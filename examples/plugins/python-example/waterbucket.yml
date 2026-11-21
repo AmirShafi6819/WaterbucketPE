@@ -1,0 +1,5 @@
+name: ExamplePython
+version: 1.0.0
+author: WaterbucketPE
+main: main.py
+depends: []

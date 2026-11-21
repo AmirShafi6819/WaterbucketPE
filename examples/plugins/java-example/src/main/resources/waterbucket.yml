@@ -1,0 +1,5 @@
+name: ExampleJava
+version: 1.0.0
+author: WaterbucketPE
+main: example.waterbucket.ExampleJavaPlugin
+depends: []
