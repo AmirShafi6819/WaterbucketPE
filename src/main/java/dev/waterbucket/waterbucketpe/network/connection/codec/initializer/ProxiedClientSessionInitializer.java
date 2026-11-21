@@ -80,7 +80,10 @@ public class ProxiedClientSessionInitializer extends ChannelInitializer<Channel>
 
         channel.pipeline()
                 .addLast(TransportFrameCodec.NAME, this.getFrameCodec())
-                .addLast(CompressionCodec.NAME, new ProxiedCompressionCodec(getCompressionStrategy(compression, rakVersion, true), false))
+                // Downstream leg gets its own zlib level (downstream_compression) instead of
+                // inheriting the shared upstream strategy
+                .addLast(CompressionCodec.NAME, new ProxiedCompressionCodec(getCompressionStrategy(compression, rakVersion, true,
+                        this.player.getProxy().getConfiguration().getDownstreamCompression()), false))
                 .addLast(BedrockBatchDecoder.NAME, BATCH_DECODER)
                 .addLast(BedrockBatchEncoder.NAME, new BedrockBatchEncoder())
                 .addLast(BedrockPacketCodec.NAME, getPacketCodec(rakVersion))

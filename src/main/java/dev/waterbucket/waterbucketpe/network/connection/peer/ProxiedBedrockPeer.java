@@ -233,7 +233,8 @@ public class ProxiedBedrockPeer extends BedrockPeer {
     @Override
     public void setCompression(PacketCompressionAlgorithm algorithm) {
         Objects.requireNonNull(algorithm, "algorithm");
-        this.setCompression(ProxiedSessionInitializer.getCompressionStrategy(algorithm, this.transportProfile.codecVersion(), false));
+        this.setCompression(ProxiedSessionInitializer.getCompressionStrategy(algorithm, this.transportProfile.codecVersion(), false,
+                this.proxy.getConfiguration().getUpstreamCompression()));
     }
 
     @Override

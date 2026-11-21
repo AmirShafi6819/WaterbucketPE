@@ -29,6 +29,7 @@ import io.netty.channel.ChannelHandler;
 import org.cloudburstmc.netty.channel.nethernet.config.NetherChannelMetrics;
 import org.cloudburstmc.netty.channel.nethernet.config.NetherChannelOption;
 import org.cloudburstmc.protocol.bedrock.BedrockPeer;
+import org.cloudburstmc.protocol.bedrock.netty.codec.compression.CompressionStrategy;
 import org.cloudburstmc.protocol.bedrock.PacketDirection;
 
 /**
@@ -46,6 +47,13 @@ public class NetherNetServerSessionInitializer extends ProxiedSessionInitializer
     public NetherNetServerSessionInitializer(ProxyServer proxy, GameOutcomeReporter outcomes) {
         super(proxy);
         this.outcomes = outcomes;
+    }
+
+    @Override
+    protected CompressionStrategy getCompressionStrategy(int rakVersion, boolean initial) {
+        // Upstream leg: zlib level from upstream_compression
+        return ProxiedSessionInitializer.getCompressionStrategy(this.proxy.getConfiguration().getCompression(),
+                rakVersion, initial, this.proxy.getConfiguration().getUpstreamCompression());
     }
 
     @Override

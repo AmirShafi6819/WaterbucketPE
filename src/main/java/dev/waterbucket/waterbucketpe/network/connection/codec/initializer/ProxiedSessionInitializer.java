@@ -52,10 +52,28 @@ public abstract class ProxiedSessionInitializer<T extends BedrockSession> extend
     public static final int NETHERNET_CODEC_VERSION = 11;
     public static final BedrockBatchDecoder BATCH_DECODER = new BedrockBatchDecoder();
 
+    /**
+     * Fallback zlib level for the legacy plugin-facing strategy lookup.
+     */
+    public static final int DEFAULT_ZLIB_LEVEL = 6;
+
     public static final CompressionStrategy ZLIB_RAW_STRATEGY = new SimpleCompressionStrategy(new ZlibCompression(Zlib.RAW));
     public static final CompressionStrategy ZLIB_STRATEGY = new SimpleCompressionStrategy(new ZlibCompression(Zlib.DEFAULT));
     public static final CompressionStrategy SNAPPY_STRATEGY = new SimpleCompressionStrategy(new SnappyCompression());
     public static final CompressionStrategy NOOP_STRATEGY = new SimpleCompressionStrategy(new NoopCompression());
+
+    /**
+     * Creates a strategy with its own {@link ZlibCompression} instance at the given level.
+     * The upstream and downstream legs need different levels (upstream_compression vs
+     * downstream_compression); sharing the static instances forced one global level on both.
+     * The deflate/inflate codecs live in FastThreadLocals inside the shared {@link Zlib}, so
+     * a per-connection wrapper is allocation-cheap and stays off the hot path.
+     */
+    public static CompressionStrategy zlibStrategy(boolean raw, int level) {
+        ZlibCompression compression = new ZlibCompression(raw ? Zlib.RAW : Zlib.DEFAULT);
+        compression.setLevel(level);
+        return new SimpleCompressionStrategy(compression);
+    }
 
     protected final ProxyServer proxy;
 
@@ -66,12 +84,18 @@ public abstract class ProxiedSessionInitializer<T extends BedrockSession> extend
 
         channel.pipeline()
                 .addLast(TransportFrameCodec.NAME, this.getFrameCodec())
-                .addLast(CompressionCodec.NAME, new ProxiedCompressionCodec(getCompressionStrategy(this.proxy.getConfiguration().getCompression(), rakVersion, true), false))
+                .addLast(CompressionCodec.NAME, new ProxiedCompressionCodec(this.getCompressionStrategy(rakVersion, true), false))
                 .addLast(BedrockBatchDecoder.NAME, BATCH_DECODER)
                 .addLast(BedrockBatchEncoder.NAME, new BedrockBatchEncoder())
                 .addLast(BedrockPacketCodec.NAME, getPacketCodec(rakVersion))
                 .addLast(BedrockPeer.NAME, new ProxiedBedrockPeer(channel, this::createSession, proxy, profile));
     }
+
+    /**
+     * Compression strategy for this leg. Both legs used to share static instances, which forced
+     * the upstream level onto every connection; each leg now gets its own level.
+     */
+    protected abstract CompressionStrategy getCompressionStrategy(int rakVersion, boolean initial);
 
     /**
      * Framing ahead of the compression codec. Registered under {@link TransportFrameCodec#NAME} whatever
@@ -108,14 +132,27 @@ public abstract class ProxiedSessionInitializer<T extends BedrockSession> extend
         return switch (rakVersion) {
             case 7, 8, 9 -> ZLIB_STRATEGY;
             case 10 -> ZLIB_RAW_STRATEGY;
-            case 11 -> initial ? NOOP_STRATEGY : getCompressionStrategy(algorithm);
+            case 11 -> initial ? NOOP_STRATEGY : getCompressionStrategy(algorithm, DEFAULT_ZLIB_LEVEL);
             default -> throw new UnsupportedOperationException("Unsupported RakNet protocol version: " + rakVersion);
         };
     }
 
-    private static CompressionStrategy getCompressionStrategy(CompressionAlgorithm algorithm) {
+    /**
+     * Same as {@link #getCompressionStrategy(CompressionAlgorithm, int, boolean)} but with the
+     * zlib level of the connection's leg applied to freshly created zlib strategies.
+     */
+    public static CompressionStrategy getCompressionStrategy(CompressionAlgorithm algorithm, int rakVersion, boolean initial, int zlibLevel) {
+        return switch (rakVersion) {
+            case 7, 8, 9 -> zlibStrategy(false, zlibLevel);
+            case 10 -> zlibStrategy(true, zlibLevel);
+            case 11 -> initial ? NOOP_STRATEGY : getCompressionStrategy(algorithm, zlibLevel);
+            default -> throw new UnsupportedOperationException("Unsupported RakNet protocol version: " + rakVersion);
+        };
+    }
+
+    private static CompressionStrategy getCompressionStrategy(CompressionAlgorithm algorithm, int zlibLevel) {
         if (algorithm == PacketCompressionAlgorithm.ZLIB) {
-            return ZLIB_RAW_STRATEGY;
+            return zlibStrategy(true, zlibLevel);
         } else if (algorithm == PacketCompressionAlgorithm.SNAPPY) {
             return SNAPPY_STRATEGY;
         } if (algorithm == PacketCompressionAlgorithm.NONE) {

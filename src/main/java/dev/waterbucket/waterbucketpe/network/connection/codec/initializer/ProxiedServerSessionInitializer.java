@@ -28,12 +28,20 @@ import org.cloudburstmc.netty.channel.raknet.config.RakChannelMetrics;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelOption;
 import org.cloudburstmc.netty.handler.codec.raknet.common.RakSessionCodec;
 import org.cloudburstmc.protocol.bedrock.BedrockPeer;
+import org.cloudburstmc.protocol.bedrock.netty.codec.compression.CompressionStrategy;
 import org.cloudburstmc.protocol.bedrock.PacketDirection;
 
 public class ProxiedServerSessionInitializer extends ProxiedSessionInitializer<BedrockServerSession> {
 
     public ProxiedServerSessionInitializer(ProxyServer proxy) {
         super(proxy);
+    }
+
+    @Override
+    protected CompressionStrategy getCompressionStrategy(int rakVersion, boolean initial) {
+        // Upstream leg: zlib level from upstream_compression
+        return ProxiedSessionInitializer.getCompressionStrategy(this.proxy.getConfiguration().getCompression(),
+                rakVersion, initial, this.proxy.getConfiguration().getUpstreamCompression());
     }
 
     @Override

@@ -72,8 +72,10 @@ public class BedrockClientConnection extends SimpleChannelInboundHandler<Bedrock
         this.serverInfo = serverInfo;
         this.channel = channel;
         if (player.getProtocol().isBefore(ProtocolVersion.MINECRAFT_PE_1_19_30)) {
-            this.compressionStrategy = player.getConnection().getPeer().getRakVersion() < 10 ?
-                    ProxiedSessionInitializer.ZLIB_STRATEGY : ProxiedSessionInitializer.ZLIB_RAW_STRATEGY;
+            // Downstream leg: fresh zlib strategy at the configured downstream level
+            this.compressionStrategy = ProxiedSessionInitializer.zlibStrategy(
+                    player.getConnection().getPeer().getRakVersion() >= 10,
+                    player.getProxy().getConfiguration().getDownstreamCompression());
         }
     }
 
@@ -122,9 +124,11 @@ public class BedrockClientConnection extends SimpleChannelInboundHandler<Bedrock
     public void setCompression(CompressionAlgorithm algorithm) {
         CompressionStrategy strategy;
         if (algorithm instanceof CompressionType type && type.getBedrockAlgorithm() != null) {
-            strategy = getCompressionStrategy(type.getBedrockAlgorithm(), this.player.getProtocol().getRaknetVersion(), false);
+            strategy = getCompressionStrategy(type.getBedrockAlgorithm(), this.player.getProtocol().getRaknetVersion(), false,
+                    this.player.getProxy().getConfiguration().getDownstreamCompression());
         } else {
-            strategy = getCompressionStrategy(algorithm, this.player.getProtocol().getRaknetVersion(), false);
+            strategy = getCompressionStrategy(algorithm, this.player.getProtocol().getRaknetVersion(), false,
+                    this.player.getProxy().getConfiguration().getDownstreamCompression());
         }
         this.setCompressionStrategy(strategy);
     }
