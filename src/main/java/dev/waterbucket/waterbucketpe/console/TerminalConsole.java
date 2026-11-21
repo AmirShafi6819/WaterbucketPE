@@ -43,6 +43,8 @@ public class TerminalConsole extends SimpleTerminalConsole {
     protected LineReader buildReader(LineReaderBuilder builder) {
         builder.completer(new CommandCompleter(this.proxy));
         builder.appName("WaterbucketPE");
+        // Persist typed commands across restarts, so operators keep their history
+        builder.variable(LineReader.HISTORY_FILE, java.nio.file.Paths.get(dev.waterbucket.waterbucketpe.WaterbucketPE.DATA_PATH + ".console_history"));
         builder.option(LineReader.Option.HISTORY_BEEP, false);
         builder.option(LineReader.Option.HISTORY_IGNORE_DUPS, true);
         builder.option(LineReader.Option.HISTORY_IGNORE_SPACE, true);

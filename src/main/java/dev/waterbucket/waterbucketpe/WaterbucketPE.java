@@ -32,13 +32,27 @@ import java.util.regex.Pattern;
 
 public class WaterbucketPE {
 
+    /**
+     * Branded startup banner, printed as one clean block before logging starts.
+     * Kept plain text (no ANSI or color codes) so it renders safely on every terminal,
+     * redirected output and Windows consoles.
+     */
+    private static final String[] BANNER = {
+            "  _      __     __          __            __       __  ___  ____",
+            " | | /| / /__ _/ /____ ____/ /  __ ______/ /_____ / /_/ _ \\/ __/",
+            " | |/ |/ / _ `/ __/ -_) __/ _ \\/ // / __/  '_/ -_) __/ ___/ _/  ",
+            " |__/|__/\\_,_/\\__/\\__/_/ /_.__/\\_,_/\\__/_/\\_\\\\__/\\__/_/  /___/",
+            "",
+            "  A fast Minecraft: Bedrock Edition proxy, forked from WaterdogPE"
+    };
+
     public static String DATA_PATH = System.getProperty("user.dir") + "/";
     public final static String PLUGIN_PATH = DATA_PATH + "plugins";
     private static final VersionInfo versionInfo = loadVersion();
 
     public static void main(String[] args) {
         Thread.currentThread().setName("WaterbucketPE-main");
-        System.out.println("Starting WaterbucketPE....");
+        printBanner();
         System.setProperty("log4j.skipJansi", "false");
 
         MainLogger logger = MainLogger.getLogger();
@@ -79,6 +93,16 @@ public class WaterbucketPE {
             logger.throwing(e);
             shutdownHook();
         }
+    }
+
+    /**
+     * Prints the startup banner as one clean block above the first log lines.
+     */
+    private static void printBanner() {
+        for (String line : BANNER) {
+            System.out.println(line);
+        }
+        System.out.println();
     }
 
     /**
