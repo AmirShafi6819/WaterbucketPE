@@ -295,6 +295,28 @@ def bench_jar(jar, name, runs=3):
             "kb_per_session": (rss_kb(pid) - rss_before) / max(1, hold.get("ok", 1)),
             "cpu_pct": (cpu_seconds(pid) - c0) / hold_wall * 100.0,
         })
+
+        # Leak check: repeated churn rounds; a growing RSS trend across rounds points at
+        # sessions/players leaking after teardown. Equal-or-falling RSS is a pass.
+        rss_base = rss_kb(pid)
+        growth = []
+        for _round in range(3):
+            run_java_client("handshake", 150)
+            time.sleep(4)  # teardown + GC settle
+            growth.append(round((rss_kb(pid) - rss_base) / 1024.0, 2))
+        result["churn_growth_mb"] = growth
+
+        # Scale: 500 concurrent sessions, the size where operators ask whether the proxy holds
+        rss_before = rss_kb(pid)
+        c0, t0 = cpu_seconds(pid), time.perf_counter()
+        scale = run_java_client("hold", 500, hold_seconds=6)
+        scale_wall = time.perf_counter() - t0
+        result["scale_500"] = summarize_client(scale, {
+            "held": scale.get("ok", 0),
+            "rss_delta_kb": rss_kb(pid) - rss_before,
+            "kb_per_session": (rss_kb(pid) - rss_before) / max(1, scale.get("ok", 1)),
+            "cpu_pct": (cpu_seconds(pid) - c0) / scale_wall * 100.0,
+        })
     finally:
         pp.stop()
         shutil.rmtree(workdir, ignore_errors=True)
@@ -321,6 +343,10 @@ def summarize(results):
             "sessions_held": r["live_sessions"]["held"],
             "kb_per_session": r["live_sessions"].get("kb_per_session"),
             "sessions_cpu_pct": r["live_sessions"].get("cpu_pct"),
+            "churn_growth_mb": r.get("churn_growth_mb"),
+            "scale_held": r.get("scale_500", {}).get("held"),
+            "scale_kb_per_session": r.get("scale_500", {}).get("kb_per_session"),
+            "scale_cpu_pct": r.get("scale_500", {}).get("cpu_pct"),
         }
     return out
 

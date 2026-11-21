@@ -1,154 +1,192 @@
 {
-  "waterdog": {
-    "results": [
-      {
-        "name": "WaterdogPE",
-        "jar": "Waterdog.jar",
-        "jvm_flags": "-Xms128M -Xmx512M -XX:+UseG1GC -XX:MaxGCPauseMillis=200",
-        "port": 19132,
-        "startup": [
-          6.6409439769995515,
-          2.7653810510000767,
-          2.2309772799999337
-        ],
-        "idle_rss_kb": [
-          222496,
-          219948,
-          200136
-        ],
-        "idle_cpu_pct": [
-          1.4999799112190795,
-          1.3999804394032886,
-          1.4999808720189276
-        ],
-        "ping_rtt_ms": {
-          "count": 1500,
-          "lost": 0,
-          "median": 0.2610385004118143,
-          "p95": 0.6760074504654767,
-          "p99": 1.5057447200888419
-        },
-        "concurrent_ping": {
-          "sent": 800,
-          "replies": 800,
-          "replies_per_sec": 530.2121258357633,
-          "loss_pct": 0.0
-        },
-        "handshake_churn": {
-          "ok": 300,
-          "failed": 0,
-          "connect_ms_median": 2.3685,
-          "connect_ms_p95": 20.22225,
-          "wall_s": 4.368286054000237,
-          "cpu_pct": 52.194384063106426,
-          "connects_per_sec": 68.67682113566634
-        },
-        "live_sessions": {
-          "ok": 200,
-          "failed": 0,
-          "connect_ms_median": 3.1375,
-          "connect_ms_p95": 28.77675,
-          "held": 200,
-          "rss_delta_kb": 11776,
-          "kb_per_session": 58.88,
-          "cpu_pct": 35.53006187864554
-        }
+  "results": [
+    {
+      "name": "WaterbucketPE",
+      "jar": "Waterbucket.jar",
+      "jvm_flags": "-Xms128M -Xmx512M -XX:+UseG1GC -XX:MaxGCPauseMillis=200",
+      "port": 19132,
+      "startup": [
+        1.6869644670005073,
+        2.231139733001328,
+        2.2299299870010145
+      ],
+      "idle_rss_kb": [
+        258128,
+        253900,
+        255896
+      ],
+      "idle_cpu_pct": [
+        20.099773158986046,
+        18.849756854159104,
+        21.349750934872574
+      ],
+      "ping_rtt_ms": {
+        "count": 1500,
+        "lost": 0,
+        "median": 0.2236600003016065,
+        "p95": 0.5548691991862142,
+        "p99": 1.0177183698942827
+      },
+      "concurrent_ping": {
+        "sent": 800,
+        "replies": 800,
+        "replies_per_sec": 530.6972479487314,
+        "loss_pct": 0.0
+      },
+      "handshake_churn": {
+        "ok": 300,
+        "failed": 0,
+        "connect_ms_median": 2.7575,
+        "connect_ms_p95": 15.81375,
+        "wall_s": 4.440200572000322,
+        "cpu_pct": 51.57424676805418,
+        "connects_per_sec": 67.56451541666489
+      },
+      "live_sessions": {
+        "ok": 200,
+        "failed": 0,
+        "connect_ms_median": 3.123,
+        "connect_ms_p95": 29.05485,
+        "held": 200,
+        "rss_delta_kb": 4204,
+        "kb_per_session": 21.02,
+        "cpu_pct": 42.950903679608665
+      },
+      "churn_growth_mb": [
+        0.47,
+        0.75,
+        1.01
+      ],
+      "scale_500": {
+        "ok": 500,
+        "failed": 0,
+        "connect_ms_median": 1.6255,
+        "connect_ms_p95": 7.3594,
+        "held": 500,
+        "rss_delta_kb": 6724,
+        "kb_per_session": 13.448,
+        "cpu_pct": 26.51235656584078
       }
-    ],
-    "summary": {
-      "WaterdogPE": {
-        "startup_s_median": 2.7653810510000767,
-        "idle_rss_mb_median": 214.79296875,
-        "idle_cpu_pct_median": 1.4999799112190795,
-        "ping_rtt_ms_median": 0.2610385004118143,
-        "ping_rtt_p95_ms": 0.6760074504654767,
-        "ping_replies_per_sec": 530.2121258357633,
-        "ping_loss_pct": 0.0,
-        "handshake_ok": 300,
-        "handshake_failed": 0,
-        "handshake_connect_ms_median": 2.3685,
-        "handshake_connects_per_sec": 68.67682113566634,
-        "handshake_cpu_pct": 52.194384063106426,
-        "sessions_held": 200,
-        "kb_per_session": 58.88,
-        "sessions_cpu_pct": 35.53006187864554
+    },
+    {
+      "name": "WaterdogPE",
+      "jar": "Waterdog.jar",
+      "jvm_flags": "-Xms128M -Xmx512M -XX:+UseG1GC -XX:MaxGCPauseMillis=200",
+      "port": 19132,
+      "startup": [
+        2.2146709180015023,
+        1.6781125899997278,
+        1.6937750010001764
+      ],
+      "idle_rss_kb": [
+        319164,
+        317968,
+        239988
+      ],
+      "idle_cpu_pct": [
+        18.8497735444763,
+        18.149800290486574,
+        18.699775182889034
+      ],
+      "ping_rtt_ms": {
+        "count": 1500,
+        "lost": 0,
+        "median": 0.22294449991022702,
+        "p95": 0.6054426000446256,
+        "p99": 1.7439750495395856
+      },
+      "concurrent_ping": {
+        "sent": 800,
+        "replies": 800,
+        "replies_per_sec": 528.440610229938,
+        "loss_pct": 0.0
+      },
+      "handshake_churn": {
+        "ok": 300,
+        "failed": 0,
+        "connect_ms_median": 2.2465,
+        "connect_ms_p95": 14.03285,
+        "wall_s": 4.232514927000011,
+        "cpu_pct": 55.52254488245051,
+        "connects_per_sec": 70.87984453078792
+      },
+      "live_sessions": {
+        "ok": 200,
+        "failed": 0,
+        "connect_ms_median": 2.2795,
+        "connect_ms_p95": 28.6292,
+        "held": 200,
+        "rss_delta_kb": 9668,
+        "kb_per_session": 48.34,
+        "cpu_pct": 39.44351713392847
+      },
+      "churn_growth_mb": [
+        0.35,
+        0.45,
+        0.7
+      ],
+      "scale_500": {
+        "ok": 500,
+        "failed": 0,
+        "connect_ms_median": 2.173,
+        "connect_ms_p95": 10.085049999999999,
+        "held": 500,
+        "rss_delta_kb": -3396,
+        "kb_per_session": -6.792,
+        "cpu_pct": 27.633926248704682
       }
     }
-  },
-  "waterbucket": {
-    "results": [
-      {
-        "name": "WaterbucketPE",
-        "jar": "Waterbucket.jar",
-        "jvm_flags": "-Xms128M -Xmx512M -XX:+UseG1GC -XX:MaxGCPauseMillis=200",
-        "port": 19132,
-        "startup": [
-          2.7781281679999665,
-          2.7758715749996554,
-          1.6924738030002118
-        ],
-        "idle_rss_kb": [
-          225164,
-          231620,
-          198580
-        ],
-        "idle_cpu_pct": [
-          1.4999786800530595,
-          1.599977913504871,
-          1.4499799973809466
-        ],
-        "ping_rtt_ms": {
-          "count": 1500,
-          "lost": 0,
-          "median": 0.22570649980480084,
-          "p95": 0.5823180998049793,
-          "p99": 1.2945928602403
-        },
-        "concurrent_ping": {
-          "sent": 800,
-          "replies": 800,
-          "replies_per_sec": 530.410270269012,
-          "loss_pct": 0.0
-        },
-        "handshake_churn": {
-          "ok": 300,
-          "failed": 0,
-          "connect_ms_median": 2.4275,
-          "connect_ms_p95": 11.9802,
-          "wall_s": 4.240115729000536,
-          "cpu_pct": 49.0552648309505,
-          "connects_per_sec": 70.7527858138709
-        },
-        "live_sessions": {
-          "ok": 200,
-          "failed": 0,
-          "connect_ms_median": 2.785,
-          "connect_ms_p95": 20.626900000000003,
-          "held": 200,
-          "rss_delta_kb": 3740,
-          "kb_per_session": 18.7,
-          "cpu_pct": 34.16235668047059
-        }
-      }
-    ],
-    "summary": {
-      "WaterbucketPE": {
-        "startup_s_median": 2.7758715749996554,
-        "idle_rss_mb_median": 219.88671875,
-        "idle_cpu_pct_median": 1.4999786800530595,
-        "ping_rtt_ms_median": 0.22570649980480084,
-        "ping_rtt_p95_ms": 0.5823180998049793,
-        "ping_replies_per_sec": 530.410270269012,
-        "ping_loss_pct": 0.0,
-        "handshake_ok": 300,
-        "handshake_failed": 0,
-        "handshake_connect_ms_median": 2.4275,
-        "handshake_connects_per_sec": 70.7527858138709,
-        "handshake_cpu_pct": 49.0552648309505,
-        "sessions_held": 200,
-        "kb_per_session": 18.7,
-        "sessions_cpu_pct": 34.16235668047059
-      }
+  ],
+  "summary": {
+    "WaterbucketPE": {
+      "startup_s_median": 2.2299299870010145,
+      "idle_rss_mb_median": 249.8984375,
+      "idle_cpu_pct_median": 20.099773158986046,
+      "ping_rtt_ms_median": 0.2236600003016065,
+      "ping_rtt_p95_ms": 0.5548691991862142,
+      "ping_replies_per_sec": 530.6972479487314,
+      "ping_loss_pct": 0.0,
+      "handshake_ok": 300,
+      "handshake_failed": 0,
+      "handshake_connect_ms_median": 2.7575,
+      "handshake_connects_per_sec": 67.56451541666489,
+      "handshake_cpu_pct": 51.57424676805418,
+      "sessions_held": 200,
+      "kb_per_session": 21.02,
+      "sessions_cpu_pct": 42.950903679608665,
+      "churn_growth_mb": [
+        0.47,
+        0.75,
+        1.01
+      ],
+      "scale_held": 500,
+      "scale_kb_per_session": 13.448,
+      "scale_cpu_pct": 26.51235656584078
+    },
+    "WaterdogPE": {
+      "startup_s_median": 1.6937750010001764,
+      "idle_rss_mb_median": 310.515625,
+      "idle_cpu_pct_median": 18.699775182889034,
+      "ping_rtt_ms_median": 0.22294449991022702,
+      "ping_rtt_p95_ms": 0.6054426000446256,
+      "ping_replies_per_sec": 528.440610229938,
+      "ping_loss_pct": 0.0,
+      "handshake_ok": 300,
+      "handshake_failed": 0,
+      "handshake_connect_ms_median": 2.2465,
+      "handshake_connects_per_sec": 70.87984453078792,
+      "handshake_cpu_pct": 55.52254488245051,
+      "sessions_held": 200,
+      "kb_per_session": 48.34,
+      "sessions_cpu_pct": 39.44351713392847,
+      "churn_growth_mb": [
+        0.35,
+        0.45,
+        0.7
+      ],
+      "scale_held": 500,
+      "scale_kb_per_session": -6.792,
+      "scale_cpu_pct": 27.633926248704682
     }
   }
 }
