@@ -141,11 +141,10 @@ public class WaterbucketScheduler {
             return;
         }
 
-        // The task may have been cancelled (and unregistered) concurrently while it ran
-        TaskHandler<?> removed = this.taskHandlerMap.remove(taskHandler.getTaskId());
-        if (removed != null) {
-            removed.cancel();
-        }
+        // The task finished normally: unregister it WITHOUT cancelling. cancel() invokes
+        // Task.onCancel(), which for CallbackTask fires every callback a second time - with
+        // null instead of the produced result - after the task already completed successfully.
+        this.taskHandlerMap.remove(taskHandler.getTaskId());
     }
 
     public void shutdown() {

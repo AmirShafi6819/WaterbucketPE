@@ -64,7 +64,12 @@ public class TaskHandler<T extends Runnable> {
         }
     }
 
-    public void cancel() {
+    /**
+     * Cancels the task exactly once. Two threads can race on cancellation (a plugin thread and
+     * the tick thread that just finalized the task), so the check-then-act is synchronized;
+     * {@code onCancel()} must never run twice for one handler.
+     */
+    public synchronized void cancel() {
         if (this.cancelled) {
             return;
         }

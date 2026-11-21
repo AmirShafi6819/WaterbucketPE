@@ -77,4 +77,32 @@ public class TaskHandlerTest {
         TaskHandler<Runnable> failing = new TaskHandler<>(() -> { throw new IllegalStateException("boom"); }, 6, false);
         failing.onRun(1); // must not throw
     }
+
+    @Test
+    void concurrentCancelRunsOnCancelExactlyOnce() throws InterruptedException {
+        AtomicInteger cancelCalls = new AtomicInteger();
+        Task task = new Task() {
+            @Override
+            public void onRun(int currentTick) {
+            }
+
+            @Override
+            public void onCancel() {
+                cancelCalls.incrementAndGet();
+            }
+        };
+        TaskHandler<Task> handler = new TaskHandler<>(task, 7, true);
+
+        int threads = 8;
+        Thread[] cancellers = new Thread[threads];
+        for (int i = 0; i < threads; i++) {
+            cancellers[i] = new Thread(handler::cancel);
+            cancellers[i].start();
+        }
+        for (Thread canceller : cancellers) {
+            canceller.join();
+        }
+
+        assertEquals(1, cancelCalls.get(), "concurrent cancels must run onCancel() exactly once");
+    }
 }
