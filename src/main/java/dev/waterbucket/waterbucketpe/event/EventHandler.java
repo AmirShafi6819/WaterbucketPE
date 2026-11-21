@@ -24,6 +24,8 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.function.Consumer;
 
@@ -61,17 +63,29 @@ public class EventHandler {
         }
 
         CompletableFuture<T> future = new CompletableFuture<>();
-        CompletableFuture.supplyAsync(() -> {
+        Runnable dispatch = () -> {
             for (EventPriority priority : EventPriority.values()) {
                 this.handlePriority(priority, event);
             }
-            return event;
-        }, this.eventManager.getThreadedExecutor()).thenAccept(futureEvent -> futureEvent.completeFuture(future)).whenComplete((ignore, error) -> {
-            if (error != null && !future.isDone()) {
-                future.completeExceptionally(error);
-                ProxyServer.getInstance().getLogger().error("Exception was thrown in event handler", error);
+            event.completeFuture(future);
+        };
+        ExecutorService executor = this.eventManager.getThreadedExecutor();
+        try {
+            CompletableFuture.runAsync(dispatch, executor).whenComplete((ignore, error) -> {
+                if (error != null && !future.isDone()) {
+                    future.completeExceptionally(error);
+                    ProxyServer.getInstance().getLogger().error("Exception was thrown in event handler", error);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // Late event while the proxy is shutting down: dispatch on the caller thread
+            // instead of throwing out of callEvent and aborting the caller's cleanup path.
+            try {
+                dispatch.run();
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
             }
-        });
+        }
         return future;
     }
 
@@ -135,6 +149,40 @@ public class EventHandler {
                 next.put(priority, List.copyOf(handlerList));
             }
         } while (!HANDLERS_UPDATER.compareAndSet(this, current, next));
+    }
+
+    /**
+     * Removes a previously subscribed handler. Matching is by handler identity (lambda
+     * equality), mirroring {@link #subscribe(Consumer, EventPriority)} dedup semantics.
+     * Unknown handlers are ignored.
+     */
+    public void unsubscribe(Consumer<Event> handler) {
+        Map<EventPriority, List<Consumer<Event>>> current, next;
+        do {
+            current = this.priority2handlers;
+            next = new EnumMap<>(EventPriority.class);
+            boolean removed = false;
+            for (Map.Entry<EventPriority, List<Consumer<Event>>> entry : current.entrySet()) {
+                List<Consumer<Event>> filtered = new ArrayList<>(entry.getValue());
+                removed |= filtered.removeIf(candidate -> candidate == handler);
+                next.put(entry.getKey(), List.copyOf(filtered));
+            }
+            if (!removed) {
+                return; // nothing to change; skip the CAS round-trip
+            }
+        } while (!HANDLERS_UPDATER.compareAndSet(this, current, next));
+    }
+
+    /**
+     * Total number of currently subscribed handlers across all priorities; diagnostics and
+     * tests use it to verify listener cleanup.
+     */
+    public int subscribedCount() {
+        int total = 0;
+        for (List<Consumer<Event>> list : this.priority2handlers.values()) {
+            total += list.size();
+        }
+        return total;
     }
 
     private static final AtomicReferenceFieldUpdater<EventHandler, Map> HANDLERS_UPDATER =

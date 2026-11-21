@@ -145,4 +145,51 @@ class EventManagerConcurrencyTest {
         manager.callEvent(new PingEvent());
         assertEquals(1, after.get());
     }
+
+    @Test
+    void unsubscribeStopsDispatchAndUnknownHandlersAreNoOps() {
+        EventManager manager = newManager();
+        AtomicInteger calls = new AtomicInteger();
+        Consumer<PingEvent> handler = event -> calls.incrementAndGet();
+        manager.subscribe(PingEvent.class, handler, EventPriority.HIGH);
+
+        // Unsubscribing an unknown handler must not disturb the live one
+        manager.unsubscribe(PingEvent.class, event -> { });
+
+        manager.callEvent(new PingEvent());
+        assertEquals(1, calls.get());
+
+        manager.unsubscribe(PingEvent.class, handler);
+        manager.callEvent(new PingEvent());
+        assertEquals(1, calls.get(), "unsubscribed handler must not run anymore");
+
+        // Unsubscribe on an event class without subscribers is a no-op
+        manager.unsubscribe(PingEvent.class, handler);
+    }
+
+    @Test
+    void concurrentSubscribeAndUnsubscribeStayConsistent() throws Exception {
+        EventManager manager = newManager();
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        try {
+            int rounds = 300;
+            CountDownLatch done = new CountDownLatch(rounds);
+            for (int i = 0; i < rounds; i++) {
+                pool.execute(() -> {
+                    Consumer<PingEvent> handler = event -> { };
+                    manager.subscribe(PingEvent.class, handler);
+                    manager.unsubscribe(PingEvent.class, handler);
+                    done.countDown();
+                });
+            }
+            assertTrue(done.await(10, TimeUnit.SECONDS), "all subscribe/unsubscribe pairs finished");
+        } finally {
+            pool.shutdownNow();
+        }
+        manager.callEvent(new PingEvent());
+        // Every handler was unsubscribed again; the pipeline stays consistent
+        EventHandler handler = manager.handlerFor(PingEvent.class);
+        assertEquals(0, handler == null ? 0 : handler.subscribedCount(),
+                "no handler may survive its unsubscribe");
+    }
 }

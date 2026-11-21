@@ -67,6 +67,20 @@ def healthy_handler(event):
     event.setHealthyFlag(True)
 
 
+def install_broken_completable_handler():
+    CompletableEvent = java.type("dev.waterbucket.waterbucketpe.plugin.python.PythonPluginTest$TestCompletableEvent")
+    plugin.subscribe(CompletableEvent, broken_handler)
+
+
+def install_healthy_completable_handler():
+    CompletableEvent = java.type("dev.waterbucket.waterbucketpe.plugin.python.PythonPluginTest$TestCompletableEvent")
+    plugin.subscribe(CompletableEvent, healthy_completable_handler)
+
+
+def healthy_completable_handler(event):
+    event.setTouched(True)
+
+
 def install_counting_handler():
     global counter
     counter = java.type("java.util.concurrent.atomic.AtomicInteger")()

@@ -71,6 +71,27 @@ public class EventManager {
     }
 
     /**
+     * Removes a handler that was registered with {@link #subscribe(Class, Consumer, EventPriority)}.
+     * Matching is by identity, so plugins should keep the lambda reference they subscribed.
+     * Calling it for an unknown handler or an event class without subscribers is a no-op.
+     * <p>
+     * Plugins should unsubscribe in {@code onDisable}: handlers left behind keep firing after
+     * the plugin was disabled, and the Python front-end depends on this to detach its handlers
+     * before the interpreter context is closed.
+     *
+     * @param event   the event class the handler was registered for
+     * @param handler the exact consumer instance passed to subscribe
+     * @param <T>     the event type
+     */
+    @SuppressWarnings("unchecked")
+    public <T extends Event> void unsubscribe(Class<T> event, Consumer<T> handler) {
+        EventHandler eventHandler = this.handlerMap.get(event);
+        if (eventHandler != null) {
+            eventHandler.unsubscribe((Consumer<Event>) handler);
+        }
+    }
+
+    /**
      * Used to call an provided event.
      * If the target event has the annotation AsyncEvent present, the CompletableFuture.whenComplete can be used to
      * execute code once the event has passed the whole event pipeline. If the annotation is not present, you can
@@ -82,6 +103,22 @@ public class EventManager {
     public <T extends Event> CompletableFuture<T> callEvent(T event) {
         EventHandler eventHandler = this.handlerMap.computeIfAbsent(event.getClass(), e -> new EventHandler(event.getClass(), this));
         return eventHandler.handle(event);
+    }
+
+    /**
+     * Package-private pipeline accessor for tests and diagnostics.
+     */
+    EventHandler handlerFor(Class<? extends Event> event) {
+        return this.handlerMap.get(event);
+    }
+
+    /**
+     * Number of handlers currently subscribed to the given event class, 0 when none.
+     * Diagnostics use: verifying listener cleanup after a plugin was disabled.
+     */
+    public int subscriberCount(Class<? extends Event> event) {
+        EventHandler eventHandler = this.handlerMap.get(event);
+        return eventHandler == null ? 0 : eventHandler.subscribedCount();
     }
 
 }

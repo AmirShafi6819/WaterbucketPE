@@ -28,18 +28,21 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentMatchers;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -76,6 +79,20 @@ class PythonPluginTest {
         }
     }
 
+    /** Mirrors the login/transfer events: completable, so a broken handler used to kick players. */
+    @dev.waterbucket.waterbucketpe.event.CompletableEvent
+    public static class TestCompletableEvent extends Event {
+        private volatile boolean touched;
+
+        public boolean isTouched() {
+            return this.touched;
+        }
+
+        public void setTouched(boolean touched) {
+            this.touched = touched;
+        }
+    }
+
     @TempDir
     Path tempDir;
 
@@ -97,8 +114,12 @@ class PythonPluginTest {
         when(this.proxy.getPluginPath()).thenReturn(this.tempDir);
         when(this.proxy.getScheduler()).thenReturn(scheduler);
         when(this.proxy.getCommandMap()).thenReturn(commandMap);
-        when(commandMap.registerCommand(anyString(), any(Command.class))).thenAnswer(invocation -> {
-            this.registeredCommands.add(invocation.getArgument(1));
+        when(commandMap.registerCommand(any(Command.class))).thenAnswer(invocation -> {
+            this.registeredCommands.add(invocation.getArgument(0));
+            return true;
+        });
+        when(commandMap.unregisterCommand(anyString())).thenAnswer(invocation -> {
+            this.registeredCommands.removeIf(command -> command.getName().equalsIgnoreCase(invocation.getArgument(0, String.class)));
             return true;
         });
 
@@ -181,6 +202,41 @@ class PythonPluginTest {
         assertTrue(command.onExecute(sender, "pyhello", new String[]{"one", "two"}));
 
         assertEquals("pyhello|one,two", this.state().get("command"), "python executor must receive sender/alias/args");
+    }
+
+    @Test
+    void brokenCompletableHandlerDoesNotFailTheEventPipeline() throws Exception {
+        // A throwing Python handler used to fail the event's completable future, which the
+        // login/transfer paths turn into a player disconnect. Java handler errors are logged
+        // and swallowed, and the Python bridge must behave the same way.
+        this.plugin.setEnabled(true);
+        this.plugin.getModule().getMember("install_broken_completable_handler").execute();
+        this.plugin.getModule().getMember("install_healthy_completable_handler").execute();
+
+        TestCompletableEvent event = new TestCompletableEvent();
+        CompletableFuture<?> future = this.eventManager.callEvent(event);
+        future.get(5, TimeUnit.SECONDS); // must complete normally, not exceptionally
+
+        assertTrue(event.isTouched(), "the healthy handler must still run after the broken one");
+    }
+
+    @Test
+    void disableDetachesEventSubscriptionsAndCommands() throws Exception {
+        this.plugin.setEnabled(true);
+        assertEquals(1, this.eventManager.subscriberCount(TestSyncEvent.class),
+                "the enabled plugin holds one subscription");
+        assertEquals(1, this.registeredCommands.size(), "the enabled plugin holds one command");
+
+        this.plugin.setEnabled(false);
+
+        assertEquals(0, this.eventManager.subscriberCount(TestSyncEvent.class),
+                "disable must detach every event subscription before the context closes");
+        assertEquals(0, this.registeredCommands.size(),
+                "disable must unregister every command the plugin registered");
+
+        // Events fired after disable must not reach into the closed context
+        assertDoesNotThrow(() -> this.eventManager.callEvent(new TestSyncEvent()));
+        assertDoesNotThrow(() -> this.eventManager.callEvent(new TestCompletableEvent()));
     }
 
     @Test

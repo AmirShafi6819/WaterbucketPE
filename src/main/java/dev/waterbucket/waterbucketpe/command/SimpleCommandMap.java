@@ -18,6 +18,7 @@ package dev.waterbucket.waterbucketpe.command;
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.utils.types.TextContainer;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
+import it.unimi.dsi.fastutil.objects.Object2ObjectMaps;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
 
@@ -28,8 +29,17 @@ public class SimpleCommandMap implements CommandMap {
     private final ProxyServer proxy;
     private final String commandPrefix;
 
-    private final Object2ObjectMap<String, Command> commandsMap = new Object2ObjectOpenHashMap<>();
-    private final Object2ObjectMap<String, Command> aliasesMap = new Object2ObjectOpenHashMap<>();
+    /*
+     * Registrations can arrive at runtime (Python plugins may register commands from event
+     * handlers or scheduled tasks) while every event loop reads the maps for
+     * AvailableCommandsPacket building and dispatch, so both maps are synchronized wrappers.
+     * Iteration through getCommands() still requires external synchronization on the map, as
+     * before; the wrapper protects the mutation paths the proxy itself owns.
+     */
+    private final Object2ObjectMap<String, Command> commandsMap =
+            Object2ObjectMaps.synchronize(new Object2ObjectOpenHashMap<>());
+    private final Object2ObjectMap<String, Command> aliasesMap =
+            Object2ObjectMaps.synchronize(new Object2ObjectOpenHashMap<>());
 
     public SimpleCommandMap(ProxyServer proxy, String prefix) {
         this.proxy = proxy;
@@ -70,7 +80,11 @@ public class SimpleCommandMap implements CommandMap {
         if (command == null) return false;
 
         for (String alias : command.getAliases()) {
-            this.aliasesMap.remove(alias.toLowerCase());
+            // Remove an alias only when this command actually owns it: registerAlias is
+            // putIfAbsent, so a conflicting alias still resolves to whichever command claimed
+            // the name first. The previous unconditional remove deleted other commands'
+            // aliases and left them unreachable.
+            this.aliasesMap.remove(alias.toLowerCase(), command);
         }
         return true;
     }

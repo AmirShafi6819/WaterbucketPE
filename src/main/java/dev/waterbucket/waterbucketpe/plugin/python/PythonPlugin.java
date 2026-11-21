@@ -25,6 +25,8 @@ import org.graalvm.polyglot.Value;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -49,9 +51,20 @@ import java.util.function.Consumer;
 @Log4j2
 public class PythonPlugin extends Plugin {
 
+    /**
+     * One live event subscription of this plugin: the Java event class plus the exact wrapped
+     * consumer instance that was registered with the event manager, so it can be detached on
+     * disable.
+     */
+    private record Subscription(Class<? extends dev.waterbucket.waterbucketpe.event.Event> eventClass,
+                                Consumer<dev.waterbucket.waterbucketpe.event.Event> handler) {
+    }
+
     private final ProxyServer proxy;
     private volatile Context context;
     private volatile Value module;
+    private final List<Subscription> eventSubscriptions = Collections.synchronizedList(new ArrayList<>());
+    private final List<String> registeredCommands = Collections.synchronizedList(new ArrayList<>());
 
     public PythonPlugin(ProxyServer proxy) {
         this.proxy = proxy;
@@ -137,7 +150,43 @@ public class PythonPlugin extends Plugin {
     @Override
     public void onDisable() {
         this.callHook("on_disable", this);
+        // Detach everything that points into the interpreter BEFORE closing it. Handlers and
+        // commands left behind used to be invoked after the context was closed - every later
+        // event dispatched a PolyglotException into a dead context, and re-enabling duplicated
+        // handlers behind commands that could no longer be re-registered.
+        this.detachEventSubscriptions();
+        this.unregisterRegisteredCommands();
         this.closeContext();
+    }
+
+    private void detachEventSubscriptions() {
+        List<Subscription> subscriptions;
+        synchronized (this.eventSubscriptions) {
+            subscriptions = new ArrayList<>(this.eventSubscriptions);
+            this.eventSubscriptions.clear();
+        }
+        for (Subscription subscription : subscriptions) {
+            this.detachSubscription(subscription.eventClass(), subscription.handler());
+        }
+    }
+
+    private <T extends dev.waterbucket.waterbucketpe.event.Event> void detachSubscription(
+            Class<T> eventClass, Consumer<dev.waterbucket.waterbucketpe.event.Event> handler) {
+        // Safe: the wrapped consumer was registered for exactly this event class
+        @SuppressWarnings("unchecked")
+        Consumer<T> typed = (Consumer<T>) handler;
+        this.proxy.getEventManager().unsubscribe(eventClass, typed);
+    }
+
+    private void unregisterRegisteredCommands() {
+        List<String> names;
+        synchronized (this.registeredCommands) {
+            names = new ArrayList<>(this.registeredCommands);
+            this.registeredCommands.clear();
+        }
+        for (String name : names) {
+            this.proxy.getCommandMap().unregisterCommand(name);
+        }
     }
 
     private void closeContext() {
@@ -153,22 +202,28 @@ public class PythonPlugin extends Plugin {
     /**
      * Subscribes a Python callable to a proxy event. Synchronous handlers run inline like Java
      * handlers; async events receive a future so the pipeline waits for the Python handler.
+     * <p>
+     * A throwing handler behaves exactly like a throwing Java handler: the error is logged and
+     * dispatch continues. It never fails the event pipeline - failing the completable future
+     * used to surface as a disconnect for the player whose login/transfer event the broken
+     * plugin subscribed to.
+     * <p>
+     * All subscriptions are detached automatically in {@link #onDisable()}.
      *
      * @param eventClass Java event class, obtained e.g. via {@code java.type("...")}
      * @param handler    Python function receiving the event object
      */
+    @SuppressWarnings("unchecked")
     public <T extends dev.waterbucket.waterbucketpe.event.Event> void subscribe(Class<T> eventClass, Consumer<? super T> handler) {
-        this.proxy.getEventManager().subscribe(eventClass, event -> {
+        Consumer<T> wrapped = event -> {
             try {
                 if (event.isCompletable()) {
                     CompletableFuture<Void> done = new CompletableFuture<>();
                     event.addCompletableFuture(done);
                     try {
                         handler.accept(event);
+                    } finally {
                         done.complete(null);
-                    } catch (Throwable t) {
-                        done.completeExceptionally(t);
-                        throw t;
                     }
                 } else {
                     handler.accept(event);
@@ -176,7 +231,9 @@ public class PythonPlugin extends Plugin {
             } catch (Throwable t) {
                 this.getLogger().error("Python plugin {} threw in an event handler", this.getName(), t);
             }
-        });
+        };
+        this.proxy.getEventManager().subscribe(eventClass, wrapped);
+        this.eventSubscriptions.add(new Subscription(eventClass, (Consumer<dev.waterbucket.waterbucketpe.event.Event>) wrapped));
     }
 
     /**
@@ -193,7 +250,11 @@ public class PythonPlugin extends Plugin {
     public boolean registerCommand(String name, String description, String usage, List<String> aliases,
                                    String permission, PythonCommandExecutor handler) {
         PythonCommand command = new PythonCommand(this, name, description, usage, aliases, permission, handler);
-        return this.proxy.getCommandMap().registerCommand(name, command);
+        if (this.proxy.getCommandMap().registerCommand(command)) {
+            this.registeredCommands.add(command.getName());
+            return true;
+        }
+        return false;
     }
 
     /**

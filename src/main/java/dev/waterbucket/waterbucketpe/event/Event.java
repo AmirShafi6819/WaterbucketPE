@@ -19,6 +19,7 @@ import dev.waterbucket.waterbucketpe.utils.exceptions.EventException;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import org.cloudburstmc.protocol.common.util.Preconditions;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -70,12 +71,19 @@ public abstract class Event {
 
     protected <T extends Event> void completeFuture(CompletableFuture<T> future) {
         Preconditions.checkArgument(this.isCompletable(), "Event is not @CompletableEvent or @AsyncEvent!");
-        if (this.completableFuture.isEmpty()) {
-            future.complete((T) this);
-            return;
+        // isEmpty() and toArray() must be one atomic step on the list: a handler (or the Python
+        // bridge) can register a future concurrently with dispatch, and the previous two-call
+        // snapshot raced it into either premature completion or a silently dropped future.
+        List<CompletableFuture<Void>> snapshot;
+        synchronized (this.completableFuture) {
+            if (this.completableFuture.isEmpty()) {
+                future.complete((T) this);
+                return;
+            }
+            snapshot = new ArrayList<>(this.completableFuture);
         }
 
-        CompletableFuture.allOf(this.completableFuture.toArray(new CompletableFuture[0])).whenComplete((ignore, error) -> {
+        CompletableFuture.allOf(snapshot.toArray(new CompletableFuture[0])).whenComplete((ignore, error) -> {
             if (error == null) {
                 future.complete((T) this);
             } else {
