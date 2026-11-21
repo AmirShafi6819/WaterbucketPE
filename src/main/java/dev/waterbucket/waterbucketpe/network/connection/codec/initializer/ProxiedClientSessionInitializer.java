@@ -30,6 +30,7 @@ import dev.waterbucket.waterbucketpe.network.connection.codec.packet.BedrockPack
 import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import io.netty.channel.*;
+import io.netty.handler.flush.FlushConsolidationHandler;
 import io.netty.util.concurrent.Promise;
 import lombok.RequiredArgsConstructor;
 import org.cloudburstmc.netty.channel.raknet.RakChannel;
@@ -79,6 +80,9 @@ public class ProxiedClientSessionInitializer extends ChannelInitializer<Channel>
         }
 
         channel.pipeline()
+                // Same flush consolidation as the upstream leg: the downstream relay is the
+                // path with the highest write rate (chunk + entity batches)
+                .addLast("flush-consolidation", new FlushConsolidationHandler(ProxiedSessionInitializer.FLUSH_CONSOLIDATION_FLUSH_COUNT, true))
                 .addLast(TransportFrameCodec.NAME, this.getFrameCodec())
                 // Downstream leg gets its own zlib level (downstream_compression) instead of
                 // inheriting the shared upstream strategy

@@ -29,6 +29,7 @@ import dev.waterbucket.waterbucketpe.network.connection.codec.packet.BedrockPack
 import dev.waterbucket.waterbucketpe.network.connection.codec.packet.BedrockPacketCodec_v3;
 import dev.waterbucket.waterbucketpe.network.connection.peer.ProxiedBedrockPeer;
 import io.netty.channel.*;
+import io.netty.handler.flush.FlushConsolidationHandler;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.cloudburstmc.netty.channel.raknet.config.RakChannelOption;
@@ -57,6 +58,11 @@ public abstract class ProxiedSessionInitializer<T extends BedrockSession> extend
      */
     public static final int DEFAULT_ZLIB_LEVEL = 6;
 
+    /**
+     * Explicit flush count for {@link FlushConsolidationHandler}, matching Velocity's tuning.
+     */
+    public static final int FLUSH_CONSOLIDATION_FLUSH_COUNT = 256;
+
     public static final CompressionStrategy ZLIB_RAW_STRATEGY = new SimpleCompressionStrategy(new ZlibCompression(Zlib.RAW));
     public static final CompressionStrategy ZLIB_STRATEGY = new SimpleCompressionStrategy(new ZlibCompression(Zlib.DEFAULT));
     public static final CompressionStrategy SNAPPY_STRATEGY = new SimpleCompressionStrategy(new SnappyCompression());
@@ -83,6 +89,9 @@ public abstract class ProxiedSessionInitializer<T extends BedrockSession> extend
         int rakVersion = profile.codecVersion();
 
         channel.pipeline()
+                // Consolidate the many small flushes of the relay path the same way Velocity does:
+                // one syscall per read burst instead of one per batch
+                .addLast("flush-consolidation", new FlushConsolidationHandler(FLUSH_CONSOLIDATION_FLUSH_COUNT, true))
                 .addLast(TransportFrameCodec.NAME, this.getFrameCodec())
                 .addLast(CompressionCodec.NAME, new ProxiedCompressionCodec(this.getCompressionStrategy(rakVersion, true), false))
                 .addLast(BedrockBatchDecoder.NAME, BATCH_DECODER)
