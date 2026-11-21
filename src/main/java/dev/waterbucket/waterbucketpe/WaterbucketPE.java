@@ -129,7 +129,9 @@ public class WaterbucketPE {
         String branchName = properties.getProperty("git.branch", "unknown");
         String commitId = properties.getProperty("git.commit.id.abbrev", "unknown");
         String projectVersion = properties.getProperty("git.build.version");
-        boolean debug = branchName.equals("release") ? false : VersionInfo.DEFAULT_DEBUG;
+        // Snapshot builds run with development mode enabled; anything else (tagged or release
+        // branch builds) runs in release mode, which disables Netty's per-buffer leak tracking.
+        boolean debug = projectVersion == null ? VersionInfo.DEFAULT_DEBUG : projectVersion.endsWith("-SNAPSHOT");
         return new VersionInfo(branchName, commitId, projectVersion, debug);
     }
 

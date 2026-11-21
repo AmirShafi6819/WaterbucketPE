@@ -218,8 +218,13 @@ public class ProxyServer {
                 .priority(8)
                 .daemon(true)
                 .build();
-        this.workerEventLoopGroup = channelType.newEventLoopGroup(0, workerFactory);
-        this.bossEventLoopGroup = channelType.newEventLoopGroup(0, bossFactory);
+        // Netty defaults to 2x core count threads per group. The RakNet listener binds one channel per
+        // core with SO_REUSEPORT, so core-count worker loops still give every channel a dedicated loop,
+        // while halving thread stacks, selectors and context switching. The boss group only registers
+        // channels, so a fraction of the core count is plenty for it.
+        int coreCount = Runtime.getRuntime().availableProcessors();
+        this.workerEventLoopGroup = channelType.newEventLoopGroup(coreCount, workerFactory);
+        this.bossEventLoopGroup = channelType.newEventLoopGroup(Math.max(2, coreCount / 2), bossFactory);
 
         // Default Handlers
         this.forcedHostHandler = new DefaultForcedHostHandler();
