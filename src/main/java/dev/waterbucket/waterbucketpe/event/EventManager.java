@@ -17,7 +17,6 @@ package dev.waterbucket.waterbucketpe.event;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.utils.ThreadFactoryBuilder;
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import lombok.Getter;
 
 import java.util.concurrent.*;
@@ -33,7 +32,12 @@ public class EventManager {
     private final ProxyServer proxy;
     @Getter
     private final ExecutorService threadedExecutor;
-    private final Object2ObjectOpenHashMap<Class<? extends Event>, EventHandler> handlerMap = new Object2ObjectOpenHashMap<>();
+    /*
+     * Events are fired from every Netty event loop while plugins subscribe from their own
+     * threads, so this map must be concurrent. It was a fastutil hash map before, which is
+     * not thread-safe and could corrupt entries or lose subscriptions under load.
+     */
+    private final ConcurrentHashMap<Class<? extends Event>, EventHandler> handlerMap = new ConcurrentHashMap<>();
 
     public EventManager(ProxyServer proxy) {
         this.proxy = proxy;

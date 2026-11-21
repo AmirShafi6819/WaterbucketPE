@@ -24,6 +24,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.function.Consumer;
 
 /**
@@ -36,7 +37,14 @@ public class EventHandler {
     private final EventManager eventManager;
     private final Class<? extends Event> eventClass;
 
-    private final Map<EventPriority, ArrayList<Consumer<Event>>> priority2handlers = new EnumMap<>(EventPriority.class);
+    /*
+     * Handlers are read on every event call, which happens concurrently on Netty event loops,
+     * while plugins may subscribe (and resubscribe after reloads) at any time from other
+     * threads. The previous EnumMap + ArrayList pair could throw ConcurrentModificationException
+     * or drop a handler mid-iteration, so reads iterate an immutable snapshot and subscriptions
+     * replace the whole map atomically.
+     */
+    private volatile Map<EventPriority, List<Consumer<Event>>> priority2handlers = Map.of();
 
     public EventHandler(Class<? extends Event> eventClass, EventManager eventManager) {
         this.eventClass = eventClass;
@@ -94,7 +102,7 @@ public class EventHandler {
     }
 
     private void handlePriority(EventPriority priority, Event event) {
-        ArrayList<Consumer<Event>> handlerList = this.priority2handlers.get(priority);
+        List<Consumer<Event>> handlerList = this.priority2handlers.get(priority);
         if (handlerList != null) {
             for (Consumer<Event> eventHandler : handlerList) {
                 try {
@@ -107,12 +115,28 @@ public class EventHandler {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public void subscribe(Consumer<Event> handler, EventPriority priority) {
-        List<Consumer<Event>> handlerList = this.priority2handlers.computeIfAbsent(priority, priority1 -> new ArrayList<>());
-        // Check if the event is already registered
-        if (!handlerList.contains(handler)) {
-            // Handler is not registered yet
-            handlerList.add(handler);
-        }
+        Map<EventPriority, List<Consumer<Event>>> current, next;
+        do {
+            current = this.priority2handlers;
+            next = new EnumMap<>(EventPriority.class);
+            for (Map.Entry<EventPriority, List<Consumer<Event>>> entry : current.entrySet()) {
+                next.put(entry.getKey(), entry.getValue());
+            }
+            List<Consumer<Event>> handlerList = next.computeIfAbsent(priority, priority1 -> new ArrayList<>());
+            // Check if the event is already registered
+            if (!handlerList.contains(handler)) {
+                // Handler is not registered yet
+                List<Consumer<Event>> updated = new ArrayList<>(handlerList);
+                updated.add(handler);
+                next.put(priority, List.copyOf(updated));
+            } else {
+                next.put(priority, List.copyOf(handlerList));
+            }
+        } while (!HANDLERS_UPDATER.compareAndSet(this, current, next));
     }
+
+    private static final AtomicReferenceFieldUpdater<EventHandler, Map> HANDLERS_UPDATER =
+            AtomicReferenceFieldUpdater.newUpdater(EventHandler.class, Map.class, "priority2handlers");
 }
