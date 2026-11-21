@@ -91,7 +91,9 @@ public class WaterbucketPE {
             new ProxyServer(logger, DATA_PATH, PLUGIN_PATH);
         } catch (Exception e) {
             logger.throwing(e);
-            shutdownHook();
+            // A failed start must not report success to process supervisors (Docker/systemd
+            // restart policies depend on the exit code).
+            shutdownHook(1);
         }
     }
 
@@ -109,8 +111,17 @@ public class WaterbucketPE {
      * This method is called when exception occurs or process saw shutdown
      */
     protected static void shutdownHook() {
+        shutdownHook(0);
+    }
+
+    /**
+     * Tears the logging framework down and force-exits with the given status code.
+     *
+     * @param status 0 for a clean shutdown, non-zero for a failed startup
+     */
+    protected static void shutdownHook(int status) {
         LogManager.shutdown();
-        Runtime.getRuntime().halt(0); // force exit
+        Runtime.getRuntime().halt(status); // force exit
     }
 
     private static VersionInfo loadVersion() {

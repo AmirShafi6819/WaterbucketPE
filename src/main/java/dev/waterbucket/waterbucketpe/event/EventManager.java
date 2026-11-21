@@ -43,6 +43,9 @@ public class EventManager {
         this.proxy = proxy;
         ThreadFactoryBuilder builder = ThreadFactoryBuilder.builder()
                 .format("WaterbucketEvents Executor - #%d")
+                // Internal pool: must not keep the JVM alive on its own, matching the other
+                // proxy executors.
+                .daemon(true)
                 .build();
         int idleThreads = this.proxy.getConfiguration().getIdleThreads();
         this.threadedExecutor = new ThreadPoolExecutor(idleThreads, Integer.MAX_VALUE, 60, TimeUnit.SECONDS, new SynchronousQueue<>(true), builder);

@@ -27,7 +27,12 @@ public final class ThreadFactoryBuilder implements ThreadFactory {
     private static final ThreadFactory backingFactory = Executors.defaultThreadFactory();
 
     private final AtomicInteger count = new AtomicInteger(0);
-    private final boolean daemon;
+    /**
+     * Explicit default (false, matching the previous undeclared-field behavior) so builders that
+     * never call {@code .daemon(...)} keep producing non-daemon threads.
+     */
+    @Builder.Default
+    private final boolean daemon = false;
     private final String format;
     @Builder.Default
     private final int priority = Thread.currentThread().getPriority();

@@ -17,6 +17,7 @@ package dev.waterbucket.waterbucketpe.panel;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
+import dev.waterbucket.waterbucketpe.scheduler.TaskHandler;
 import lombok.extern.log4j.Log4j2;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -62,6 +63,7 @@ public class PanelMetrics {
 
     private LogTailAppender appender;
     private volatile boolean running;
+    private volatile TaskHandler<?> sampleTask;
     private final long startedAt = System.currentTimeMillis();
 
     public PanelMetrics(ProxyServer proxy) {
@@ -71,13 +73,18 @@ public class PanelMetrics {
     public void start() {
         this.running = true;
         this.attachLogAppender();
-        this.proxy.getScheduler().scheduleRepeating(this::sample, SAMPLE_PERIOD_TICKS, true);
+        this.sampleTask = this.proxy.getScheduler().scheduleRepeating(this::sample, SAMPLE_PERIOD_TICKS, true);
         // Initial snapshot so the panel has data before the first period elapses
         this.sample();
     }
 
     public void stop() {
         this.running = false;
+        TaskHandler<?> task = this.sampleTask;
+        if (task != null) {
+            task.cancel();
+            this.sampleTask = null;
+        }
         this.detachLogAppender();
     }
 

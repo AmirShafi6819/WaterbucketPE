@@ -43,7 +43,11 @@ public class RakNetInterface implements NetworkInterface {
 
     private final long serverId;
 
-    private boolean running = false;
+    /**
+     * Written by whoever triggers the shutdown (tick thread, console, shutdown hook) and read
+     * from the re-entry guard below; volatile so two shutdown callers cannot both pass it.
+     */
+    private volatile boolean running = false;
 
     private volatile RakServerMetrics serverMetrics;
 
@@ -122,7 +126,9 @@ public class RakNetInterface implements NetworkInterface {
             return;
         }
         running = false;
-        for (Channel channel : this.serverChannels) {
+        // start() and shutdown() run on different threads; iterate a copy so a channel added
+        // concurrently cannot cause a ConcurrentModificationException.
+        for (Channel channel : List.copyOf(this.serverChannels)) {
             if (channel.isOpen()) {
                 channel.close().syncUninterruptibly();
             }

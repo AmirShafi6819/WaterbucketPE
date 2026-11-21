@@ -55,6 +55,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -91,6 +92,12 @@ public class PanelServer {
     private static final int MAX_REQUEST_BYTES = 512 * 1024;
     private static final int RATE_LIMIT_REQUESTS = 80;
     private static final long RATE_LIMIT_WINDOW_MS = TimeUnit.SECONDS.toMillis(10);
+    /**
+     * Upper bound for the rate-limit bucket map. Scanner fleets hit the panel from many source
+     * IPs; without a bound the map grew by one entry per IP and never shrank. When the bound is
+     * reached, expired buckets are evicted on the spot.
+     */
+    private static final int RATE_BUCKET_LIMIT = 4096;
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 
     private final ProxyServer proxy;
@@ -142,8 +149,19 @@ public class PanelServer {
         }
     }
 
+    /**
+     * Constant-time token comparison; equals() leaks the match position through timing.
+     */
+    private static boolean tokenEquals(String expected, String provided) {
+        if (provided == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                provided.getBytes(StandardCharsets.UTF_8));
+    }
+
     public void start(String bindAddress, int port) throws InterruptedException {
-        this.metrics.start();
         // Use the same transport (epoll/kqueue/nio) as the proxy; a Nio channel on an epoll
         // group would refuse to register
         Class<? extends io.netty.channel.socket.ServerSocketChannel> serverChannelClass =
@@ -162,6 +180,9 @@ public class PanelServer {
                     }
                 });
         this.serverChannel = bootstrap.bind(bindAddress, port).sync().channel();
+        // Metrics sampling starts only once the panel is actually listening; starting it before
+        // the bind made a failed bind leak the sampler task and the log-tail appender.
+        this.metrics.start();
         InetSocketAddress bound = (InetSocketAddress) this.serverChannel.localAddress();
         this.proxy.getLogger().info("Web panel listening on http://{}:{} (token file: {})", bound.getHostString(),
                 bound.getPort(), this.proxy.getDataPath().resolve("panel_token.txt").getFileName());
@@ -178,14 +199,14 @@ public class PanelServer {
     private boolean authorized(FullHttpRequest request, QueryStringDecoder query) {
         String header = request.headers().get(HttpHeaderNames.AUTHORIZATION);
         if (header != null && header.startsWith("Bearer ")) {
-            return this.token.equals(header.substring(7).trim());
+            return tokenEquals(this.token, header.substring(7).trim());
         }
         String panelToken = request.headers().get("X-Panel-Token");
         if (panelToken != null) {
-            return this.token.equals(panelToken.trim());
+            return tokenEquals(this.token, panelToken.trim());
         }
         List<String> values = query.parameters().get("token");
-        return values != null && !values.isEmpty() && this.token.equals(values.get(0));
+        return values != null && !values.isEmpty() && tokenEquals(this.token, values.get(0));
     }
 
     private boolean rateLimited(String ip) {
@@ -197,6 +218,11 @@ public class PanelServer {
             state[0]++;
             return state;
         });
+        if (this.rateBuckets.size() > RATE_BUCKET_LIMIT) {
+            // Scanner fleets can source thousands of IPs; drop the expired windows so the map
+            // stays bounded. Active windows survive the sweep untouched.
+            this.rateBuckets.values().removeIf(state -> now - state[1] > RATE_LIMIT_WINDOW_MS);
+        }
         return bucket[0] > RATE_LIMIT_REQUESTS;
     }
 
@@ -340,14 +366,17 @@ public class PanelServer {
             this.respondError(ctx, request, HttpResponseStatus.BAD_REQUEST, "Missing 'command'");
             return;
         }
-        // Console commands run away from the event loop, exactly like the terminal console does
-        this.commandExecutor.execute(() -> {
-            try {
-                this.proxy.dispatchCommand(this.proxy.getConsoleSender(), text.trim());
-            } catch (Throwable t) {
-                this.proxy.getLogger().error("Panel command execution failed", t);
-            }
-        });
+        // Console commands run away from the event loop, exactly like the terminal console does.
+        // The command goes through the tick scheduler, so an "end" command never runs the proxy
+        // shutdown on this panel executor (which its own shutdownNow() would interrupt).
+        this.commandExecutor.execute(() ->
+                this.proxy.getScheduler().scheduleTask(() -> {
+                    try {
+                        this.proxy.dispatchCommand(this.proxy.getConsoleSender(), text.trim());
+                    } catch (Throwable t) {
+                        this.proxy.getLogger().error("Panel command execution failed", t);
+                    }
+                }, false));
         this.respondJson(ctx, request, HttpResponseStatus.OK, Map.of("queued", true));
     }
 
@@ -414,9 +443,18 @@ public class PanelServer {
         return middle;
     }
 
+    /**
+     * Parses a JSON object body. Returns null for a blank body, malformed JSON, or any JSON
+     * that is not an object (a bare array or string used to escape as ClassCastException and
+     * reset the connection without a response).
+     */
     private Map<?, ?> parseBody(String body) {
         try {
-            return body.isBlank() ? Map.of() : GSON.fromJson(body, Map.class);
+            if (body.isBlank()) {
+                return Map.of();
+            }
+            Object parsed = GSON.fromJson(body, Object.class);
+            return parsed instanceof Map<?, ?> map ? map : null;
         } catch (Exception e) {
             return null;
         }

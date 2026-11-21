@@ -49,6 +49,9 @@ public class WaterbucketScheduler {
 
         ThreadFactoryBuilder builder = ThreadFactoryBuilder.builder()
                 .format("WaterbucketScheduler Executor - #%d")
+                // Internal pool: must not keep the JVM alive on its own, matching the tick
+                // executor and the Netty event loops.
+                .daemon(true)
                 .build();
         int idleThreads = this.proxy.getConfiguration().getIdleThreads();
         this.threadedExecutor = new ThreadPoolExecutor(idleThreads, Integer.MAX_VALUE, 60, TimeUnit.SECONDS, new SynchronousQueue<>(), builder);
@@ -150,16 +153,37 @@ public class WaterbucketScheduler {
         this.threadedExecutor.shutdown();
 
         int count = 25;
-        while (!this.threadedExecutor.isTerminated() && count-- > 0) {
+        while (count-- > 0) {
             try {
-                this.threadedExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
+                if (this.threadedExecutor.awaitTermination(100, TimeUnit.MILLISECONDS)) {
+                    break;
+                }
             } catch (InterruptedException e) {
-                // Ignore
+                // Stop waiting and force the issue below instead of busy-looping on a
+                // continuously interrupted thread.
+                break;
             }
+        }
+        // Tasks still running after the grace period get interrupted; without this they kept
+        // the (non-daemon) workers alive past the shutdown, delaying or blocking process exit.
+        this.threadedExecutor.shutdownNow();
+        // Release the task registry so queued-but-never-run handlers are not retained forever.
+        this.taskHandlerMap.clear();
+        this.assignedTasks.clear();
+        TaskHandler<?> leftover;
+        while ((leftover = this.pendingTasks.poll()) != null) {
+            // drain; MPSC queues have no clear()
         }
     }
 
     public int getCurrentTick() {
         return this.proxy.getCurrentTick();
+    }
+
+    /**
+     * Package-private lookup used by tests and diagnostics to inspect the live task registry.
+     */
+    TaskHandler<?> taskHandlerFor(int taskId) {
+        return this.taskHandlerMap.get(taskId);
     }
 }

@@ -159,8 +159,12 @@ public class ProxyServer {
     private final ScheduledExecutorService tickExecutor;
     private ScheduledFuture<?> tickFuture;
     private volatile boolean shutdown = false;
+    /**
+     * Written by the tick thread, read from any thread that schedules tasks; volatile so a
+     * scheduled task's next-run tick is never computed from a stale value.
+     */
     @Getter
-    private int currentTick = 0;
+    private volatile int currentTick = 0;
 
     public ProxyServer(MainLogger logger, String filePath, String pluginPath) throws InvalidConfigurationException {
         instance = this;
@@ -206,6 +210,9 @@ public class ProxyServer {
         ThreadFactoryBuilder builder = ThreadFactoryBuilder
                 .builder()
                 .format("WaterbucketTick Executor - #%d")
+                // Internal pools must never keep the JVM alive on their own; the shutdown
+                // path terminates them explicitly.
+                .daemon(true)
                 .build();
         this.tickExecutor = Executors.newScheduledThreadPool(1, builder);
 
@@ -410,10 +417,14 @@ public class ProxyServer {
     }
 
     public void shutdown() {
-        if (this.shutdown) {
-            return;
+        // Guard the check-then-act with a lock: a SIGTERM hook and a console/panel "end"
+        // command can otherwise both pass the flag check and run the teardown twice.
+        synchronized (this) {
+            if (this.shutdown) {
+                return;
+            }
+            this.shutdown = true;
         }
-        this.shutdown = true;
 
         try {
             this.shutdown0();
@@ -434,23 +445,34 @@ public class ProxyServer {
             this.logger.info("Disconnecting " + player.getValue().getName());
             player.getValue().disconnect(disconnectReason);
         }
-        Thread.sleep(500); // Give small delay to send packet
+        // The caller may have been interrupted on its way in (a panel "end" command used to run
+        // the shutdown on the panel executor itself, which shutdownNow() interrupts mid-flight).
+        // Swallow the flag so the whole teardown below always completes.
+        try {
+            Thread.sleep(500); // Give small delay to send packet
+        } catch (InterruptedException e) {
+            this.logger.debug("Shutdown delay interrupted; continuing teardown");
+        }
 
         this.console.getConsoleThread().interrupt();
         this.tickExecutor.shutdown();
-        this.scheduler.shutdown();
-        this.eventManager.getThreadedExecutor().shutdown();
-
-        if (Metrics.get() != null) {
-            Metrics.get().shutdown();
-        }
 
         try {
+            // Close the network interfaces first: closing a connection fires disconnect events,
+            // so the event executor must still be alive here. Shutting it down before the
+            // interfaces made every pending PlayerDisconnectedEvent fail inside disconnect().
             for (NetworkInterface interfaze : this.interfaces) {
                 interfaze.shutdown();
             }
         } catch (Exception e) {
             this.logger.error("Error while shutting down ProxyServer", e);
+        }
+
+        this.scheduler.shutdown();
+        this.eventManager.getThreadedExecutor().shutdown();
+
+        if (Metrics.get() != null) {
+            Metrics.get().shutdown();
         }
 
         if (this.tickFuture != null && !this.tickFuture.isCancelled()) {
