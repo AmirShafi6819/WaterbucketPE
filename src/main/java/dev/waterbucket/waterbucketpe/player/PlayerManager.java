@@ -16,6 +16,7 @@
 package dev.waterbucket.waterbucketpe.player;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
+import dev.waterbucket.waterbucketpe.utils.types.TextContainer;
 import dev.waterbucket.waterbucketpe.utils.types.Permission;
 
 import java.util.Collections;
@@ -74,6 +75,33 @@ public class PlayerManager {
         if (player != null) {
             this.players.remove(player.getUniqueId(), player);
             this.playersByName.remove(player.getName().toLowerCase(Locale.ROOT), player);
+        }
+    }
+
+    /**
+     * Evicts ghost registrations: players whose upstream connection died but whose disconnect
+     * event was never processed (glitched clients, lost packets). Such instances stay registered
+     * forever, block reconnects with "logged in from other location" and leak memory (reported
+     * upstream as issue #266). Runs periodically from the proxy scheduler.
+     * <p>
+     * Only the stale instance is evicted: if a fresh session for the same identity re-registered
+     * in the meantime, it stays untouched.
+     */
+    public void sweepDisconnectedPlayers() {
+        for (ProxiedPlayer player : this.players.values()) {
+            if (player.isConnected()) {
+                continue;
+            }
+            if (this.players.remove(player.getUniqueId(), player)) {
+                this.playersByName.remove(player.getName().toLowerCase(Locale.ROOT), player);
+                try {
+                    // Make sure any cleanup the disconnect path performs still runs; it is
+                    // idempotent and the registry entry is already gone.
+                    player.disconnect(new TextContainer("disconnectionScreen.timeout"));
+                } catch (Throwable t) {
+                    // The ghost is already out of the registry; nothing else can leak here.
+                }
+            }
         }
     }
 

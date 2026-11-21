@@ -88,6 +88,11 @@ import org.cloudburstmc.netty.util.nethernet.TrustedProxies;
 import org.cloudburstmc.protocol.common.util.Preconditions;
 
 public class ProxyServer {
+    /**
+     * How often the ghost-player sweep runs (15 seconds in ticks).
+     */
+    private static final int GHOST_SWEEP_PERIOD_TICKS = 20 * 15;
+
     @Getter
     private static ProxyServer instance;
 
@@ -330,6 +335,10 @@ public class ProxyServer {
 
         Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
         this.tickFuture = this.tickExecutor.scheduleAtFixedRate(this::tickProcessor, 50, 50, TimeUnit.MILLISECONDS);
+
+        // Periodically evict ghost registrations whose disconnect event was never processed;
+        // they would otherwise stay registered forever and block reconnects for that identity.
+        this.scheduler.scheduleRepeating(this.playerManager::sweepDisconnectedPlayers, GHOST_SWEEP_PERIOD_TICKS, true);
     }
 
     private void bootNetworks(InetSocketAddress address) throws NetworkStartupException {

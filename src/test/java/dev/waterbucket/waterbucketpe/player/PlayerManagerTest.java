@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -106,5 +107,51 @@ public class PlayerManagerTest {
         assertNull(this.manager.getPlayer("ghost"));
         this.manager.removePlayer(null);
         assertNull(this.manager.getPlayer(UUID.randomUUID()));
+    }
+
+    @Test
+    void sweepEvictsDisconnectedGhosts() {
+        ProxiedPlayer ghost = this.player("Ghost", UUID.randomUUID());
+        when(ghost.isConnected()).thenReturn(false);
+        this.manager.registerPlayer(ghost);
+
+        this.manager.sweepDisconnectedPlayers();
+
+        assertNull(this.manager.getPlayer("ghost"));
+        assertNull(this.manager.getPlayer(ghost.getUniqueId()));
+    }
+
+    @Test
+    void sweepKeepsConnectedPlayers() {
+        ProxiedPlayer live = this.player("Live", UUID.randomUUID());
+        when(live.isConnected()).thenReturn(true);
+        this.manager.registerPlayer(live);
+
+        this.manager.sweepDisconnectedPlayers();
+
+        assertSame(live, this.manager.getPlayer("live"));
+    }
+
+    @Test
+    void sweepDoesNotEvictFreshSessionReusingGhostIdentity() {
+        ProxiedPlayer ghost = this.player("Alex", UUID.randomUUID());
+        when(ghost.isConnected()).thenReturn(false);
+        this.manager.registerPlayer(ghost);
+
+        // The same identity reconnects before the sweep runs; the fresh session wins the registry
+        ProxiedPlayer fresh = this.player("Alex", UUID.randomUUID());
+        when(fresh.isConnected()).thenReturn(true);
+        this.manager.registerPlayer(fresh);
+
+        this.manager.sweepDisconnectedPlayers();
+
+        assertNull(this.manager.getPlayer(ghost.getUniqueId()), "stale instance must go");
+        assertSame(fresh, this.manager.getPlayer("ALEX"), "fresh session must stay");
+    }
+
+    @Test
+    void sweepWithEmptyRegistryIsSafe() {
+        this.manager.sweepDisconnectedPlayers();
+        assertEquals(0, this.manager.getPlayerCount());
     }
 }
