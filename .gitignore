@@ -36,7 +36,7 @@ modules.xml
 build/
 !gradle/wrapper/gradle-wrapper.jar
 
-# WaterdogPE test files
+# WaterbucketPE test files
 config.yml
 !.github/ISSUE_TEMPLATE/config.yml
 lang.ini

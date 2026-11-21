@@ -1,7 +1,7 @@
 <component name="CopyrightManager">
-  <settings default="WaterdogPE">
+  <settings default="WaterbucketPE">
     <module2copyright>
-      <element module="All" copyright="WaterdogPE" />
+      <element module="All" copyright="WaterbucketPE" />
     </module2copyright>
   </settings>
 </component>

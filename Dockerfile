@@ -5,6 +5,6 @@ EXPOSE 19132/udp
 
 WORKDIR /home
 
-ADD build/libs/Waterdog.jar /home
+ADD build/libs/Waterbucket.jar /home
 
-ENTRYPOINT ["java", "-jar", "Waterdog.jar"]
+ENTRYPOINT ["java", "-jar", "Waterbucket.jar"]

@@ -1,0 +1,245 @@
+/*
+ * Copyright 2026 WaterbucketTEAM
+ * Licensed under the GNU General Public License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package dev.waterbucket.waterbucketpe.transfer;
+
+import dev.waterbucket.waterbucketpe.event.defaults.PostTransferCompleteEvent;
+import dev.waterbucket.waterbucketpe.event.defaults.ServerTransferFailedEvent;
+import dev.waterbucket.waterbucketpe.network.connection.client.ClientConnection;
+import dev.waterbucket.waterbucketpe.network.connection.handler.ReconnectReason;
+import dev.waterbucket.waterbucketpe.network.protocol.handler.TransferCallback;
+import dev.waterbucket.waterbucketpe.network.protocol.handler.downstream.ConnectedDownstreamHandler;
+import dev.waterbucket.waterbucketpe.network.protocol.handler.downstream.SwitchDownstreamHandler;
+import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
+import org.cloudburstmc.math.vector.Vector2f;
+import org.cloudburstmc.math.vector.Vector3f;
+import org.cloudburstmc.protocol.bedrock.packet.MovePlayerPacket;
+import org.cloudburstmc.protocol.bedrock.packet.RespawnPacket;
+import org.cloudburstmc.protocol.bedrock.packet.SetLocalPlayerAsInitializedPacket;
+import org.cloudburstmc.protocol.bedrock.packet.UpdateClientInputLocksPacket;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+public class TransferCallbackTest {
+
+    private TransferTestHarness harness;
+    private ServerInfo sourceServer;
+    private ServerInfo targetServer;
+    private ClientConnection targetConnection;
+    private TransferCallback callback;
+
+    @BeforeEach
+    void setUp() {
+        this.harness = new TransferTestHarness();
+        this.sourceServer = this.harness.newServer("lobby");
+        this.targetServer = this.harness.newServer("game");
+        this.targetConnection = this.harness.newDownstream(this.targetServer);
+        this.callback = new TransferCallback(this.harness.player, this.targetConnection, this.sourceServer, 0);
+        assertTrue(this.harness.player.getRewriteData().trySetTransferCallback(this.callback));
+    }
+
+    @AfterEach
+    void tearDown() {
+        this.harness.close();
+    }
+
+    private void setPhase(TransferCallback.TransferPhase phase) {
+        TransferTestHarness.setField(this.callback, "transferPhase", phase);
+    }
+
+    @Test
+    void failureReleasesStateAndFiresEventOnce() {
+        this.callback.onTransferFailed("test failure");
+
+        assertEquals(TransferCallback.TransferPhase.RESET, this.callback.getPhase());
+        assertNull(this.harness.player.getRewriteData().getTransferCallback());
+        verify(this.harness.upstream).discardTransferQueue();
+
+        assertEquals(1, this.harness.events(ServerTransferFailedEvent.class).size());
+        ServerTransferFailedEvent event = this.harness.events(ServerTransferFailedEvent.class).get(0);
+        assertSame(this.targetServer, event.getTargetServer());
+        assertSame(ReconnectReason.TRANSFER_FAILED, event.getReason());
+        assertFalse(event.isRecoverable());
+
+        // Failing again must be a no-op.
+        this.callback.onTransferFailed("test failure");
+        assertEquals(1, this.harness.events(ServerTransferFailedEvent.class).size());
+    }
+
+    @Test
+    void failureKicksPlayerWhenNoFallbackExists() {
+        this.callback.onTransferFailed("test failure");
+        assertFalse(this.harness.player.isConnected(), "player should be kicked without a fallback");
+    }
+
+    @Test
+    void failureSendsPlayerToFallback() {
+        ServerInfo fallback = this.harness.newServer("fallback");
+        this.harness.stubDial(fallback);
+        when(this.harness.reconnectHandler.getFallbackServer(any(), any(), any(), anyString())).thenReturn(fallback);
+
+        this.callback.onTransferFailed("test failure");
+
+        assertTrue(this.harness.player.isConnected());
+        verify(fallback).createConnection(this.harness.player);
+    }
+
+    @Test
+    void finalizeRequiresBothResetPhaseAndPlayStatus() {
+        setPhase(TransferCallback.TransferPhase.PHASE_2);
+        this.callback.onPlayStatus();
+        verify(this.targetConnection, never()).sendPacket(isA(SetLocalPlayerAsInitializedPacket.class));
+
+        setPhase(TransferCallback.TransferPhase.RESET);
+        this.callback.tryTransferFinalize();
+
+        verify(this.targetConnection).sendPacket(isA(SetLocalPlayerAsInitializedPacket.class));
+        assertEquals(1, this.harness.events(PostTransferCompleteEvent.class).size());
+        assertNull(this.harness.player.getRewriteData().getTransferCallback(), "callback should be released on finalize");
+    }
+
+    @Test
+    void finalizeHappensOnlyOnce() {
+        setPhase(TransferCallback.TransferPhase.RESET);
+        this.callback.onPlayStatus();
+        this.callback.tryTransferFinalize();
+        this.callback.onPlayStatus();
+
+        verify(this.targetConnection).sendPacket(isA(SetLocalPlayerAsInitializedPacket.class));
+        assertEquals(1, this.harness.events(PostTransferCompleteEvent.class).size());
+    }
+
+    @Test
+    void lateSpawnAfterFailureDoesNotFinalize() {
+        ServerInfo fallback = this.harness.newServer("fallback");
+        this.harness.stubDial(fallback);
+        when(this.harness.reconnectHandler.getFallbackServer(any(), any(), any(), anyString())).thenReturn(fallback);
+
+        this.callback.onTransferFailed("test failure");
+        this.callback.onPlayStatus();
+
+        verify(this.targetConnection, never()).sendPacket(isA(SetLocalPlayerAsInitializedPacket.class));
+        assertTrue(this.harness.events(PostTransferCompleteEvent.class).isEmpty());
+    }
+
+    @Test
+    void phaseOneInputLockUsesSpawnPosition() {
+        Vector3f spawnPosition = Vector3f.from(128, 64, -32);
+        this.harness.player.getRewriteData().setSpawnPosition(spawnPosition);
+
+        this.callback.onDimChangeSuccess();
+
+        ArgumentCaptor<UpdateClientInputLocksPacket> packet = ArgumentCaptor.forClass(UpdateClientInputLocksPacket.class);
+        verify(this.harness.upstream).sendPacket(packet.capture());
+        assertEquals(spawnPosition, packet.getValue().getServerPosition());
+    }
+
+    private static RespawnPacket serverReady(Vector3f position) {
+        RespawnPacket packet = new RespawnPacket();
+        packet.setState(RespawnPacket.State.SERVER_READY);
+        packet.setPosition(position);
+        return packet;
+    }
+
+    @Test
+    void phaseTwoTeleportsToTheSpawnFromServerReady() {
+        // A BDS world set to find a safe spawn only has a placeholder height in StartGame
+        this.harness.player.getRewriteData().setSpawnPosition(Vector3f.from(0.5f, 32769.62f, 0.5f));
+        this.harness.player.getRewriteData().setRotation(Vector2f.ZERO);
+        Vector3f spawn = Vector3f.from(0.5f, 71.62f, 0.5f);
+        new SwitchDownstreamHandler(this.harness.player, this.targetConnection).handle(serverReady(spawn));
+
+        setPhase(TransferCallback.TransferPhase.PHASE_2);
+        this.callback.onDimChangeSuccess();
+
+        verify(this.harness.upstream).sendPacketImmediately(argThat(packet -> packet instanceof MovePlayerPacket move
+                && move.getPosition().equals(spawn)));
+    }
+
+    @Test
+    void onlyTheTransferTargetMovesTheSpawn() {
+        Vector3f spawn = Vector3f.from(128, 64, -32);
+        this.harness.player.getRewriteData().setSpawnPosition(spawn);
+
+        ClientConnection lobby = this.harness.newDownstream(this.sourceServer);
+        new ConnectedDownstreamHandler(this.harness.player, lobby).handle(serverReady(Vector3f.ZERO));
+        assertEquals(spawn, this.harness.player.getRewriteData().getSpawnPosition());
+
+        // A respawn after the transfer settled has no transfer left to place
+        this.harness.player.getRewriteData().clearTransferCallback(this.callback);
+        new ConnectedDownstreamHandler(this.harness.player, this.targetConnection).handle(serverReady(Vector3f.ZERO));
+        assertEquals(spawn, this.harness.player.getRewriteData().getSpawnPosition());
+    }
+
+    @Test
+    void timeoutKicksStuckTransfer() {
+        this.callback.startTimeout();
+        assertEquals(1, this.harness.scheduledTasks.size());
+        assertEquals(60 * 20, this.harness.scheduledTasks.get(0).delayTicks());
+
+        this.harness.runScheduledTasks();
+
+        assertFalse(this.harness.player.isConnected(), "stuck transfer should kick the player");
+        assertNull(this.harness.player.getRewriteData().getTransferCallback());
+        assertEquals(1, this.harness.events(ServerTransferFailedEvent.class).size());
+        ServerTransferFailedEvent event = this.harness.events(ServerTransferFailedEvent.class).get(0);
+        assertSame(ReconnectReason.TIMEOUT, event.getReason());
+        assertFalse(event.isRecoverable());
+    }
+
+    @Test
+    void timeoutIsCancelledAndIgnoredAfterFinalize() {
+        this.callback.startTimeout();
+        TransferTestHarness.Scheduled scheduled = this.harness.scheduledTasks.get(0);
+
+        setPhase(TransferCallback.TransferPhase.RESET);
+        this.callback.onPlayStatus();
+        verify(scheduled.handler()).cancel();
+
+        this.harness.runScheduledTasks();
+        assertTrue(this.harness.player.isConnected(), "finalized transfer must not kick the player");
+        assertTrue(this.harness.events(ServerTransferFailedEvent.class).isEmpty());
+    }
+
+    @Test
+    void timeoutAfterFailureDoesNothing() {
+        this.callback.startTimeout();
+        ServerInfo fallback = this.harness.newServer("fallback");
+        this.harness.stubDial(fallback);
+        when(this.harness.reconnectHandler.getFallbackServer(any(), any(), any(), anyString())).thenReturn(fallback);
+
+        this.callback.onTransferFailed("test failure");
+        this.harness.runScheduledTasks();
+
+        assertTrue(this.harness.player.isConnected());
+        assertEquals(1, this.harness.events(ServerTransferFailedEvent.class).size(), "only the failure event should exist");
+        assertSame(ReconnectReason.TRANSFER_FAILED, this.harness.events(ServerTransferFailedEvent.class).get(0).getReason());
+    }
+}

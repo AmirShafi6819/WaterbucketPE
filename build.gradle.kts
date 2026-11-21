@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 WaterdogTEAM
+ * Copyright 2026 WaterbucketTEAM
  * Licensed under the GNU General Public License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -22,9 +22,9 @@ plugins {
     alias(libs.plugins.git.properties)
 }
 
-group = "dev.waterdog.waterdogpe"
+group = "dev.waterbucket.waterbucketpe"
 version = "2.0.4-SNAPSHOT"
-description = "Brand new Minecraft: Bedrock Edition proxy created by authors of well-known Waterdog proxy"
+description = "A fast and memory-efficient Minecraft: Bedrock Edition proxy, forked from the well-known WaterdogPE proxy"
 
 java {
     toolchain {
@@ -100,7 +100,7 @@ gitProperties {
 }
 
 tasks.jar {
-    manifest.attributes["Main-Class"] = "dev.waterdog.waterdogpe.WaterdogPE"
+    manifest.attributes["Main-Class"] = "dev.waterbucket.waterbucketpe.WaterbucketPE"
 }
 
 tasks.shadowJar {
@@ -108,12 +108,12 @@ tasks.shadowJar {
     filesMatching(listOf("META-INF/services/**", "META-INF/**/Log4j2Plugins.dat")) {
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
     }
-    archiveFileName = "Waterdog.jar"
+    archiveFileName = "Waterbucket.jar"
     archiveClassifier = ""
     manifest.attributes["Multi-Release"] = "true"
     // FFM terminal provider needs Java 22+; strip it like the old shade filter did
     exclude("org/jline/terminal/impl/ffm/**")
-    relocate("org.bstats", "dev.waterdog")
+    relocate("org.bstats", "dev.waterbucket")
     transform(Log4j2PluginsCacheFileTransformer::class.java)
     mergeServiceFiles()
 }
@@ -143,11 +143,8 @@ publishing {
     }
     repositories {
         maven {
-            name = "waterdog"
-            url = uri(
-                if (version.toString().endsWith("-SNAPSHOT")) "https://repo.waterdog.dev/snapshots"
-                else "https://repo.waterdog.dev/releases"
-            )
+            name = "waterbucket"
+            url = uri("https://maven.pkg.github.com/AmirShafi6819/WaterbucketPE")
             credentials(PasswordCredentials::class)
         }
     }

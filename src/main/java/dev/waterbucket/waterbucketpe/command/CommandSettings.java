@@ -1,0 +1,111 @@
+/*
+ * Copyright 2022 WaterbucketTEAM
+ * Licensed under the GNU General Public License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package dev.waterbucket.waterbucketpe.command;
+
+import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
+import lombok.Getter;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * A container holding base the information of each command
+ */
+@Getter
+public class CommandSettings {
+
+    private static final CommandSettings EMPTY_SETTINGS = CommandSettings.builder().build();
+
+    private final String usageMessage;
+    private final String description;
+    private final boolean quoteAware;
+
+    private final String permission;
+    private final String permissionMessage;
+
+    private final Set<String> aliases;
+
+    private CommandSettings(String usageMessage, String description, String permission, Set<String> aliases, String permissionMessage, boolean quoteAware) {
+        this.usageMessage = new TranslationContainer(usageMessage).getTranslated();
+        this.description = new TranslationContainer(description).getTranslated();
+        this.permission = new TranslationContainer(permission).getTranslated();
+        this.permissionMessage = new TranslationContainer(permissionMessage).getTranslated();
+        this.quoteAware = quoteAware;
+        this.aliases = aliases;
+    }
+
+    public static CommandSettings empty() {
+        return EMPTY_SETTINGS;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    @Getter
+    public static class Builder {
+        private String usageMessage = "";
+        private String description = null;
+        private String permission = "";
+        private String permissionMessage = "waterbucket.command.permission.failed";
+        private String[] aliases = new String[0];
+        private boolean quoteAware = false;
+
+        public CommandSettings build() {
+            return new CommandSettings(
+                    this.usageMessage,
+                    this.description == null ? this.usageMessage : this.description,
+                    this.permission,
+                    Collections.unmodifiableSet(new HashSet<>(Arrays.asList(this.aliases))),
+                    this.permissionMessage,
+                    this.quoteAware
+            );
+        }
+
+        public Builder setUsageMessage(String usageMessage) {
+            this.usageMessage = usageMessage;
+            return this;
+        }
+
+        public Builder setQuoteAware(boolean quoteAware) {
+            this.quoteAware = quoteAware;
+
+            return this;
+        }
+
+        public Builder setDescription(String description) {
+            this.description = description;
+            return this;
+        }
+
+        public Builder setPermission(String permission) {
+            this.permission = permission;
+            return this;
+        }
+
+        public Builder setPermissionMessage(String permissionMessage) {
+            this.permissionMessage = permissionMessage;
+            return this;
+        }
+
+        public Builder setAliases(String... aliases) {
+            this.aliases = aliases;
+            return this;
+        }
+    }
+}

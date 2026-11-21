@@ -1,0 +1,96 @@
+/*
+ * Copyright 2026 WaterbucketTEAM
+ * Licensed under the GNU General Public License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package dev.waterbucket.waterbucketpe.network.connection.codec.initializer;
+
+import dev.waterbucket.waterbucketpe.ProxyServer;
+import dev.waterbucket.waterbucketpe.network.NetworkMetrics;
+import dev.waterbucket.waterbucketpe.network.connection.TransportProfile;
+import dev.waterbucket.waterbucketpe.network.connection.codec.server.ServerErrorHandler;
+import dev.waterbucket.waterbucketpe.network.connection.peer.BedrockServerSession;
+import dev.waterbucket.waterbucketpe.network.connection.peer.ProxiedBedrockPeer;
+import dev.waterbucket.waterbucketpe.network.nethernet.GameOutcomeReporter;
+import dev.waterbucket.waterbucketpe.network.protocol.ProtocolVersion;
+import dev.waterbucket.waterbucketpe.network.protocol.handler.upstream.LoginUpstreamHandler;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
+import org.cloudburstmc.netty.channel.nethernet.config.NetherChannelMetrics;
+import org.cloudburstmc.netty.channel.nethernet.config.NetherChannelOption;
+import org.cloudburstmc.protocol.bedrock.BedrockPeer;
+import org.cloudburstmc.protocol.bedrock.PacketDirection;
+
+/**
+ * Upstream sessions arriving over NetherNet.
+ * <p>
+ * Identical to the RakNet path above the frame codec: the data channel payload is the same batch
+ * body, minus the frame id, so compression, encryption, batching and the packet codec are shared.
+ */
+public class NetherNetServerSessionInitializer extends ProxiedSessionInitializer<BedrockServerSession> {
+    private final GameOutcomeReporter outcomes;
+
+    /**
+     * @param outcomes Reports game outcomes to the provider, or null when no provider admits players here
+     */
+    public NetherNetServerSessionInitializer(ProxyServer proxy, GameOutcomeReporter outcomes) {
+        super(proxy);
+        this.outcomes = outcomes;
+    }
+
+    @Override
+    protected void initChannel(Channel channel) {
+        // The security manager already saw this connection when its offer arrived, running it
+        // again here would charge the connection throttle twice for one join.
+        channel.attr(PacketDirection.ATTRIBUTE).set(PacketDirection.CLIENT_BOUND);
+
+        NetworkMetrics metrics = this.proxy.getNetworkMetrics();
+        if (metrics != null) {
+            channel.attr(NetworkMetrics.ATTRIBUTE).set(metrics);
+        }
+        // Mirrors the RakNet path, so peer and ICE state changes are recorded the same way losses are.
+        NetherChannelMetrics netherMetrics = metrics == null ? null : metrics.netherMetrics(NetworkMetrics.Leg.UPSTREAM);
+        if (netherMetrics != null) {
+            channel.config().setOption(NetherChannelOption.NETHER_METRICS, netherMetrics);
+        }
+
+        super.initChannel(channel);
+        if (this.outcomes != null) {
+            channel.pipeline().addBefore(BedrockPeer.NAME, GameOutcomeReporter.HANDLER_NAME,
+                    this.outcomes.observer(protocol -> ProtocolVersion.get(protocol) != null));
+        }
+
+        channel.pipeline().addLast(ServerErrorHandler.NAME, new ServerErrorHandler.Child(this.proxy));
+    }
+
+    @Override
+    protected ChannelHandler getFrameCodec() {
+        return NETHERNET_FRAME_CODEC;
+    }
+
+    @Override
+    protected TransportProfile getTransportProfile(Channel channel) {
+        return TransportProfile.NETHERNET;
+    }
+
+    @Override
+    protected BedrockServerSession createSession0(BedrockPeer peer, int subClientId) {
+        this.proxy.getLogger().debug("[" + peer.getSocketAddress() + "] <-> Received first data over NetherNet");
+        return new BedrockServerSession((ProxiedBedrockPeer) peer, subClientId);
+    }
+
+    @Override
+    protected void initSession(BedrockServerSession session) {
+        session.setPacketHandler(new LoginUpstreamHandler(this.proxy, session));
+    }
+}

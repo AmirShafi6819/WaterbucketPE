@@ -2,7 +2,7 @@
 
 ## Requirements
 
-To compile WaterdogPE you need JDK 17.
+To compile WaterbucketPE you need JDK 17.
 
 ### Recommended libraries and versions
 
@@ -14,7 +14,7 @@ To compile WaterdogPE you need JDK 17.
 ## How to complete this guide
 
 - To get latest WDPE source we recommend cloning our GitHub repository
-  using `git clone https://github.com/WaterdogPE/WaterdogPE.git`.
-- cd into `WaterdogPE` folder.
+  using `git clone https://github.com/WaterbucketPE/WaterbucketPE.git`.
+- cd into `WaterbucketPE` folder.
 - Compile sources using the Gradle Wrapper: `./gradlew build` (`gradlew.bat build` on Windows).
-- Once Gradle finishes the build you can find your executable `Waterdog.jar` in the `build/libs` folder.
+- Once Gradle finishes the build you can find your executable `Waterbucket.jar` in the `build/libs` folder.

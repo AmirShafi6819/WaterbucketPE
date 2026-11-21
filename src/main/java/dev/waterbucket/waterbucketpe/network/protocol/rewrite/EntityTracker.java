@@ -1,0 +1,214 @@
+/*
+ * Copyright 2022 WaterbucketTEAM
+ * Licensed under the GNU General Public License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package dev.waterbucket.waterbucketpe.network.protocol.rewrite;
+import dev.waterbucket.waterbucketpe.network.protocol.PacketUtils;
+import dev.waterbucket.waterbucketpe.network.protocol.ProtocolVersion;
+import org.cloudburstmc.protocol.bedrock.data.HudVisibility;
+import org.cloudburstmc.protocol.bedrock.data.ScoreInfo;
+import org.cloudburstmc.protocol.bedrock.data.debugshape.DebugShape;
+import org.cloudburstmc.protocol.bedrock.data.entity.EntityLinkData;
+import org.cloudburstmc.protocol.bedrock.packet.*;
+import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
+import org.cloudburstmc.protocol.common.PacketSignal;
+
+import java.util.List;
+
+/**
+ * Pipeline Handler used to track entities of any kind, aswell as other data
+ * that will be required to get removed when switching servers.
+ */
+public class EntityTracker implements BedrockPacketHandler {
+
+    private final ProxiedPlayer player;
+
+    public EntityTracker(ProxiedPlayer player) {
+        this.player = player;
+    }
+
+    public PacketSignal trackEntity(BedrockPacket packet) {
+        return this.handlePacket(packet);
+    }
+
+    @Override
+    public PacketSignal handle(AddPlayerPacket packet) {
+        this.player.getEntities().add(packet.getUniqueEntityId());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(AddEntityPacket packet) {
+        this.player.getEntities().add(packet.getUniqueEntityId());
+        for (EntityLinkData entityLink : packet.getEntityLinks()) {
+            this.handleEntityLink(entityLink);
+        }
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(AddItemEntityPacket packet) {
+        this.player.getEntities().add(packet.getUniqueEntityId());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(AddPaintingPacket packet) {
+        this.player.getEntities().add(packet.getUniqueEntityId());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(RemoveEntityPacket packet) {
+        this.player.getEntities().remove(packet.getUniqueEntityId());
+        // TODO Check if this is correct
+        this.player.getEntityLinks().remove(packet.getUniqueEntityId());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(AddVolumeEntityPacket packet) {
+        this.player.getVolumeEntities().put(packet.getId(), packet.getDimension());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(RemoveVolumeEntityPacket packet) {
+        this.player.getVolumeEntities().remove(packet.getId());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(PlayerFogPacket packet) {
+        this.player.setFogApplied(!packet.getFogStack().isEmpty());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(UpdateClientInputLocksPacket packet) {
+        this.player.setInputLockData(packet.getLockComponentData());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(SetHudPacket packet) {
+        if (packet.getVisibility() == HudVisibility.HIDE) {
+            this.player.getHiddenHudElements().addAll(packet.getElements());
+        } else {
+            this.player.getHiddenHudElements().removeAll(packet.getElements());
+        }
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(ContainerOpenPacket packet) {
+        this.player.getOpenContainers().put(packet.getId(), packet.getType());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(ContainerClosePacket packet) {
+        this.player.getOpenContainers().remove(packet.getId());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(PlayerListPacket packet) {
+        List<PlayerListPacket.Entry> entries = packet.getEntries();
+        for (PlayerListPacket.Entry entry : entries) {
+            PlayerListPacket.Action action = PacketUtils.getAction(packet, entry);
+            if (action == PlayerListPacket.Action.ADD) {
+                this.player.getPlayers().add(entry.getUuid());
+            } else if (action == PlayerListPacket.Action.REMOVE) {
+                this.player.getPlayers().remove(entry.getUuid());
+            }
+        }
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(SetEntityLinkPacket packet) {
+        this.handleEntityLink(packet.getEntityLink());
+        return PacketSignal.UNHANDLED;
+    }
+
+    private void handleEntityLink(EntityLinkData entityLink) {
+        if (entityLink.getType() == EntityLinkData.Type.REMOVE) {
+            this.player.getEntityLinks().remove(entityLink.getFrom());
+        } else {
+            this.player.getEntityLinks().put(entityLink.getFrom(), entityLink.getTo());
+        }
+    }
+
+    @Override
+    public final PacketSignal handle(SetDisplayObjectivePacket packet) {
+        this.player.getScoreboards().add(packet.getObjectiveId());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public final PacketSignal handle(RemoveObjectivePacket packet) {
+        this.player.getScoreboards().remove(packet.getObjectiveId());
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public final PacketSignal handle(SetScorePacket packet) {
+        SetScorePacket.Action action = packet.getAction();
+        if (action == SetScorePacket.Action.SET) {
+            for (ScoreInfo info : packet.getInfos()) {
+                this.player.getScoreInfos().put(info.getScoreboardId(), info);
+            }
+        } else if (action == SetScorePacket.Action.REMOVE) {
+            for (ScoreInfo info : packet.getInfos()) {
+                this.player.getScoreInfos().remove(info.getScoreboardId());
+            }
+        } else {
+            // Since 26.40 the ScorerType.INVALID is used for REMOVE action
+            for (ScoreInfo info : packet.getInfos()) {
+                if (info.getType() == ScoreInfo.ScorerType.INVALID) {
+                    this.player.getScoreInfos().remove(info.getScoreboardId());
+                } else {
+                    this.player.getScoreInfos().put(info.getScoreboardId(), info);
+                }
+            }
+        }
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(DebugDrawerPacket packet) {
+        // Removals can not be encoded before 1.21.120, so there is nothing to clear on switch for older clients
+        if (this.player.getProtocol().isBefore(ProtocolVersion.MINECRAFT_PE_1_21_120)) {
+            return PacketSignal.UNHANDLED;
+        }
+        for (DebugShape shape : packet.getShapes()) {
+            if (shape.getType() == null) {
+                this.player.getDebugShapes().remove(shape.getId());
+            } else {
+                this.player.getDebugShapes().put(shape.getId(), shape.getDimension());
+            }
+        }
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public final PacketSignal handle(BossEventPacket packet) {
+        switch (packet.getAction()) {
+            case CREATE -> this.player.getBossbars().add(packet.getBossUniqueEntityId());
+            case REMOVE -> this.player.getBossbars().remove(packet.getBossUniqueEntityId());
+        }
+        return PacketSignal.UNHANDLED;
+    }
+}

@@ -1,7 +1,7 @@
 blank_issues_enabled: true
 contact_links:
   - name: Discussions Q&A
-    url: https://github.com/WaterdogPE/WaterdogPE/discussions/categories/q-a
+    url: https://github.com/WaterbucketPE/WaterbucketPE/discussions/categories/q-a
     about: You can ask and answer questions about WDPE here
   - name: Discord server
     url: https://discord.gg/sJ452xNugw

@@ -1,25 +1,25 @@
-# WaterdogPE
-[![Build Status](https://github.com/WaterdogPE/WaterdogPE/actions/workflows/maven-build.yml/badge.svg)](https://github.com/WaterdogPE/WaterdogPE/actions?query=branch%3Amaster+is%3Acompleted+event%3Apush)
+# WaterbucketPE
+[![Build Status](https://github.com/WaterbucketPE/WaterbucketPE/actions/workflows/maven-build.yml/badge.svg)](https://github.com/WaterbucketPE/WaterbucketPE/actions?query=branch%3Amaster+is%3Acompleted+event%3Apush)
 [![Discord Chat](https://img.shields.io/discord/767330242078834712.svg)](https://discord.gg/QcRRzXX)
 
-WaterdogPE is a brand new Minecraft: Bedrock Edition proxy software developed by the developers of the old Waterdog
+WaterbucketPE is a brand new Minecraft: Bedrock Edition proxy software developed by the developers of the old Waterbucket
 Proxy.  
 In this new proxy, we are working with Cloudbursts Protocol Library. It takes alot of maintaining effort from us and
 provides us with a nice api to work with.  
-If you want to discuss things without joining the discord server, please use the [Discussions Tab](https://github.com/WaterdogPE/WaterdogPE/discussions)
+If you want to discuss things without joining the discord server, please use the [Discussions Tab](https://github.com/WaterbucketPE/WaterbucketPE/discussions)
 
 ## Links
 
 - [Website](https://waterdog.dev)
 - [Discord](https://discord.gg/sJ452xNugw)
 - [Official documentation](https://docs.waterdog.dev)
-- [Issue Tracker](https://github.com/WaterdogPE/WaterdogPE/issues)
+- [Issue Tracker](https://github.com/WaterbucketPE/WaterbucketPE/issues)
 - [Public Plugins Page](https://plugins.waterdog.dev/)
-- [Branding: various brand assets for the WaterdogPE project](https://github.com/WaterdogPE/Branding)
+- [Branding: various brand assets for the WaterbucketPE project](https://github.com/WaterbucketPE/Branding)
 
 ## Setup Guide
-If you haven't used WaterdogPE before, we recommend you to take a look at our [setup guide](https://docs.waterdog.dev/waterdogpe-setup/starting-waterdog) in the docs.   
-*Please note that the config from the old Waterdog (Bungee) is not compatible with WaterdogPE*
+If you haven't used WaterbucketPE before, we recommend you to take a look at our [setup guide](https://docs.waterdog.dev/waterdogpe-setup/starting-waterdog) in the docs.   
+*Please note that the config from the old Waterbucket (Bungee) is not compatible with WaterbucketPE*
 
 ### Supported Software
 Our goal is to support all commonly used Minecraft: Bedrock server softwares. Spoons and unofficial forks will not be supported due to the lack
@@ -28,7 +28,7 @@ You can find list of currently supported/unsupported software [here](https://doc
 
 ## Compiling
 
-To compile WaterdogPE please visit our [COMPILING.md](COMPILING.md) guide.
+To compile WaterbucketPE please visit our [COMPILING.md](COMPILING.md) guide.
 
 ## Maven usage
 
@@ -42,7 +42,7 @@ To compile WaterdogPE please visit our [COMPILING.md](COMPILING.md) guide.
 
 <dependencies>
     <dependency>
-        <groupId>dev.waterdog.waterdogpe</groupId>
+        <groupId>dev.waterbucket.waterbucketpe</groupId>
         <artifactId>waterdog</artifactId>
         <version>2.0.4-SNAPSHOT</version>
         <scope>provided</scope>
@@ -52,5 +52,5 @@ To compile WaterdogPE please visit our [COMPILING.md](COMPILING.md) guide.
 
 ## Included libraries
 
-- [Yamler: a forked yaml parsing library](https://github.com/WaterdogPE/Yamler)
-- [Protocol: A fork of Nukkits Protocol library with various changes for the WaterdogPE project](https://github.com/WaterdogPE/Protocol)
+- [Yamler: a forked yaml parsing library](https://github.com/WaterbucketPE/Yamler)
+- [Protocol: A fork of Nukkits Protocol library with various changes for the WaterbucketPE project](https://github.com/WaterbucketPE/Protocol)
