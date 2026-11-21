@@ -163,7 +163,9 @@ public class QueryHandler extends SimpleChannelInboundHandler<DatagramPacket> {
             this.writeString(buf, Integer.toString(event.getPlayerCount()));
             this.writeString(buf, Integer.toString(event.getMaximumPlayerCount()));
             buf.writeShortLE(bindAddress.getPort());
-            this.writeString(buf, bindAddress.getHostName());
+            // getHostString never resolves: getHostName() could do a blocking reverse DNS lookup
+            // on the event loop for every query response
+            this.writeString(buf, bindAddress.getHostString());
             return;
         }
 
@@ -174,7 +176,7 @@ public class QueryHandler extends SimpleChannelInboundHandler<DatagramPacket> {
         map.put("numplayers", Integer.toString(event.getPlayerCount()));
         map.put("maxplayers", Integer.toString(event.getMaximumPlayerCount()));
         map.put("hostport", Integer.toString(bindAddress.getPort()));
-        map.put("hostip", bindAddress.getHostName());
+        map.put("hostip", bindAddress.getHostString());
         map.put("game_id", GAME_ID);
         map.put("version", event.getVersion());
         map.put("plugins", ""); // Do not list plugins
