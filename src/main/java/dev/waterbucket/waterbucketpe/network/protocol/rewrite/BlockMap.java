@@ -67,10 +67,14 @@ public class BlockMap implements BedrockPacketHandler {
             if (success) {
                 to.writeBytes(from); // Copy the rest
                 packet.setData(to.retain());
+                // Ownership moves: the packet now references `to`, so OUR reference to the old
+                // buffer is dropped here. Releasing `from` unconditionally used to leave the
+                // packet pointing at a freed buffer on the failure path (a latent double
+                // release / use-after-free if the packet is ever re-encoded).
+                from.release();
             }
             return success ? PacketSignal.HANDLED : PacketSignal.UNHANDLED;
         } finally {
-            from.release();
             to.release();
         }
     }

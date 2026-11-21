@@ -18,6 +18,7 @@ package dev.waterbucket.waterbucketpe.command.defaults;
 import dev.waterbucket.waterbucketpe.command.Command;
 import dev.waterbucket.waterbucketpe.command.CommandSender;
 import dev.waterbucket.waterbucketpe.command.CommandSettings;
+import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
 import dev.waterbucket.waterbucketpe.network.connection.ConnectionDiagnostics;
 import dev.waterbucket.waterbucketpe.network.connection.client.ClientConnection;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
@@ -49,7 +50,7 @@ public class MeCommand extends Command {
             if (args.length < 1) {
                 return false;
             }
-            if (!sender.hasPermission("waterbucket.command.me.permission.other")) {
+            if (!sender.hasPermission(new TranslationContainer("waterbucket.command.me.permission.other").getTranslated())) {
                 sender.sendMessage("§cYou don't have the permission to inspect other players.");
                 return true;
             }

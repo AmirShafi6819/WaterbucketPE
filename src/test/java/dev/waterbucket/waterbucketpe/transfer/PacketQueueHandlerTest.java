@@ -18,14 +18,19 @@ package dev.waterbucket.waterbucketpe.transfer;
 import dev.waterbucket.waterbucketpe.network.connection.codec.batch.BatchFlags;
 import dev.waterbucket.waterbucketpe.network.connection.codec.server.PacketQueueHandler;
 import dev.waterbucket.waterbucketpe.network.connection.peer.BedrockServerSession;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
 import org.cloudburstmc.protocol.bedrock.netty.BedrockBatchWrapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
@@ -99,9 +104,46 @@ public class PacketQueueHandlerTest {
     @Test
     void overflowDisconnectsSession() {
         // MAX_BATCHES is 256, but netty clamps MPSC queues to a minimum capacity of 2048.
+        // The overflow now correctly FAILS the write promise, which EmbeddedChannel.writeOutbound
+        // surfaces as an exception; the session must still be disconnected afterwards.
         for (int i = 0; i < 3000 && this.channel.pipeline().get(PacketQueueHandler.NAME) != null; i++) {
-            this.channel.writeOutbound(BedrockBatchWrapper.newInstance());
+            try {
+                this.channel.writeOutbound(BedrockBatchWrapper.newInstance());
+            } catch (IllegalStateException expected) {
+                // promise failed with "Transfer queue got too large"
+            }
         }
+        verify(this.session, atLeastOnce()).disconnect(any(CharSequence.class));
+    }
+
+    @Test
+    void overflowReleasesTheRejectedBatchAndFailsItsPromise() {
+        // Drives the offer-rejected overflow path: the batch that the queue refused was neither
+        // queued nor written, so the old code leaked its pooled buffers and never completed the
+        // write promise.
+        List<BedrockBatchWrapper> batches = new ArrayList<>();
+        List<ChannelPromise> promises = new ArrayList<>();
+        int written = 0;
+        while (written < 4000 && this.channel.pipeline().get(PacketQueueHandler.NAME) != null) {
+            BedrockBatchWrapper batch = BedrockBatchWrapper.newInstance();
+            ChannelPromise promise = this.channel.newPromise();
+            this.channel.pipeline().write(batch, promise);
+            batches.add(batch);
+            promises.add(promise);
+            written++;
+        }
+
+        int failed = 0;
+        for (int i = 0; i < promises.size(); i++) {
+            ChannelPromise promise = promises.get(i);
+            if (!promise.isSuccess()) {
+                failed++;
+                assertEquals(0, batches.get(i).refCnt(),
+                        "the rejected batch must be released, not leaked");
+                assertTrue(promise.isDone(), "the failed write promise must be completed");
+            }
+        }
+        assertTrue(failed >= 1, "the overflow must fail at least one write promise");
         verify(this.session, atLeastOnce()).disconnect(any(CharSequence.class));
     }
 }

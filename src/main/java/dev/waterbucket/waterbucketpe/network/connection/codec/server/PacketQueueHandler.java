@@ -79,17 +79,31 @@ public class PacketQueueHandler extends ChannelDuplexHandler {
             return;
         }
 
-        if (this.queue.offer(batch) && this.packetCounter < MAX_PACKETS) {
+        // MPSC queues must not be mutated from the producer thread beyond offer(), so the
+        // two overflow cases are distinguished by the offer result instead of remove():
+        boolean offered = this.queue.offer(batch);
+        if (offered && this.packetCounter < MAX_PACKETS) {
             this.packetCounter += batch.getPackets().size();
-        } else {
-            log.warn("[{}] has reached maximum transfer queue capacity: batches={} packets={}", this.session.getSocketAddress(), this.queue.size(), this.packetCounter);
-            this.finish(ctx, false);
-            this.session.disconnect("Transfer queue got too large");
+            // The batch is accepted and written later by finish(); complete the promise now so
+            // the write contract holds (an unresolved promise made every await() on such a
+            // write hang forever).
+            promise.trySuccess();
+            return;
+        }
 
-            NetworkMetrics metrics = ctx.channel().attr(NetworkMetrics.ATTRIBUTE).get();
-            if (metrics != null) {
-                metrics.packetQueueTooLarge();
-            }
+        log.warn("[{}] has reached maximum transfer queue capacity: batches={} packets={}", this.session.getSocketAddress(), this.queue.size(), this.packetCounter);
+        if (!offered) {
+            // The offer was rejected (queue full): the batch was neither queued nor written
+            // and finish() only sees queue members, so it leaked its pooled buffers.
+            batch.release();
+        } // else: the batch is in the queue and finish(false) below releases it
+        promise.tryFailure(new IllegalStateException("Transfer queue got too large"));
+        this.finish(ctx, false);
+        this.session.disconnect("Transfer queue got too large");
+
+        NetworkMetrics metrics = ctx.channel().attr(NetworkMetrics.ATTRIBUTE).get();
+        if (metrics != null) {
+            metrics.packetQueueTooLarge();
         }
     }
 }

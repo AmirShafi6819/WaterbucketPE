@@ -47,6 +47,22 @@ public class PlayerManagerTest {
     }
 
     @Test
+    void reconnectWithChangedNameClearsTheOldNameEntry() {
+        // The same UUID reconnecting under a new profile name used to leave the old name key
+        // pointing at the dead instance until the 15-second ghost sweep
+        UUID uuid = UUID.randomUUID();
+        ProxiedPlayer first = this.player("OldName", uuid);
+        when(first.getConnection()).thenReturn(mock(dev.waterbucket.waterbucketpe.network.connection.peer.BedrockServerSession.class));
+        this.manager.registerPlayer(first);
+        ProxiedPlayer second = this.player("NewName", uuid);
+        this.manager.registerPlayer(second);
+
+        assertNull(this.manager.getPlayer("OldName"), "the old name must not resolve to the dead instance");
+        assertSame(second, this.manager.getPlayer("NewName"));
+        assertSame(second, this.manager.getPlayer(uuid));
+    }
+
+    @Test
     void getPlayerIsCaseInsensitiveExactMatch() {
         ProxiedPlayer steve = this.player("Steve", UUID.randomUUID());
         this.manager.registerPlayer(steve);

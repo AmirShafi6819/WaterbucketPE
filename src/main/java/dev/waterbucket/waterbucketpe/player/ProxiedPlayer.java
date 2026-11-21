@@ -134,7 +134,12 @@ public class ProxiedPlayer implements CommandSender {
     private final Int2ObjectMap<ContainerType> openContainers = Int2ObjectMaps.synchronize(new Int2ObjectOpenHashMap<>()); // id -> type
     private final Object2ObjectMap<String, Permission> permissions = new Object2ObjectOpenHashMap<>();
     private final Collection<ServerInfo> pendingServers = ObjectCollections.synchronize(new ObjectArrayList<>());
-    private ClientConnection clientConnection;
+    /*
+     * Written by SwitchDownstreamHandler on the new downstream loop (StartGame) and read from
+     * the old downstream loop, panel threads and commands; volatile so the relay's
+     * `connection != current` staleness window stays closed.
+     */
+    private volatile ClientConnection clientConnection;
     private ClientConnection pendingConnection;
 
 

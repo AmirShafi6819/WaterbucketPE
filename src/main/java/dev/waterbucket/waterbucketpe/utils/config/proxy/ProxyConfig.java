@@ -308,8 +308,16 @@ public class ProxyConfig extends YamlConfig {
     @Override
     protected void loadFromYaml() throws InvalidConfigurationException {
         super.loadFromYaml();
-        // A file from before config_version existed is 0
-        int version = this.root.get("config_version") instanceof Number number ? number.intValue() : 0;
+        // A file from before config_version existed is 0. A quoted "2" (string) counts as 2:
+        // hand-edited files used to fail the instanceof-Number check, silently re-running every
+        // migration step and flagging the file outdated on every boot.
+        int version = 0;
+        Object rawVersion = this.root.get("config_version");
+        if (rawVersion instanceof Number number) {
+            version = number.intValue();
+        } else if (rawVersion instanceof String text && text.matches("\\d+")) {
+            version = Integer.parseInt(text);
+        }
         if (version < 0) {
             throw new InvalidConfigurationException(this.CONFIG_FILE + " has an invalid config_version " + version);
         }

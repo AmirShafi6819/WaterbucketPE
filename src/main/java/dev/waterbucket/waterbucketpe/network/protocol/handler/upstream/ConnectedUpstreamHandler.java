@@ -40,8 +40,14 @@ import static dev.waterbucket.waterbucketpe.network.protocol.user.PlayerRewriteU
  */
 public class ConnectedUpstreamHandler extends AbstractUpstreamHandler implements ProxyPacketHandler {
 
+    /*
+     * Written by TransferCallback (client event loop) during a transfer phase and read by
+     * downstream event loops in sendProxiedBatch; volatile so a batch handed off across loops
+     * never observes a stale (null/old) target and silently drops the first packets of the
+     * new server.
+     */
     @Setter
-    private ClientConnection targetConnection;
+    private volatile ClientConnection targetConnection;
 
     public ConnectedUpstreamHandler(ProxiedPlayer player) {
         super(player);

@@ -21,6 +21,7 @@ import dev.waterbucket.waterbucketpe.command.CommandSettings;
 import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.utils.types.TextContainer;
+import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
 import org.cloudburstmc.protocol.bedrock.data.command.CommandOverloadData;
 import org.cloudburstmc.protocol.bedrock.data.command.CommandParam;
 import org.cloudburstmc.protocol.bedrock.data.command.CommandParamData;
@@ -52,7 +53,7 @@ public class ServerCommand extends Command {
         if (sender.isPlayer() && args.length < 2) {
             player = (ProxiedPlayer) sender;
         } else {
-            if (!sender.hasPermission("waterbucket.command.server.permission.other")) {
+            if (!sender.hasPermission(new TranslationContainer("waterbucket.command.server.permission.other").getTranslated())) {
                 sender.sendMessage(new TextContainer("§cYou don't have the permission to move other players."));
                 return false;
             }

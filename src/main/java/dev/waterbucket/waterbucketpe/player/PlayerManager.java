@@ -53,6 +53,12 @@ public class PlayerManager {
         if (previousSession != null && previousSession.getConnection().isConnected()) {
             previousSession.disconnect("disconnectionScreen.loggedinOtherLocation");
         }
+        // Clear the previous session's name entry too: a reconnect under a changed name (new
+        // device profile) used to leave the old name pointing at the dead instance until the
+        // 15-second ghost sweep removed it.
+        if (previousSession != null) {
+            this.playersByName.remove(previousSession.getName().toLowerCase(Locale.ROOT), previousSession);
+        }
         this.playersByName.remove(player.getName().toLowerCase(Locale.ROOT));
         this.players.put(player.getUniqueId(), player);
         this.playersByName.put(player.getName().toLowerCase(Locale.ROOT), player);

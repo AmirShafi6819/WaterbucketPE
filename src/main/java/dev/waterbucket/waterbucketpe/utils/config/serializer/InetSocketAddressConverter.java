@@ -44,8 +44,19 @@ public class InetSocketAddressConverter implements Converter {
             return null;
         }
         String string = (String) object;
-        String address = string.substring(0, string.lastIndexOf(":"));
-        int port = Integer.parseInt(string.substring(string.lastIndexOf(":") + 1));
+        int separator = string.lastIndexOf(':');
+        // "0.0.0.0" (no port) used to escape as StringIndexOutOfBounds and a non-numeric port
+        // as a bare NumberFormatException, both surfacing as an opaque startup crash.
+        if (separator <= 0) {
+            throw new IllegalArgumentException("Invalid address '" + string + "': expected <host>:<port> (IPv6 literals need [host]:port)");
+        }
+        String address = string.substring(0, separator);
+        int port;
+        try {
+            port = Integer.parseInt(string.substring(separator + 1));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid port in address '" + string + "'", e);
+        }
         return InetSocketAddress.createUnresolved(address, port);
     }
 

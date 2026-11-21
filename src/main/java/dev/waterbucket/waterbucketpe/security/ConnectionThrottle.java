@@ -43,10 +43,14 @@ public class ConnectionThrottle {
     }
 
     public boolean throttle(InetAddress address) {
-        Entry entry = this.map.get(address);
+        // putIfAbsent keeps concurrent first-hits on ONE entry: the previous get-then-put let
+        // two event loops (RakNet binds one channel per core) both see a null entry and create
+        // separate counters, so the second put orphaned the first count - the per-IP limit was
+        // under-counted exactly during a flood. ExpiringMap only overrides putIfAbsent, so
+        // computeIfAbsent would fall back to the non-atomic default Map implementation.
+        Entry entry = this.map.putIfAbsent(address, new Entry(this.limit));
         if (entry == null) {
-            entry = new Entry(this.limit);
-            this.map.put(address, entry, ExpirationPolicy.ACCESSED);
+            entry = this.map.get(address);
         }
 
         int value = entry.value.incrementAndGet();

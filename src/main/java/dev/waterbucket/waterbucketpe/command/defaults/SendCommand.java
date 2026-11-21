@@ -50,13 +50,19 @@ public class SendCommand extends Command {
         ServerInfo targetServer;
         if (sender.isPlayer() && args.length < 2) {
             targetServer = ((ProxiedPlayer) sender).getServerInfo();
+            // A player that has not connected anywhere yet has no current server; the old code
+            // fell through to args[1] and crashed with ArrayIndexOutOfBounds on a one-argument
+            // call. Answer with the usage instead.
+            if (targetServer == null) {
+                sender.sendMessage(new TextContainer("§cYou are not connected to a server yet; usage: {%0}", this.getUsageMessage()));
+                return true;
+            }
         } else {
             targetServer = sender.getProxy().getServerInfo(args[1]);
-        }
-
-        if (targetServer == null) {
-            sender.sendMessage(new TextContainer("§cCould not find target server {%0}!", args[1]));
-            return true;
+            if (targetServer == null) {
+                sender.sendMessage(new TextContainer("§cCould not find target server {%0}!", args[1]));
+                return true;
+            }
         }
 
         for (ProxiedPlayer player : targetServer.getPlayers()) {
