@@ -1,5 +1,5 @@
 name: "build"
-description: "Default WDPE build action"
+description: "Default WaterbucketPE build action"
 
 inputs:
   repo_token:
@@ -38,12 +38,17 @@ runs:
       shell: bash
 
     - name: Build and Deploy
-      if: ${{ inputs.perform_deploy == 'true' }}
+      if: ${{ inputs.perform_deploy == 'true' && inputs.deploy_username != '' }}
       run: ./gradlew build publish
       shell: bash
       env:
         ORG_GRADLE_PROJECT_waterbucketUsername: ${{ inputs.deploy_username }}
         ORG_GRADLE_PROJECT_waterbucketPassword: ${{ inputs.deploy_password }}
+
+    - name: Build (deploy skipped, credentials missing)
+      if: ${{ inputs.perform_deploy == 'true' && inputs.deploy_username == '' }}
+      run: ./gradlew build
+      shell: bash
 
     - name: Upload test report
       if: ${{ failure() }}
