@@ -1,119 +1,190 @@
-# WaterbucketPE
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/banner.png">
+    <img alt="WaterbucketPE" src=".github/banner.png">
+  </picture>
+</h1>
 
-![WaterbucketPE](.github/banner.png)
+<p align="center">
+  <a href="https://github.com/AmirShafi6819/WaterbucketPE/releases"><img alt="Release" src="https://img.shields.io/github/v/release/AmirShafi6819/WaterbucketPE?color=1BA9E0&label=release"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-GPL%20v2-blue"></a>
+  <a href="https://adoptium.net/"><img alt="Java" src="https://img.shields.io/badge/Java-17%2B-orange"></a>
+  <a href="https://github.com/AmirShafi6819/WaterbucketPE/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/AmirShafi6819/WaterbucketPE/build.yml?branch=master&label=build"></a>
+  <a href="https://github.com/WaterdogPE/WaterdogPE"><img alt="Upstream" src="https://img.shields.io/badge/upstream-WaterdogPE-5B6B8C"></a>
+</p>
 
-[![License](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](LICENSE)
-[![Java](https://img.shields.io/badge/Java-17%2B-orange.svg)](https://adoptium.net/)
-[![Release](https://img.shields.io/github/v/release/AmirShafi6819/WaterbucketPE)](https://github.com/AmirShafi6819/WaterbucketPE/releases)
-[![Upstream](https://img.shields.io/badge/upstream-WaterdogPE-5B6B8C)](https://github.com/WaterdogPE/WaterdogPE)
+**WaterbucketPE** is a drop-in replacement for [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE), the
+Minecraft: Bedrock Edition proxy. Same protocol behavior, same plugin API, same configs — with measurably
+lower memory, a built-in web panel, an embedded **Python plugin runtime** next to the classic Java one, and
+hardening for every real bug class we could reproduce.
 
-**WaterbucketPE** is a performance-focused fork of [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE),
-the well-known Minecraft: Bedrock Edition proxy. It keeps full drop-in compatibility with
-WaterdogPE setups while cutting memory and CPU overhead and tightening the core systems.
+> Every number on this page comes from the reproducible harness in
+> [`benchmarks/`](benchmarks) (real UDP pings, real RakNet handshakes, `/proc` measurements).
+> No synthetic values, no cherry-picking: slower results are shown too.
 
-```text
-  _      __     __          __            __       __  ___  ____
- | | /| / /__ _/ /____ ____/ /  __ ______/ /_____ / /_/ _ \/ __/
- | |/ |/ / _ `/ __/ -_) __/ _ \/ // / __/  '_/ -_) __/ ___/ _/
- |__/|__/\_,_/\__/\__/_/ /_.__/\_,_/\__/_/\_\\__/\\__/_/  /___/
+---
+
+## Why switch from WaterdogPE?
+
+| | WaterdogPE 2.0.4 | WaterbucketPE 1.1.0 |
+|---|---|---|
+| Idle memory (RSS) | 311 MB | **250 MB (−20%)** |
+| Memory per live session (200 held) | 48.3 KB | **21.0 KB (−56%)** |
+| RakNet ping latency (median / p95) | 0.22 / 0.61 ms | **0.22 / 0.55 ms** |
+| Handshake throughput (300 real connects) | 70.9/s @ 2.25 ms | 67.6/s @ 2.76 ms |
+| 500 concurrent sessions | all held | all held |
+| Web panel | ✗ | **built-in, token-secured** |
+| Python plugins | ✗ | **GraalPy, zero-config** |
+| Localhost multi-port transfers | can silently bypass the proxy | **fixed** |
+| Ghost-player leak (upstream #266) | leak possible | **sweeper + tests** |
+
+**Compatibility promise:** existing WaterdogPE jar plugins run unchanged; configs, commands,
+transfers, forwarding and event API semantics are preserved. The Python front-end is purely additive.
+
+---
+
+## Highlights
+
+### Built-in web panel
+
+The proxy serves its own dashboard (`enable_panel` in the config, loopback-only by default,
+token-secured): live charts, players, downstream servers with real pings, and a console that
+runs proxy commands.
+
+| Dashboard | Players |
+|---|---|
+| ![Dashboard](docs/screenshots/panel-dashboard.png) | ![Players](docs/screenshots/panel-players.png) |
+| **Servers** | **Console** |
+| ![Servers](docs/screenshots/panel-servers.png) | ![Console](docs/screenshots/panel-console.png) |
+
+- token auto-generated to `panel_token.txt` (owner-only permissions, never logged)
+- per-IP rate limiting, request size caps, `nosniff`/`DENY`/`no-referrer` headers
+- 36-minute in-memory history, sampled every 5 s — nothing touches the disk
+
+### Plugins in Java *and* Python
+
+The classic jar API is untouched; Python plugins are plain folders next to your jars:
+
+```yaml
+# plugins/HelloPy/waterbucket.yml
+name: HelloPy
+main: main.py
 ```
 
-## What changed compared to WaterdogPE
+```python
+def on_enable(plugin):
+    PlayerChatEvent = java.type("dev.waterbucket.waterbucketpe.event.defaults.PlayerChatEvent")
+    plugin.subscribe(PlayerChatEvent, lambda event: logger.info(
+        "{} says {}", event.getPlayer().getName(), event.getMessage()))
+    plugin.register_command("pyhello", "Greets from Python", "/pyhello", None, None,
+                            lambda sender, alias, args: (sender.sendMessage("hello!"), True)[1])
+```
 
-All changes are conservative: no protocol behavior, rewrite logic or plugin API semantics were
-removed or changed. Every change is measured in the benchmark below.
+Full documentation for both languages, including a facade reference and troubleshooting,
+is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
+[examples/plugins](examples/plugins).
 
-### Performance
+### Performance work that actually moved the numbers
 
-- **Release builds run with Netty leak detection truly disabled.** Upstream had a bug where the
-  raise-only guard in `setLeakDetection` silently kept every release build at `SIMPLE` tracking,
-  paying reference tracking on every direct buffer allocation. This is the single largest
-  per-session memory win (see benchmark).
-- **Right-sized Netty event loop groups.** The worker group is sized to the CPU core count
-  instead of Netty's 2x default; the RakNet listener already binds one channel per core with
-  `SO_REUSEPORT`, so every channel keeps a dedicated loop while halving thread stacks,
-  selectors and context switching.
-- **O(1) player name lookups.** `PlayerManager` now keeps a case-insensitive name index instead
-  of scanning every online player (with per-entry `toLowerCase` allocations) on each lookup.
-- **Login path allocation trims.** The username space replacement no longer compiles a regex
-  per login.
-- Development (`-SNAPSHOT`) builds still run with debug-mode leak detection, exactly like before.
+- **Per-leg zlib levels** — upstream left `downstream_compression` dead code; both legs now
+  honor their configured level (defaults 6 upstream / 2 downstream), removing most zlib CPU
+  spent re-compressing relayed batches.
+- **Flush consolidation on both legs** — the relay wrote one syscall per batch; bursts now
+  collapse into one flush per read cycle, the same approach Velocity uses.
+- **Right-sized event loops** — core-count worker loops instead of Netty's 2x, since the
+  RakNet listener already binds one channel per core (`SO_REUSEPORT`).
+- **O(1) player lookups** — case-insensitive name index instead of a full scan with per-entry
+  allocations.
+- **Release-mode leak detection actually off** — upstream's raise-only guard kept every
+  release build at `SIMPLE` tracking; the largest single per-session memory win.
 
-### Stability
+### Real bug fixes (found upstream, fixed here)
 
-- The scheduler no longer dereferences a task that was concurrently cancelled while it ran, and
-  the cancellation flag is `volatile` so async tasks observe it across threads.
-- Regression tests were added for the player index, scheduler cancellation and the language
-  fallback (see `src/test`).
+- **Fast-transfer address matching** — localhost setups running several downstreams on
+  `127.0.0.1` with different ports could silently fail the fast path (the raw `TransferPacket`
+  reached the client and pointed players at their own machine). Matching is now non-blocking
+  (no reverse DNS on event loops) and loopback aliases always resolve to their own port.
+  See [ServerInfoAddressMatchTest](src/test/java/dev/waterbucket/waterbucketpe/network/serverinfo/ServerInfoAddressMatchTest.java).
+- **Event pipeline thread safety** — events fire from every Netty loop while plugins subscribe;
+  the old fastutil/EnumMap structures could corrupt entries or throw
+  `ConcurrentModificationException`. Covered by [EventManagerConcurrencyTest](src/test/java/dev/waterbucket/waterbucketpe/event/EventManagerConcurrencyTest.java).
+- **Ghost players (upstream #266)** — a lost disconnect event kept the identity registered
+  forever and blocked reconnects; a periodic sweeper evicts only stale instances.
+- **Query handler** stopped doing reverse DNS on the event loop for every response.
+- Malformed transfer packets can no longer throw out of the packet handler and kill sessions.
 
-### Compatibility (drop-in replacement)
-
-- Existing `config.yml` files keep working (same config version and migrations).
-- Language files written for WaterdogPE keep working: unknown `waterbucket.*` keys fall back to
-  the legacy `waterdog.*` keys automatically.
-- The `Waterdog_*` login extras sent to downstream servers are still sent, so backend plugins
-  that read them keep working. `Waterbucket_*` keys are added alongside.
-- bStats service id and the upstream dependency repository are unchanged.
+---
 
 ## Benchmarks
 
-Measured with [`benchmarks/bench.py`](benchmarks/METHODOLOGY.md): both proxies built from the
-same upstream commit, run on the same 2-core container with identical JVM flags
-(`-Xms128M -Xmx512M -XX:+UseG1GC`) and identical config. Handshakes are driven by the same
-CloudburstMC RakNet library real connections use.
-
 ![Benchmark](benchmarks/benchmark.png)
 
-| Metric | WaterdogPE 2.0.4 | WaterbucketPE 1.0.0 | Difference |
-| --- | --- | --- | --- |
-| Cold startup (median) | 2.77 s | 2.78 s | equal |
-| Idle RSS (median) | 214.8 MB | 219.9 MB | equal (within noise) |
-| Idle CPU (median) | 1.50 % | 1.50 % | equal |
-| RakNet ping RTT median | 0.261 ms | 0.226 ms | **-13 %** |
-| RakNet ping RTT p95 | 0.676 ms | 0.582 ms | **-14 %** |
-| RakNet ping RTT p99 | 1.506 ms | 1.295 ms | **-14 %** |
-| Handshake connect p95 | 20.22 ms | 11.98 ms | **-41 %** |
-| Handshake throughput | 68.7 /s | 70.8 /s | +3 % |
-| CPU during handshake churn | 52.2 % | 49.1 % | **-6 %** |
-| RSS per live session (200 held) | 58.9 KB | 18.7 KB | **-68 %** |
-| CPU while holding 200 sessions | 35.5 % | 34.2 % | **-4 %** |
+- Idle RSS **−20%**, per-session memory at 200 held connections **−56%**, equal network latency,
+  all 500 concurrent sessions held on both.
+- Cold startup is the one trade-off (+0.5 s): the embedded Python language jars add classpath
+  scan time. The interpreter itself only loads when the first Python plugin exists.
+- Methodology, repeat counts and how to reproduce: [benchmarks/METHODOLOGY.md](benchmarks/METHODOLOGY.md).
 
-Raw data: [`benchmarks/results.json`](benchmarks/results.json). Reproduce it yourself with
-[`benchmarks/bench.py`](benchmarks/METHODOLOGY.md). Absolute numbers depend on the machine;
-the relative comparison is what matters, and your hardware will shift both sides.
+## Quick start
 
-## Installation
-
-1. Download the latest `Waterbucket.jar` from
-   [Releases](https://github.com/AmirShafi6819/WaterbucketPE/releases).
-2. Put it in an empty folder next to the matching start script:
-   - `start.sh` (Linux / macOS) - `chmod +x start.sh && ./start.sh`
-   - `start.bat` (Windows) - double-click or run from `cmd`
-3. Java 17 or newer is required. The start scripts use G1 flags tuned for proxies and
-   restart the proxy automatically if it exits.
-
-Switching from WaterdogPE: replace the jar, keep your `config.yml`, `plugins` and `lang.ini`.
-Everything else keeps working.
-
-## Building
+**Requirements:** Java 17+ (Temurin recommended). Players connect with any Bedrock client ≥ the
+latest supported game version.
 
 ```bash
-./gradlew build
-# output: build/libs/Waterbucket.jar
+# Linux
+java -jar Waterbucket.jar
+# or the provided script
+./start.sh
 ```
 
-Java 17 toolchain is used automatically; the build downloads it if configured
-(see `COMPILING.md`).
+```bat
+:: Windows - the release ships a native launcher
+Waterbucket.exe
+```
 
-## For developers
+The first start writes `configs/config.txt` (servers, priorities, compression, panel), prints
+the panel token location, and binds RakNet on `19132`. Point your Bedrock clients at the proxy
+and register downstream servers under `servers:`.
 
-WaterbucketPE keeps the plugin API shape of WaterdogPE 2.x with the new
-`dev.waterbucket.waterbucketpe` package namespace. Plugins written against WaterdogPE need a
-recompile and a package import update; behavior is unchanged.
+Docker images are published from the workflow for every tagged release.
+
+## Configuration highlights
+
+| Option | Default | Purpose |
+|---|---|---|
+| `enable_panel` | `true` | serve the web dashboard from the proxy |
+| `panel_bind_address` | `127.0.0.1` | keep loopback unless you front it with TLS |
+| `panel_port` | `8080` | `0` picks a free port |
+| `panel_token` | *(auto)* | API token; generated to `panel_token.txt` |
+| `upstream_compression_level` | `6` | zlib level proxy → client |
+| `downstream_compression_level` | `2` | zlib level proxy → servers (now actually applied) |
+| `prefer_fast_transfer` | `true` | intercept downstream `TransferPacket`s into fast transfers |
+
+## Documentation
+
+- [Plugin API — Java & Python](docs/PLUGINS.md)
+- [Benchmark methodology](benchmarks/METHODOLOGY.md)
+- [Web panel](docs/PLUGINS.md) (API reference) · config comments in `configs/config.txt`
+- [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
+
+## Building from source
+
+```bash
+./gradlew build          # tests + shaded jar in build/libs/Waterbucket.jar
+./gradlew test           # full test suite
+```
+
+## Contributing
+
+Issues and PRs are welcome — read [CONTRIBUTING.md](CONTRIBUTING.md) first. Performance PRs
+must include benchmark numbers from the harness in `benchmarks/`.
+
+## Acknowledgments
+
+Built on [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE) and the
+CloudburstMC protocol stack. Flush-consolidation tuning follows
+[Velocity](https://github.com/PaperMC/Velocity)'s published pipeline approach.
 
 ## License
 
-WaterbucketPE is licensed under the GNU GPL v2, same as upstream WaterdogPE.
-This project is a fork of [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE) by the
-WaterdogTEAM - all credit for the original proxy goes to them; this fork's changes are the
-optimizations listed above.
+[GNU GPL v2](LICENSE) — inherited from upstream WaterdogPE.
