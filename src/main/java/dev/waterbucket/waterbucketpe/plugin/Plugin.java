@@ -132,10 +132,19 @@ public abstract class Plugin {
      * @return Returns a file from inside the plugin jar as an InputStream
      */
     public InputStream getResourceFile(String filename) {
-        try {
-            JarFile pluginJar = new JarFile(this.pluginFile);
+        // The previous implementation opened a JarFile per call and never closed it (a file
+        // descriptor leak per call), and getInputStream(null) threw a bare NullPointerException
+        // when the entry did not exist. The returned stream must survive the JarFile close, so
+        // the entry is fully read here; plugin resources are config-sized files.
+        try (JarFile pluginJar = new JarFile(this.pluginFile)) {
             JarEntry entry = pluginJar.getJarEntry(filename);
-            return pluginJar.getInputStream(entry);
+            if (entry == null) {
+                this.proxy.getLogger().warning("Resource {} was not found in plugin {}", filename, this.getName());
+                return null;
+            }
+            try (InputStream stream = pluginJar.getInputStream(entry)) {
+                return new java.io.ByteArrayInputStream(stream.readAllBytes());
+            }
         } catch (IOException e) {
             this.proxy.getLogger().error("Can not get plugin resource!", e);
         }
@@ -192,7 +201,10 @@ public abstract class Plugin {
             this.saveResource("config.yml");
             this.config = new YamlConfig(this.configFile);
         } catch (Exception e) {
-            this.proxy.getLogger().error("Can not load plugin config!");
+            // Log the actual cause: a swallowed "Can not load plugin config!" with no exception
+            // left broken plugin configs indistinguishable from missing ones, and getConfig()
+            // returned null for a confusing NPE at the plugin call site.
+            this.proxy.getLogger().error("Can not load plugin config!", e);
         }
     }
 
@@ -224,6 +236,12 @@ public abstract class Plugin {
                 this.onDisable();
             }
         } catch (Exception e) {
+            if (enabled) {
+                // A failed enable must not leave the plugin stuck in enabled-but-dead state.
+                // The manager no longer calls setEnabled(false) after a failed enable, so
+                // onDisable() no longer runs against a half-initialized plugin either.
+                this.enabled = false;
+            }
             throw new PluginChangeStateException("Can not " + (enabled ? "enable" : "disable") + " plugin " + this.description.getName() + "!", e);
         }
     }

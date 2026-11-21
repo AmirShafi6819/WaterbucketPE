@@ -38,6 +38,25 @@ public class PluginLoader {
         return file.getFileName().toString().endsWith(".jar");
     }
 
+    /**
+     * Plugin names become directory names under plugins/ (data folder) and map keys, so a name
+     * containing path separators or {@code ..} would escape the plugin directory. Descriptors
+     * that declare such a name are rejected instead of creating/reading outside plugins/.
+     */
+    public static boolean isValidPluginName(String name) {
+        if (name == null || name.isBlank() || name.length() > 64) {
+            return false;
+        }
+        return name.matches("[A-Za-z0-9_][A-Za-z0-9._ -]*");
+    }
+
+    /**
+     * Resolves {@code candidate} inside {@code root} and rejects anything that escapes it.
+     */
+    public static boolean isInsideDirectory(Path root, Path candidate) {
+        return candidate.normalize().startsWith(root.normalize());
+    }
+
     protected PluginClassLoader loadClassLoader(PluginYAML pluginConfig, File pluginJar) {
         try {
             return new PluginClassLoader(this.pluginManager, this.getClass().getClassLoader(), pluginJar);
@@ -79,6 +98,11 @@ public class PluginLoader {
             try (InputStream fileStream = pluginJar.getInputStream(configEntry)) {
                 PluginYAML pluginConfig = yaml.loadAs(fileStream, PluginYAML.class);
                 if (pluginConfig.getMain() != null && pluginConfig.getName() != null) {
+                    if (!isValidPluginName(pluginConfig.getName())) {
+                        log.warn("Invalid plugin name '{}' in {}: names may only contain letters, digits, spaces, dots, dashes and underscores",
+                                pluginConfig.getName(), file.getName());
+                        return null;
+                    }
                     // Valid plugin.yml, main and name set
                     return pluginConfig;
                 }

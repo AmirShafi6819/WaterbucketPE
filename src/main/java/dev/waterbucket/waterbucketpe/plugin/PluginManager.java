@@ -125,6 +125,13 @@ public class PluginManager {
             this.proxy.getLogger().warning("Plugin is already loaded: {}", config.getName());
             return null;
         }
+        // Two jars declaring the same plugin name used to both reach loadAllPlugins (the name
+        // check above sees an empty map during the scan); the loser kept a registered but
+        // never-loaded classloader whose classes could shadow the winner via getClassFromCache.
+        if (this.pluginClassLoaders.containsKey(config.getName())) {
+            this.proxy.getLogger().warning("Duplicate plugin name {}: {} will be skipped", config.getName(), path.getFileName());
+            return null;
+        }
 
         PluginClassLoader classLoader = this.pluginLoader.loadClassLoader(config, path.toFile());
         if (classLoader != null) {
@@ -204,6 +211,14 @@ public class PluginManager {
         this.proxy.getLogger().warning(builder.toString());
     }
 
+    /**
+     * Plugins currently being enabled in the active enable pass; detects dependency cycles of
+     * any length. The previous check compared only against the directly-enabling parent, so a
+     * longer cycle (A→B→C→A) recursed until StackOverflowError - an Error, which escaped every
+     * handler and crashed the whole proxy boot.
+     */
+    private final Set<String> enabling = new HashSet<>();
+
     public boolean enablePlugin(Plugin plugin, String parent) {
         if (plugin.isEnabled()) return true;
         String pluginName = plugin.getName();
@@ -221,22 +236,31 @@ public class PluginManager {
                     return false;
                 }
 
-                if (!dependPlugin.isEnabled() && !this.enablePlugin(dependPlugin, pluginName)) {
-                    return false;
+                if (!dependPlugin.isEnabled()) {
+                    // A plugin currently mid-enable in this pass means a cycle somewhere in the chain
+                    if (!this.enabling.add(depend)) {
+                        this.proxy.getLogger().warning("§cCan not enable plugin " + pluginName + " circular dependency " + depend + "!");
+                        return false;
+                    }
+                    try {
+                        if (!this.enablePlugin(dependPlugin, pluginName)) {
+                            return false;
+                        }
+                    } finally {
+                        this.enabling.remove(depend);
+                    }
                 }
             }
         }
 
+        this.enabling.add(pluginName);
         try {
             plugin.setEnabled(true);
         } catch (PluginChangeStateException e) {
             this.proxy.getLogger().error(e.getMessage(), e.getCause());
-            try {
-                plugin.setEnabled(false);
-            } catch (PluginChangeStateException disableException) {
-                this.proxy.getLogger().error(disableException.getMessage(), disableException.getCause());
-            }
             return false;
+        } finally {
+            this.enabling.remove(pluginName);
         }
         this.enabledOrder.add(plugin);
         return true;

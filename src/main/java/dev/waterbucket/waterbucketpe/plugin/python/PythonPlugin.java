@@ -97,11 +97,20 @@ public class PythonPlugin extends Plugin {
             bindings.putMember("plugin", this);
             bindings.putMember("proxy", this.proxy);
             bindings.putMember("logger", this.getLogger());
-            this.context.eval("python", "import sys as _wb_sys\n_wb_sys.path.insert(0, r'" +
-                    this.getPluginFile().getAbsolutePath().replace("'", "\\'") + "')");
+            // The plugin folder joins sys.path through a bindings member: the previous source-
+            // text interpolation broke on paths containing quotes or backslashes.
+            bindings.putMember("_wb_plugin_dir", this.getPluginFile().getAbsolutePath());
+            this.context.eval("python", "import sys as _wb_sys\nif _wb_plugin_dir not in _wb_sys.path:\n    _wb_sys.path.insert(0, _wb_plugin_dir)");
 
-            this.module = this.context.eval("python", Files.readString(
-                    Path.of(this.getPluginFile().getAbsolutePath(), this.getDescription().getMain())));
+            Path main = Path.of(this.getPluginFile().getAbsolutePath(), this.getDescription().getMain());
+            if (!dev.waterbucket.waterbucketpe.plugin.PluginLoader.isInsideDirectory(
+                    Path.of(this.getPluginFile().getAbsolutePath()), main)) {
+                this.getLogger().error("Python plugin {} declares main '{}' which escapes its plugin folder",
+                        this.getName(), this.getDescription().getMain());
+                this.closeContext();
+                return false;
+            }
+            this.module = this.context.eval("python", Files.readString(main));
             return true;
         } catch (Exception e) {
             this.getLogger().error("Failed to load Python plugin {}!", this.getName(), e);
@@ -333,9 +342,15 @@ public class PythonPlugin extends Plugin {
 
     @Override
     public java.io.InputStream getResourceFile(String filename) {
-        // Python plugins are folders, not jars: resources live next to the main script
+        // Python plugins are folders, not jars: resources live next to the main script.
+        // Normalize and confine the path so '..' entries cannot read outside the folder.
         try {
-            Path path = Path.of(this.getPluginFile().getAbsolutePath(), filename);
+            Path root = Path.of(this.getPluginFile().getAbsolutePath());
+            Path path = root.resolve(filename);
+            if (!dev.waterbucket.waterbucketpe.plugin.PluginLoader.isInsideDirectory(root, path)) {
+                this.getLogger().warn("Resource {} escapes the plugin folder of {}", filename, this.getName());
+                return null;
+            }
             if (Files.exists(path)) {
                 return Files.newInputStream(path);
             }

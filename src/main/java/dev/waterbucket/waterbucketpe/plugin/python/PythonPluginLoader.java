@@ -17,6 +17,7 @@ package dev.waterbucket.waterbucketpe.plugin.python;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.plugin.Plugin;
+import dev.waterbucket.waterbucketpe.plugin.PluginLoader;
 import dev.waterbucket.waterbucketpe.plugin.PluginYAML;
 import lombok.extern.log4j.Log4j2;
 import org.yaml.snakeyaml.Yaml;
@@ -58,7 +59,8 @@ public class PythonPluginLoader {
     }
 
     /**
-     * Reads the plugin descriptor from a plugin folder. Returns null when absent or broken.
+     * Reads the plugin descriptor from a plugin folder. Returns null when absent, broken, or
+     * when the declared plugin name is invalid (names become directory names and map keys).
      */
     public PluginYAML loadDescriptor(Path folder, Yaml yaml) {
         Path descriptor = folder.resolve("waterbucket.yml");
@@ -72,7 +74,14 @@ public class PythonPluginLoader {
             Yaml parser = yaml != null ? yaml
                     : new Yaml(new org.yaml.snakeyaml.constructor.CustomClassLoaderConstructor(
                             PythonPluginLoader.class.getClassLoader()));
-            return parser.loadAs(stream, PluginYAML.class);
+            PluginYAML config = parser.loadAs(stream, PluginYAML.class);
+            if (config != null && !PluginLoader.isValidPluginName(config.getName())) {
+                log.warn("Skipping Python plugin in {}: {}", folder.getFileName(),
+                        config.getName() == null ? "descriptor declares no name"
+                                : "invalid plugin name '" + config.getName() + "'");
+                return null;
+            }
+            return config;
         } catch (Exception e) {
             log.error("Error while reading Python plugin descriptor in {}", folder.getFileName(), e);
             return null;
@@ -84,6 +93,11 @@ public class PythonPluginLoader {
      */
     public Plugin loadPlugin(PluginYAML config, Path folder) {
         Path main = folder.resolve(config.getMain());
+        if (!PluginLoader.isInsideDirectory(folder, main)) {
+            log.error("Python plugin {} declares main '{}' which escapes its plugin folder",
+                    config.getName(), config.getMain());
+            return null;
+        }
         if (!Files.isRegularFile(main)) {
             log.error("Python plugin {} declares main '{}' which does not exist in {}",
                     config.getName(), config.getMain(), folder.getFileName());
