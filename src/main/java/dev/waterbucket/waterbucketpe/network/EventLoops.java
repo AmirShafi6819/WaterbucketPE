@@ -69,5 +69,9 @@ public class EventLoops {
         public EventLoopGroup newEventLoopGroup(int threads, ThreadFactory factory) {
             return this.eventLoopGroupFactory.apply(threads, factory);
         }
+
+        public Class<? extends ServerSocketChannel> serverSocketChannel() {
+            return this.serverSocketChannel;
+        }
     }
 }

@@ -229,6 +229,34 @@ public class ProxyConfig extends YamlConfig {
     @Comment("If enabled, clients which support Vibrant Visuals (deferred lighting) will be forced to turn it off.")
     private boolean forceDisableVibrantVisuals = false;
 
+    @Path("enable_panel")
+    @Accessors(fluent = true)
+    @Comments({
+            "Local web panel: a live dashboard with players, downstream servers, history charts",
+            "and a console served by the proxy itself at http://<address>:<port>.",
+            "It binds to the loopback interface by default; open it to other interfaces only",
+            "together with a reverse proxy that provides TLS."
+    })
+    private boolean enablePanel = true;
+
+    @Path("panel_bind_address")
+    @Accessors(fluent = true)
+    @Comment("Address the web panel listens on. Keep 127.0.0.1 unless you know what you are doing")
+    private String panelBindAddress = "127.0.0.1";
+
+    @Path("panel_port")
+    @Accessors(fluent = true)
+    @Comment("Port of the web panel. Set to 0 to pick a free port automatically at startup")
+    private int panelPort = 8080;
+
+    @Path("panel_token")
+    @Accessors(fluent = true)
+    @Comments({
+            "Access token for the web panel API. Leave empty to auto-generate one on first start;",
+            "the generated token is stored in panel_token.txt next to the config (never logged)."
+    })
+    private String panelToken = "";
+
     @Path("default_idle_threads")
     @Comment("Creating threads may be in some situations expensive. Specify minimum count of idle threads per internal thread executors. Set to -1 to auto-detect by core count.")
     private int defaultIdleThreads = -1;

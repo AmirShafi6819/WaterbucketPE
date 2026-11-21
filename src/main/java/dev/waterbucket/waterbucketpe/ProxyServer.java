@@ -49,6 +49,7 @@ import dev.waterbucket.waterbucketpe.network.protocol.updaters.CodecUpdaterComma
 import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
 import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfoMap;
 import dev.waterbucket.waterbucketpe.packs.PackManager;
+import dev.waterbucket.waterbucketpe.panel.PanelServer;
 import dev.waterbucket.waterbucketpe.player.PlayerManager;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.plugin.PluginManager;
@@ -138,6 +139,7 @@ public class ProxyServer {
     private final SecurityManager securityManager;
     @Getter
     private final ErrorReporting errorReporting;
+    private PanelServer panelServer;
 
     @Setter
     @Getter
@@ -339,6 +341,21 @@ public class ProxyServer {
         // Periodically evict ghost registrations whose disconnect event was never processed;
         // they would otherwise stay registered forever and block reconnects for that identity.
         this.scheduler.scheduleRepeating(this.playerManager::sweepDisconnectedPlayers, GHOST_SWEEP_PERIOD_TICKS, true);
+
+        this.startPanel();
+    }
+
+    private void startPanel() {
+        if (!this.getConfiguration().enablePanel()) {
+            return;
+        }
+        try {
+            this.panelServer = new PanelServer(this, this.getConfiguration().panelToken());
+            this.panelServer.start(this.getConfiguration().panelBindAddress(), this.getConfiguration().panelPort());
+        } catch (Exception e) {
+            this.logger.error("Failed to start the web panel; the proxy keeps running without it", e);
+            this.panelServer = null;
+        }
     }
 
     private void bootNetworks(InetSocketAddress address) throws NetworkStartupException {
@@ -408,6 +425,9 @@ public class ProxyServer {
     }
 
     private void shutdown0() throws Exception {
+        if (this.panelServer != null) {
+            this.panelServer.shutdown();
+        }
         this.pluginManager.disableAllPlugins();
         String disconnectReason = new TranslationContainer("waterbucket.server.shutdown").getTranslated();
         for (Map.Entry<UUID, ProxiedPlayer> player : this.playerManager.getPlayers().entrySet()) {

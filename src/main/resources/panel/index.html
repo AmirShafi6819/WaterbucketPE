@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WaterbucketPE Panel</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#129381;</text></svg>">
+</head>
+<body>
+<div id="login" class="login-overlay hidden">
+  <div class="login-card">
+    <div class="login-logo">&#129381;</div>
+    <h1>WaterbucketPE Panel</h1>
+    <p class="muted">Enter the panel token from <code>panel_token.txt</code></p>
+    <input id="token-input" type="password" placeholder="Panel token" autocomplete="off">
+    <button id="login-btn">Open dashboard</button>
+    <p id="login-error" class="login-error hidden">Invalid token</p>
+  </div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="bucket">&#129381;</span>
+    <div>
+      <div class="brand-title" id="proxy-name">WaterbucketPE</div>
+      <div class="brand-sub muted" id="proxy-version">local web panel</div>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">CPU</span><span class="stat-value" id="stat-cpu">–</span></div>
+    <div class="stat"><span class="stat-label">Memory</span><span class="stat-value" id="stat-mem">–</span></div>
+    <div class="stat"><span class="stat-label">Threads</span><span class="stat-value" id="stat-threads">–</span></div>
+    <div class="stat"><span class="stat-label">Players</span><span class="stat-value accent" id="stat-players">–</span></div>
+    <div class="stat"><span class="stat-label">Servers</span><span class="stat-value" id="stat-servers">–</span></div>
+    <div class="stat"><span class="stat-label">Uptime</span><span class="stat-value" id="stat-uptime">–</span></div>
+    <div class="stat clock"><span class="stat-value muted" id="stat-clock">–</span></div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="dashboard">Dashboard</button>
+  <button class="tab" data-tab="players">Players</button>
+  <button class="tab" data-tab="servers">Servers</button>
+  <button class="tab" data-tab="console">Console</button>
+</nav>
+
+<main>
+  <section id="tab-dashboard" class="tab-page active">
+    <div class="grid">
+      <div class="card chart-card">
+        <h3>Players over time</h3>
+        <canvas id="chart-players"></canvas>
+      </div>
+      <div class="card chart-card">
+        <h3>Memory over time</h3>
+        <canvas id="chart-memory"></canvas>
+      </div>
+      <div class="card chart-card">
+        <h3>CPU % over time</h3>
+        <canvas id="chart-cpu"></canvas>
+      </div>
+      <div class="card chart-card">
+        <h3>Players per server</h3>
+        <canvas id="chart-perserver"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Server status</h3>
+      <div class="table-wrap"><table id="server-status-table">
+        <thead><tr><th>Server</th><th>Address</th><th>Type</th><th>Players</th><th>Ping</th><th>Status</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="tab-players" class="tab-page">
+    <div class="card">
+      <h3>Online players <span class="badge" id="player-count">0</span></h3>
+      <div class="table-wrap"><table id="players-table">
+        <thead><tr><th>Name</th><th>Server</th><th>IP</th><th>Protocol</th><th>XUID</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section id="tab-servers" class="tab-page">
+    <div class="card">
+      <h3>Downstream servers</h3>
+      <div class="table-wrap"><table id="servers-table">
+        <thead><tr><th>Server</th><th>Address</th><th>Type</th><th>Players</th><th>Ping</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h3>Uptime per server</h3>
+      <canvas id="chart-uptime"></canvas>
+    </div>
+  </section>
+
+  <section id="tab-console" class="tab-page">
+    <div class="card console-card">
+      <h3>Console</h3>
+      <div id="console-output" class="console-output"></div>
+      <div class="console-input">
+        <span class="muted">&gt;</span>
+        <input id="console-command" type="text" placeholder="Type a proxy command (e.g. list) and press Enter" autocomplete="off">
+        <button id="console-send">Run</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer muted">
+  WaterbucketPE local panel &middot; token required for every API call &middot; bound to <span id="bind-info">127.0.0.1</span>
+</footer>
+
+<script src="/chart.umd.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -112,6 +112,14 @@ tasks.shadowJar {
     filesMatching(listOf("META-INF/services/**", "META-INF/**/Log4j2Plugins.dat")) {
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
     }
+    // GraalPy ships POM-only aggregator artifacts; they carry no classes and shadow cannot
+    // expand them, so keep the real language/resources jars and drop the empty poms
+    dependencies {
+        exclude(dependency("org.graalvm.polyglot:python"))
+        exclude(dependency("org.graalvm.python:python"))
+        exclude(dependency("org.graalvm.polyglot:python-community"))
+        exclude(dependency("org.graalvm.python:python-community"))
+    }
     archiveFileName = "Waterbucket.jar"
     archiveClassifier = ""
     manifest.attributes["Multi-Release"] = "true"
