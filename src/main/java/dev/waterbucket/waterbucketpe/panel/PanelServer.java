@@ -304,9 +304,11 @@ public class PanelServer {
                     return;
                 }
                 byte[] body = stream.readAllBytes();
-                String contentType = path.endsWith(".html") ? "text/html; charset=utf-8"
-                        : path.endsWith(".css") ? "text/css; charset=utf-8"
-                        : path.endsWith(".js") ? "application/javascript; charset=utf-8"
+                // type comes from the resource (path "/" must serve index.html as HTML,
+                // otherwise browsers treat the navigation as a download and abort it)
+                String contentType = resource.endsWith(".html") ? "text/html; charset=utf-8"
+                        : resource.endsWith(".css") ? "text/css; charset=utf-8"
+                        : resource.endsWith(".js") ? "application/javascript; charset=utf-8"
                         : "application/octet-stream";
                 PanelServer.this.respond(ctx, request, HttpResponseStatus.OK, contentType, body);
             } catch (IOException e) {
