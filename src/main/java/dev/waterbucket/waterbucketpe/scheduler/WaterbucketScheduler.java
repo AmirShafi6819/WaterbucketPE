@@ -138,7 +138,11 @@ public class WaterbucketScheduler {
             return;
         }
 
-        this.taskHandlerMap.remove(taskHandler.getTaskId()).cancel();
+        // The task may have been cancelled (and unregistered) concurrently while it ran
+        TaskHandler<?> removed = this.taskHandlerMap.remove(taskHandler.getTaskId());
+        if (removed != null) {
+            removed.cancel();
+        }
     }
 
     public void shutdown() {

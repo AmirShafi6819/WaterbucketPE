@@ -36,7 +36,11 @@ public class TaskHandler<T extends Runnable> {
     @Setter
     private int nextRunTick;
 
-    private boolean cancelled;
+    /**
+     * Async tasks can be cancelled from another thread while they run, so the flag must be
+     * volatile for the tick thread to observe the cancellation without a race.
+     */
+    private volatile boolean cancelled;
 
     public TaskHandler(T task, int taskId, boolean async) {
         this.task = task;
