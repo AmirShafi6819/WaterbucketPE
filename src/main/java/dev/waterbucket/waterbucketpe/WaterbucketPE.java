@@ -166,7 +166,13 @@ public class WaterbucketPE {
     }
 
     private static void setLeakDetection(ResourceLeakDetector.Level level) {
-        if (ResourceLeakDetector.getLevel().ordinal() < level.ordinal()) {
+        if (level == ResourceLeakDetector.Level.DISABLED) {
+            // Release mode: Netty's per-buffer reference tracking is pure overhead here.
+            // The old raise-only guard never applied DISABLED, so every release build
+            // silently kept tracking allocations at the SIMPLE level.
+            ResourceLeakDetector.setLevel(level);
+        } else if (ResourceLeakDetector.getLevel().ordinal() < level.ordinal()) {
+            // Debug mode only ever raises the level
             ResourceLeakDetector.setLevel(level);
         }
     }

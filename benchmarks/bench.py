@@ -233,7 +233,7 @@ def run_session_handshakes(count=250):
             "handshake_rtt_median_ms": statistics.median(rtts) * 1000 if rtts else None}
 
 
-def bench_jar(jar, name, runs=5):
+def bench_jar(jar, name, runs=3):
     result = {"name": name, "jar": os.path.basename(jar), "jvm_flags": " ".join(JVM_FLAGS),
               "port": PORT, "startup": [], "idle_rss_kb": [], "idle_cpu_pct": []}
     little = detect_endianness()
@@ -250,10 +250,10 @@ def bench_jar(jar, name, runs=5):
                 raise RuntimeError(f"{name} failed to start (see /tmp/{name}-crash-{run_idx}.log)")
             result["startup"].append(startup)
 
-            time.sleep(20)  # JIT warm-up / settle
+            time.sleep(15)  # JIT warm-up / settle
             result["idle_rss_kb"].append(rss_kb(pid))
             c0, t0 = cpu_seconds(pid), time.perf_counter()
-            time.sleep(30)
+            time.sleep(20)
             cpu = (cpu_seconds(pid) - c0) / (time.perf_counter() - t0) * 100.0
             result["idle_cpu_pct"].append(cpu)
         finally:
@@ -270,7 +270,7 @@ def bench_jar(jar, name, runs=5):
 
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.bind(("127.0.0.1", 0))
-        rtts, lost = run_ping_rtt(s, 2000)
+        rtts, lost = run_ping_rtt(s, 1500)
         s.close()
         result["ping_rtt_ms"] = {
             "count": len(rtts), "lost": lost,
@@ -282,7 +282,7 @@ def bench_jar(jar, name, runs=5):
         result["concurrent_ping"] = run_concurrent_pings()
 
         rss_before = rss_kb(pid)
-        result["session_handshake"] = run_session_handshakes(250)
+        result["session_handshake"] = run_session_handshakes(200)
         time.sleep(1)
         result["rss_after_load_kb"] = rss_kb(pid) - rss_before
 
