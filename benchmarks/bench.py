@@ -7,14 +7,18 @@ reports raw numbers (JSON) so charts can be generated from real data:
 
   1. cold startup time (process start -> first successful RakNet unconnected ping reply)
   2. idle RSS / idle CPU after a warm-up settle
-  3. unconnected ping RTT distribution (median / p95 / p99) and single-socket reply rate
-  4. concurrent ping throughput (8 sockets x N pings)
-  5. RakNet session handshake (OR1+OR2) success rate and rate, from unique source ports
-  6. RSS / CPU under that connection load
+  3. unconnected ping RTT distribution (median / p95 / p99), paced under the proxy's
+     per-address packet limit
+  4. concurrent ping throughput (8 sockets, paced)
+  5. RakNet session handshakes driven by RakBenchClient (the same CloudburstMC RakNet
+     library the proxy uses, i.e. byte-for-byte what real connections perform):
+     success rate, per-handshake latency, connect rate
+  6. RSS / CPU with 200 live sessions held open
 
-Everything is measured from outside the JVM with UDP packets and /proc, so both
-proxy variants run under identical conditions. Repeat runs are stored raw so the
-chart can show medians honestly.
+Both variants run with identical JVM flags and an identical config.yml
+(connection_throttle disabled so the harness measures handshake performance, not the
+DoS protection). Everything is measured from outside the JVM (UDP packets, /proc),
+and repeat runs are stored raw so the chart can show medians honestly.
 """
 import json
 import os
@@ -31,34 +35,24 @@ import time
 
 MAGIC = bytes.fromhex("00ffff00fefefefefdfdfdfd12345678")
 ID_PING, ID_PONG = 0x01, 0x1C
-ID_REQ1, ID_REP1 = 0x05, 0x06
-ID_REQ2, ID_REP2 = 0x07, 0x08
-ID_INCOMPAT, ID_ALREADY = 0x19, 0x1A
 PORT = 19132
 JAVA = os.environ.get("BENCH_JAVA", "/home/z/jdk17/bin/java")
 JVM_FLAGS = ["-Xms128M", "-Xmx512M", "-XX:+UseG1GC", "-XX:MaxGCPauseMillis=200"]
-MTU = 1400
+PING_PACE_S = 0.015  # RakNet rate limits packets per source address; stay well under it
 GUID = 0x1122334455667788
 
+BENCH_CONFIG = """network_settings:
+  # The harness measures handshake performance, not the DoS protection,
+  # so the per-address connection throttle is disabled for both variants alike.
+  connection_throttle: -1
+"""
 
-def flip(b):
-    return bytes(x ^ 0xFF for x in b)
-
-
-def ping_packet(now_ns, little=False):
-    fmt = "<q" if little else ">q"
-    return struct.pack(">B", ID_PING) + struct.pack(fmt, now_ns) + MAGIC + struct.pack(fmt, GUID)
-
-
-def req1_packet():
-    datagram_size = MTU - 48  # matches the server's MTU derivation
-    body = struct.pack(">BB", ID_REQ1, 11) + MAGIC
-    return body + b"\x00" * (datagram_size - len(body))
+CLIENT_CLASSPATH = os.environ.get("BENCH_CLIENT_JAR", "/home/z/my-project/WaterbucketPE/build/libs/Waterbucket.jar")
+CLIENT_DIR = os.environ.get("BENCH_CLIENT_CLASSES", "/tmp/wbtest7")
 
 
-def req2_packet(port):
-    addr = struct.pack(">B", 4) + flip(socket.inet_aton("127.0.0.1")) + struct.pack(">H", port)
-    return struct.pack(">B", ID_REQ2) + MAGIC + addr + struct.pack(">H", MTU) + struct.pack(">q", GUID)
+def ping_packet(now_ns):
+    return struct.pack(">Bq", ID_PING, now_ns) + MAGIC + struct.pack(">q", GUID)
 
 
 def recv_reply(sock, want_ids, timeout=1.0):
@@ -74,30 +68,15 @@ def recv_reply(sock, want_ids, timeout=1.0):
     return None
 
 
-def ping_once(sock, little=False):
+def ping_once(sock):
     """One unconnected ping; returns RTT seconds or None."""
-    sock.settimeout(1.0)
+    sock.settimeout(0.5)
     t0 = time.perf_counter()
-    sock.sendto(ping_packet(int(t0 * 1e9), little), ("127.0.0.1", PORT))
-    reply = recv_reply(sock, (ID_PONG,), timeout=1.0)
+    sock.sendto(ping_packet(int(t0 * 1e9)), ("127.0.0.1", PORT))
+    reply = recv_reply(sock, (ID_PONG,), timeout=0.5)
     if reply is None:
         return None
     return time.perf_counter() - t0
-
-
-def detect_endianness():
-    """The lib reads times big-endian; verify once so the harness matches the wire."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.bind(("127.0.0.1", 0))
-    if ping_once(s, little=False) is not None:
-        s.close()
-        return False
-    s.close()
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.bind(("127.0.0.1", 0))
-    ok = ping_once(s, little=True) is not None
-    s.close()
-    return True if ok else None
 
 
 def rss_kb(pid):
@@ -122,6 +101,8 @@ class ProxyProcess:
         self.proc = None
 
     def start(self, log_path):
+        with open(os.path.join(self.workdir, "config.yml"), "w") as fh:
+            fh.write(BENCH_CONFIG)
         env = dict(os.environ)
         env["JAVA_HOME"] = "/home/z/jdk17"
         self.log = open(log_path, "wb")
@@ -161,36 +142,41 @@ class ProxyProcess:
                 pass
 
 
-def run_ping_rtt(sock, count=2000):
+def run_ping_rtt(sock, count=1500):
+    """Sequential pings, paced under the proxy's per-address packet limit."""
     rtts = []
     lost = 0
     for _ in range(count):
+        t0 = time.perf_counter()
         rtt = ping_once(sock)
         if rtt is None:
             lost += 1
         else:
             rtts.append(rtt)
+        rest = PING_PACE_S - (time.perf_counter() - t0)
+        if rest > 0:
+            time.sleep(rest)
     return rtts, lost
 
 
-def run_concurrent_pings(threads=8, per_thread=500):
+def run_concurrent_pings(threads=8, per_thread=100):
     total_ok = [0]
     lock = threading.Lock()
-    elapsed = [0.0]
 
     def worker():
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.bind(("127.0.0.1", 0))
         ok = 0
-        t0 = time.perf_counter()
         for _ in range(per_thread):
+            t1 = time.perf_counter()
             if ping_once(s) is not None:
                 ok += 1
-        dt = time.perf_counter() - t0
+            rest = PING_PACE_S - (time.perf_counter() - t1)
+            if rest > 0:
+                time.sleep(rest)
         s.close()
         with lock:
             total_ok[0] += ok
-            elapsed[0] = max(elapsed[0], dt)
 
     ts = [threading.Thread(target=worker) for _ in range(threads)]
     wall0 = time.perf_counter()
@@ -207,37 +193,44 @@ def run_concurrent_pings(threads=8, per_thread=500):
     }
 
 
-def run_session_handshakes(count=250):
-    """Complete OR1+OR2 from unique source ports; each OR2 allocates a server-side session."""
-    ok = 0
-    rtts = []
-    for i in range(count):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.bind(("127.0.0.1", 0))
-        try:
-            t0 = time.perf_counter()
-            s.sendto(req1_packet(), ("127.0.0.1", PORT))
-            rep1 = recv_reply(s, (ID_REP1, ID_INCOMPAT), timeout=1.0)
-            if rep1 is None or rep1[0] != ID_REP1:
-                s.close()
-                continue
-            s.sendto(req2_packet(PORT), ("127.0.0.1", PORT))
-            rep2 = recv_reply(s, (ID_REP2, ID_ALREADY), timeout=1.0)
-            if rep2 is not None and rep2[0] == ID_REP2:
-                ok += 1
-                rtts.append(time.perf_counter() - t0)
-        finally:
-            s.close()
-    return {"attempts": count, "sessions_opened": ok,
-            "success_pct": ok / count * 100.0,
-            "handshake_rtt_median_ms": statistics.median(rtts) * 1000 if rtts else None}
+def run_java_client(mode, count, hold_seconds=8):
+    """Run RakBenchClient (the real RakNet library) against the live proxy."""
+    out = subprocess.run(
+        [JAVA, "-cp", f"{CLIENT_DIR}:{CLIENT_CLASSPATH}", "RakBenchClient",
+         mode, "127.0.0.1", str(PORT), str(count), str(hold_seconds)],
+        capture_output=True, text=True, timeout=600,
+    )
+    result = {"mode": mode, "requested": count}
+    for line in out.stdout.splitlines():
+        if line.startswith("RESULT"):
+            for part in line.replace("RESULT", "").split():
+                key, _, value = part.partition("=")
+                result[key] = int(value)
+        elif line.startswith("LATENCIES_US="):
+            raw = line.replace("LATENCIES_US=", "").rstrip(",")
+            vals = [int(x) for x in raw.split(",") if x]
+            result["connects_us"] = vals
+    result["failures"] = out.stderr[-2000:] if out.returncode != 0 else ""
+    return result
+
+
+def summarize_client(client_result, hold_window_cpu=None):
+    vals = client_result.get("connects_us", [])
+    out = {
+        "ok": client_result.get("ok", 0),
+        "failed": client_result.get("failed", 0),
+    }
+    if vals:
+        out["connect_ms_median"] = statistics.median(vals) / 1000
+        out["connect_ms_p95"] = (statistics.quantiles(vals, n=20)[18] / 1000) if len(vals) > 20 else None
+    if hold_window_cpu:
+        out.update(hold_window_cpu)
+    return out
 
 
 def bench_jar(jar, name, runs=3):
     result = {"name": name, "jar": os.path.basename(jar), "jvm_flags": " ".join(JVM_FLAGS),
               "port": PORT, "startup": [], "idle_rss_kb": [], "idle_cpu_pct": []}
-    little = detect_endianness()
-    result["ping_time_little_endian"] = bool(little)
 
     for run_idx in range(runs):
         workdir = tempfile.mkdtemp(prefix="wb-bench-")
@@ -279,24 +272,29 @@ def bench_jar(jar, name, runs=3):
             "p99": statistics.quantiles(rtts, n=100)[98] * 1000 if len(rtts) > 100 else None,
         }
 
-        result["concurrent_ping"] = run_concurrent_pings()
+        result["concurrent_ping"] = run_concurrent_pings(threads=8, per_thread=100)
 
-        rss_before = rss_kb(pid)
-        result["session_handshake"] = run_session_handshakes(200)
-        time.sleep(1)
-        result["rss_after_load_kb"] = rss_kb(pid) - rss_before
-
+        # Session churn: 300 sequential real-library handshakes
         c0, t0 = cpu_seconds(pid), time.perf_counter()
-        load = run_concurrent_pings(threads=4, per_thread=250)
-        hs = run_session_handshakes(100)
-        wall = time.perf_counter() - t0
-        result["mixed_load"] = {
-            "wall_s": wall, "cpu_pct": (cpu_seconds(pid) - c0) / wall * 100.0,
-            "ping_replies": load["replies"],
-            "sessions_opened": hs["sessions_opened"],
-            "ops_per_sec": (load["replies"] + hs["sessions_opened"]) / wall,
-        }
-        result["rss_after_mixed_kb"] = rss_kb(pid)
+        churn = run_java_client("handshake", 300)
+        churn_wall = time.perf_counter() - t0
+        result["handshake_churn"] = summarize_client(churn, {
+            "wall_s": churn_wall,
+            "cpu_pct": (cpu_seconds(pid) - c0) / churn_wall * 100.0,
+            "connects_per_sec": churn.get("ok", 0) / churn_wall,
+        })
+
+        # 200 live sessions: RSS delta + CPU while held
+        rss_before = rss_kb(pid)
+        c0, t0 = cpu_seconds(pid), time.perf_counter()
+        hold = run_java_client("hold", 200, hold_seconds=8)
+        hold_wall = time.perf_counter() - t0
+        result["live_sessions"] = summarize_client(hold, {
+            "held": hold.get("ok", 0),
+            "rss_delta_kb": rss_kb(pid) - rss_before,
+            "kb_per_session": (rss_kb(pid) - rss_before) / max(1, hold.get("ok", 1)),
+            "cpu_pct": (cpu_seconds(pid) - c0) / hold_wall * 100.0,
+        })
     finally:
         pp.stop()
         shutil.rmtree(workdir, ignore_errors=True)
@@ -315,10 +313,14 @@ def summarize(results):
             "ping_rtt_p95_ms": r["ping_rtt_ms"]["p95"],
             "ping_replies_per_sec": r["concurrent_ping"]["replies_per_sec"],
             "ping_loss_pct": r["concurrent_ping"]["loss_pct"],
-            "handshake_success_pct": r["session_handshake"]["success_pct"],
-            "handshake_rtt_ms": r["session_handshake"]["handshake_rtt_median_ms"],
-            "mixed_cpu_pct": r["mixed_load"]["cpu_pct"],
-            "mixed_ops_per_sec": r["mixed_load"]["ops_per_sec"],
+            "handshake_ok": r["handshake_churn"]["ok"],
+            "handshake_failed": r["handshake_churn"]["failed"],
+            "handshake_connect_ms_median": r["handshake_churn"].get("connect_ms_median"),
+            "handshake_connects_per_sec": r["handshake_churn"].get("connects_per_sec"),
+            "handshake_cpu_pct": r["handshake_churn"].get("cpu_pct"),
+            "sessions_held": r["live_sessions"]["held"],
+            "kb_per_session": r["live_sessions"].get("kb_per_session"),
+            "sessions_cpu_pct": r["live_sessions"].get("cpu_pct"),
         }
     return out
 
