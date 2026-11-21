@@ -72,6 +72,10 @@ dependencies {
     implementation(variantOf(libs.netty.transport.native.epoll) { classifier("linux-x86_64") })
     implementation(variantOf(libs.netty.transport.native.kqueue) { classifier("osx-x86_64") })
     implementation(libs.nimbus.jose.jwt)
+    // Embedded Python for the plugin API (GraalVM Polyglot). The language jars only load
+    // once the first Python context is created, so servers without Python plugins pay nothing.
+    implementation(libs.polyglot)
+    implementation(libs.graalpy.python)
 
     // NetherNet transport. The arch-detect bundle carries the WebRTC bindings plus a native for
     // every supported platform, so the shaded jar runs anywhere the proxy does.

@@ -38,7 +38,10 @@ public class TranslationContainer extends TextContainer {
     }
 
     public String getTranslated() {
-        return ProxyServer.getInstance().translate(this);
+        ProxyServer instance = ProxyServer.getInstance();
+        // Null before boot (e.g. command settings built by tests or early plugin init): fall back
+        // to the raw message instead of throwing, so class initialization never depends on boot order.
+        return instance == null ? this.getMessage() : instance.translate(this);
     }
 
     @Override

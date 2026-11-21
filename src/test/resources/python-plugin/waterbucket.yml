@@ -1,0 +1,5 @@
+name: HelloPy
+version: 1.0.0
+author: WaterbucketTEAM
+main: main.py
+depends: []

@@ -16,6 +16,7 @@
 package dev.waterbucket.waterbucketpe.plugin;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
+import dev.waterbucket.waterbucketpe.plugin.python.PythonPluginLoader;
 import dev.waterbucket.waterbucketpe.utils.exceptions.PluginChangeStateException;
 import it.unimi.dsi.fastutil.Pair;
 import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
@@ -46,6 +47,7 @@ public class PluginManager {
     @Getter
     private final ProxyServer proxy;
     private final PluginLoader pluginLoader;
+    private final PythonPluginLoader pythonLoader;
 
     protected final Object2ObjectMap<String, PluginClassLoader> pluginClassLoaders = new Object2ObjectArrayMap<>();
     private final Object2ObjectMap<String, Plugin> pluginMap = new Object2ObjectArrayMap<>();
@@ -57,6 +59,7 @@ public class PluginManager {
     public PluginManager(ProxyServer proxy) {
         this.proxy = proxy;
         this.pluginLoader = new PluginLoader(this);
+        this.pythonLoader = new PythonPluginLoader(proxy);
         try {
             this.loadPluginsInside(this.proxy.getPluginPath());
         } catch (IOException e) {
@@ -85,6 +88,23 @@ public class PluginManager {
             });
         }
         plugins.forEach(this::registerClassLoader);
+
+        // Folder-based Python plugins load alongside jar plugins; existing jar plugins are untouched
+        try (Stream<Path> stream = Files.walk(folderPath, 2)) {
+            stream.filter(path -> !path.equals(folderPath)).filter(this.pythonLoader::isPythonPlugin).forEach(dir -> {
+                PluginYAML config = this.pythonLoader.loadDescriptor(dir, yamlLoader);
+                if (config == null) {
+                    return;
+                }
+                if (this.getPluginByName(config.getName()) != null) {
+                    this.proxy.getLogger().warning("Plugin is already loaded: {}", config.getName());
+                    return;
+                }
+                this.pluginsToLoad.add(ObjectObjectImmutablePair.of(config, dir));
+            });
+        } catch (IOException e) {
+            this.proxy.getLogger().error("Error while scanning for Python plugins", e);
+        }
     }
 
     private PluginYAML loadPluginConfig(Path path) {
@@ -129,16 +149,21 @@ public class PluginManager {
             return null;
         }
 
-        PluginClassLoader classLoader = this.pluginClassLoaders.get(config.getName());
-        if (classLoader == null) {
-            classLoader = this.registerClassLoader(config, path);
+        Plugin plugin;
+        if (config.getMain() != null && config.getMain().endsWith(".py")) {
+            // Folder-based Python plugin: no class loader, the script is evaluated on enable
+            plugin = this.pythonLoader.loadPlugin(config, path);
+        } else {
+            PluginClassLoader classLoader = this.pluginClassLoaders.get(config.getName());
+            if (classLoader == null) {
+                classLoader = this.registerClassLoader(config, path);
+            }
+            if (classLoader == null) {
+                return null;
+            }
+            plugin = this.pluginLoader.loadPluginJAR(config, pluginFile, classLoader);
         }
 
-        if (classLoader == null) {
-            return null;
-        }
-
-        Plugin plugin = this.pluginLoader.loadPluginJAR(config, pluginFile, classLoader);
         if (plugin == null) {
             return null;
         }

@@ -51,6 +51,7 @@ public abstract class Plugin {
     private ProxyServer proxy;
     @Getter
     private Logger logger;
+    @Getter
     private File pluginFile;
     @Getter
     private File dataFolder;
