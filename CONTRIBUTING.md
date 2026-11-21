@@ -19,3 +19,14 @@ When your PR is up, we (the project maintainers) will review it. It will take at
 ## PR is merged
 Congratulations, your PR got merged! You are now officially a contributor to the project.
 If you contribute to the project, feel free to ping a Maintainer on Discord to receive the Contributor role on the Discord Server. 
+
+## Project specifics
+
+- **Performance changes** must come with numbers from `benchmarks/bench.py` (same machine,
+  same JVM flags, both variants) - the README only claims what the harness can reproduce.
+- **Bug fixes** need a regression test next to them; the transfer, event and player suites in
+  `src/test/java/dev/waterbucket/waterbucketpe/` show the harness patterns to copy.
+- **Plugin API**: the Java API is frozen for backwards compatibility. Additive APIs are fine;
+  Python-side aliases live in `dev.waterbucket.waterbucketpe.plugin.python`.
+- **Commits**: keep one logical change per commit (`fix:`, `perf:`, `feat:`, `docs:`), so
+  releases and reverts stay clean.

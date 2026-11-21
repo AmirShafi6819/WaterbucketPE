@@ -22,7 +22,7 @@ public class VersionInfo {
 
     public static final boolean DEFAULT_DEBUG = true;
 
-    private final String baseVersion = "1.0.0";
+    private final String baseVersion = "1.1.0";
     private final String buildVersion = "#build";
     private final String author = "WaterbucketTEAM";
     private final int metricsId = 15678;
