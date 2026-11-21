@@ -46,7 +46,7 @@ plugins/
 
 The Python descriptor must be directly inside the plugin directory. The main script path is relative to that directory. Sibling Python modules can be imported.
 
-Python plugins are directory-based and are discovered one directory below the plugins directory. Do not put a Python plugin inside another nested directory.
+Python plugin directories are discovered up to two directory levels below the plugins directory (for example, plugins/ExamplePython or plugins/category/ExamplePython). The descriptor must be directly inside the plugin directory. Deeper directory layouts are not discovered by the current scan.
 
 Restart the proxy after installation. The current implementation does not provide a supported plugin hot-reload command.
 
@@ -469,7 +469,7 @@ config.save()
 
 Configuration supports dotted paths for nested keys, get(key), get(key, default), set(key, value), remove(key), exists(key), getKeys() and save(). Values are YAML-backed through YamlConfig.
 
-Place a default **config.yml** beside the Python main script or at the root of the Java JAR. Calling getConfig()/loadConfig() copies the bundled config to the plugin data folder when it does not already exist, then loads it. Existing user configuration is not overwritten by the default save operation.
+Place a default **config.yml** at the root of the Python plugin directory or at the root of the Java JAR. Calling getConfig()/loadConfig() copies the bundled config to the plugin data folder when it does not already exist, then loads it. Existing user configuration is not overwritten by the default save operation.
 
 Resource access:
 
