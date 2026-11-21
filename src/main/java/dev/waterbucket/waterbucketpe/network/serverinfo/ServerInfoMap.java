@@ -40,6 +40,24 @@ public class ServerInfoMap {
         return this.serverList.get(name);
     }
 
+    /**
+     * Looks a server up by the address and port a transfer (or plugin) points at.
+     * Matching is done by {@link ServerInfo#matchAddress(String, int)}, which never blocks,
+     * so this is safe to call from Netty event loops.
+     *
+     * @param address host name or literal IP, may be null
+     * @param port    port of the target server
+     * @return the registered server living at that address and port, or null
+     */
+    public ServerInfo get(String address, int port) {
+        for (ServerInfo serverInfo : this.serverList.values()) {
+            if (serverInfo.matchAddress(address, port)) {
+                return serverInfo;
+            }
+        }
+        return null;
+    }
+
     public ServerInfo putIfAbsent(String name, ServerInfo info) {
         return this.serverList.putIfAbsent(name, info);
     }

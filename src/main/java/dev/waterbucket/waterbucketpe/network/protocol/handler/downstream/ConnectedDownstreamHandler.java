@@ -71,9 +71,17 @@ public class ConnectedDownstreamHandler extends AbstractDownstreamHandler {
             return PacketSignal.UNHANDLED;
         }
 
-        ServerInfo serverInfo = this.player.getProxy().getServerInfo(packet.getAddress());
+        // A malformed transfer (null/blank address, invalid port) must never throw out of the
+        // packet handler: it would kill the downstream session. Let it pass through instead.
+        String address = packet.getAddress();
+        int port = packet.getPort();
+        if (address == null || address.trim().isEmpty() || port <= 0 || port > 65535) {
+            return PacketSignal.UNHANDLED;
+        }
+
+        ServerInfo serverInfo = this.player.getProxy().getServerInfo(address);
         if (serverInfo == null) {
-            serverInfo = this.player.getProxy().getServerInfo(packet.getAddress(), packet.getPort());
+            serverInfo = this.player.getProxy().getServerInfo(address, port);
         }
 
         FastTransferRequestEvent event = new FastTransferRequestEvent(serverInfo, this.player, packet.getAddress(), packet.getPort());

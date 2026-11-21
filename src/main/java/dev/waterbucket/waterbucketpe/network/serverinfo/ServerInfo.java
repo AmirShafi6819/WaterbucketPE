@@ -131,15 +131,109 @@ public abstract class ServerInfo {
     public abstract ServerInfoType getServerType();
     public abstract Future<ClientConnection> createConnection(ProxiedPlayer player);
 
+    /**
+     * Matches a host name/address and port against this server's public address.
+     * <p>
+     * This runs on Netty event loops (fast transfer handling), so it never performs DNS:
+     * the previous implementation called {@link InetSocketAddress#getHostName()}, which can
+     * trigger a blocking reverse lookup and stall every player sharing the loop. Loopback
+     * aliases (127.x.x.x / localhost / ::1) are treated as one host so local multi-port setups
+     * always match no matter how each side names the address, and literal IPs are compared
+     * numerically against the cached {@link #resolvedAddress}.
+     *
+     * @param address host name or literal IP the transfer/target points at, may be null
+     * @param port    port the transfer/target points at
+     * @return true if this server is the one living at that address and port
+     */
     public boolean matchAddress(String address, int port) {
-        InetAddress inetAddress = this.publicAddress.getAddress();
-        boolean addressMatch;
-        if (inetAddress == null) {
-            addressMatch = (this.publicAddress.getHostString().equals(address) || this.publicAddress.getHostName().equals(address));
-        } else {
-            addressMatch = (inetAddress.getHostAddress().equals(address) || inetAddress.getHostName().equals(address));
+        if (address == null || address.isEmpty() || port != this.publicAddress.getPort()) {
+            return false;
         }
-        return addressMatch && this.publicAddress.getPort() == port;
+        String host = address.trim();
+        if (host.isEmpty()) {
+            return false;
+        }
+        if (this.publicAddress.getHostString().equalsIgnoreCase(host)) {
+            return true;
+        }
+        // All of 127.0.0.0/8 and localhost are the same machine: a transfer to any loopback
+        // spelling of this server's port is this server, without any name resolution.
+        if (isLoopbackHost(host) && isLoopbackHost(this.publicAddress.getHostString())) {
+            return true;
+        }
+        // Literal IP: compare bytes against the cached resolved connect target (no DNS).
+        InetAddress literal = parseLiteral(host);
+        if (literal != null) {
+            InetAddress resolved = this.resolvedAddress.getAddress();
+            return resolved != null && resolved.equals(literal);
+        }
+        // A host name that is neither the configured spelling nor a literal would need DNS to
+        // verify; matching it would block the event loop, so it is not attempted here.
+        return false;
+    }
+
+    /**
+     * Parses a literal IP address without touching DNS. Returns null for anything that is not
+     * a numeric address (host names), so callers never block.
+     */
+    private static InetAddress parseLiteral(String host) {
+        String cleaned = host;
+        if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
+            cleaned = cleaned.substring(1, cleaned.length() - 1);
+        }
+        if (cleaned.indexOf(':') >= 0) {
+            // Only pure hex/dot/colon strings can be IPv6 literals; anything else (names, zone
+            // IDs) is rejected so this method can never fall into a DNS lookup.
+            for (int i = 0; i < cleaned.length(); i++) {
+                char c = cleaned.charAt(i);
+                boolean hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+                if (!hex && c != ':' && c != '.') {
+                    return null;
+                }
+            }
+            try {
+                return InetAddress.getByName(cleaned);
+            } catch (UnknownHostException e) {
+                return null;
+            }
+        }
+        // IPv4 literal check without DNS: only digits and dots are accepted.
+        for (int i = 0; i < cleaned.length(); i++) {
+            char c = cleaned.charAt(i);
+            if (c != '.' && (c < '0' || c > '9')) {
+                return null;
+            }
+        }
+        try {
+            return InetAddress.getByName(cleaned);
+        } catch (UnknownHostException e) {
+            return null;
+        }
+    }
+
+    /**
+     * True for every spelling of the local machine: "localhost", any 127.0.0.0/8 literal and
+     * the IPv6 loopback "::1". Name resolution is never attempted.
+     */
+    private static boolean isLoopbackHost(String host) {
+        if (host == null || host.isEmpty()) {
+            return false;
+        }
+        String cleaned = host.trim();
+        if (cleaned.equalsIgnoreCase("localhost")) {
+            return true;
+        }
+        if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
+            cleaned = cleaned.substring(1, cleaned.length() - 1);
+        }
+        if (cleaned.equals("::1") || cleaned.equals("0:0:0:0:0:0:0:1")) {
+            return true;
+        }
+        if (cleaned.startsWith("127.")) {
+            // 127.a.b.c with numeric octets only; anything else is a name, not a literal
+            return parseLiteral(cleaned) != null;
+        }
+        return false;
     }
 
     public void addConnection(ClientConnection connection) {

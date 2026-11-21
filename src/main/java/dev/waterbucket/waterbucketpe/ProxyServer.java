@@ -595,18 +595,14 @@ public class ProxyServer {
     }
 
     /**
-     * Get ServerInfo by address and port
+     * Get ServerInfo by address and port. Matching never blocks (no DNS on the calling thread),
+     * so this is safe to use from Netty event loops, e.g. while handling transfers.
      *
      * @return ServerInfo instance of matched server
      */
     public ServerInfo getServerInfo(String address, int port) {
         Preconditions.checkNotNull(address, "Address can not be null!");
-        for (ServerInfo serverInfo : this.getServers()) {
-            if (serverInfo.matchAddress(address, port)) {
-                return serverInfo;
-            }
-        }
-        return null;
+        return this.serverInfoMap.get(address, port);
     }
 
     /**
