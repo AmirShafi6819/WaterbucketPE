@@ -75,6 +75,9 @@ public class PythonPlugin extends Plugin {
                     .allowAllAccess(true)
                     // Exposes the `import java` module so scripts can reach any Java API
                     .option("python.EmulateJython", "true")
+                    // On a standard JDK the interpreter runs without JVMCI; the warning is noise
+                    // for plugins (see docs/PLUGINS.md for the GraalVM-JDK JIT note)
+                    .option("engine.WarnInterpreterOnly", "false")
                     .build();
 
             Value bindings = this.context.getBindings("python");
@@ -100,6 +103,10 @@ public class PythonPlugin extends Plugin {
     public void callHook(String function, Object... args) {
         Value hook = this.module == null ? null : this.module.getMember(function);
         if (hook == null || !hook.canExecute()) {
+            // A silently missing hook is a classic "wrong module object" symptom; make it visible
+            this.getLogger().warn("Python plugin {}: hook {} not found (module={})", this.getName(), function,
+                    this.module == null ? "null" : this.module.hasMembers() ? "members:" + String.join(",",
+                            this.module.getMemberKeys().stream().limit(20).toList()) : "opaque");
             return;
         }
         try {

@@ -343,7 +343,7 @@ public class PanelServer {
         // Console commands run away from the event loop, exactly like the terminal console does
         this.commandExecutor.execute(() -> {
             try {
-                this.proxy.getCommandMap().handleMessage(this.proxy.getConsoleSender(), text.trim());
+                this.proxy.dispatchCommand(this.proxy.getConsoleSender(), text.trim());
             } catch (Throwable t) {
                 this.proxy.getLogger().error("Panel command execution failed", t);
             }
