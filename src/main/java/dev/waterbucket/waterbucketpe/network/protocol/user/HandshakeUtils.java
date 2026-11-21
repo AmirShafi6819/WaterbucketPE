@@ -147,8 +147,8 @@ public class HandshakeUtils {
         }
         String displayName;
         if (ProxyServer.getInstance().getConfiguration().isReplaceUsernameSpaces()) {
-            displayName = identityData.displayName
-                    .replaceAll(" ", "_");
+            // Literal replacement, no regex engine needed on the login path
+            displayName = identityData.displayName.replace(' ', '_');
         } else {
             displayName = identityData.displayName;
         }

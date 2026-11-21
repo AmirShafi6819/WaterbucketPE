@@ -20,6 +20,7 @@ import dev.waterbucket.waterbucketpe.utils.types.Permission;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +33,11 @@ public class PlayerManager {
     private final ProxyServer proxy;
 
     private final Map<UUID, ProxiedPlayer> players = new ConcurrentHashMap<>();
+    /**
+     * Case-insensitive name index, kept in sync on register/remove. Turns player name lookups
+     * (commands, login throttle checks, plugins) from O(players) scans into O(1) map hits.
+     */
+    private final Map<String, ProxiedPlayer> playersByName = new ConcurrentHashMap<>();
 
     public PlayerManager(ProxyServer proxy) {
         this.proxy = proxy;
@@ -46,7 +52,9 @@ public class PlayerManager {
         if (previousSession != null && previousSession.getConnection().isConnected()) {
             previousSession.disconnect("disconnectionScreen.loggedinOtherLocation");
         }
+        this.playersByName.remove(player.getName().toLowerCase(Locale.ROOT));
         this.players.put(player.getUniqueId(), player);
+        this.playersByName.put(player.getName().toLowerCase(Locale.ROOT), player);
         return true;
     }
 
@@ -65,6 +73,7 @@ public class PlayerManager {
     public void removePlayer(ProxiedPlayer player) {
         if (player != null) {
             this.players.remove(player.getUniqueId(), player);
+            this.playersByName.remove(player.getName().toLowerCase(Locale.ROOT), player);
         }
     }
 
@@ -72,16 +81,31 @@ public class PlayerManager {
         return uuid == null ? null : this.players.get(uuid);
     }
 
+    /**
+     * Exact, case-insensitive lookup by player name, matching the previous scan-based behavior.
+     *
+     * @return the player with exactly this name, or null
+     */
     public ProxiedPlayer getPlayer(String playerName) {
         if (playerName == null) {
             return null;
         }
+        return this.playersByName.get(playerName.toLowerCase(Locale.ROOT));
+    }
 
+    /**
+     * Case-insensitive prefix search over all online players. Useful for commands that
+     * complete partially typed names.
+     *
+     * @return the first player whose name starts with the given prefix, or null
+     */
+    public ProxiedPlayer matchPlayer(String playerName) {
+        if (playerName == null) {
+            return null;
+        }
+        String lower = playerName.toLowerCase(Locale.ROOT);
         for (ProxiedPlayer player : this.players.values()) {
-            if (!player.getName().toLowerCase().startsWith(playerName.toLowerCase())) {
-                continue;
-            }
-            if (player.getName().length() - playerName.length() == 0) {
+            if (player.getName().toLowerCase(Locale.ROOT).startsWith(lower)) {
                 return player;
             }
         }
