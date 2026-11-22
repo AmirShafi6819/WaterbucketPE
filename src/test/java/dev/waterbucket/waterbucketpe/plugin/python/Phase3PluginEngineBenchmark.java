@@ -82,6 +82,15 @@ public class Phase3PluginEngineBenchmark {
     public static class PythonProbeEvent extends Event {
     }
 
+    public static class MixedEventA extends Event {
+    }
+
+    public static class MixedEventB extends Event {
+    }
+
+    public static class MixedEventC extends Event {
+    }
+
     /** Counts python handler executions so the harness can prove the handler really ran. */
     public static final java.util.concurrent.atomic.AtomicLong PYTHON_SINK =
             new java.util.concurrent.atomic.AtomicLong();
@@ -396,6 +405,39 @@ public class Phase3PluginEngineBenchmark {
                 "name", "plugin_load_32_plugins", "unit", "ms", "median", loadMs)));
         this.results.add(new Step("plugin_enable_32_plugins", Map.of(
                 "name", "plugin_enable_32_plugins", "unit", "ms", "median", enableMs)));
+
+        t0 = System.nanoTime();
+        loadManager.disableAllPlugins();
+        double disableMs = (System.nanoTime() - t0) / 1_000_000.0;
+        this.results.add(new Step("plugin_disable_32_plugins", Map.of(
+                "name", "plugin_disable_32_plugins", "unit", "ms", "median", disableMs)));
+
+        // ---------- mixed event types under load (multiple event types, many plugins loaded) ----------
+        // Three distinct event classes with 40 handlers each, dispatched in alternation while
+        // the 32 loaded plugins remain registered: the multi-plugin, multi-event-type workload
+        // from the measurement requirements.
+        dev.waterbucket.waterbucketpe.event.Event[] mixedEvents = {
+                new MixedEventA(), new MixedEventB(), new MixedEventC()
+        };
+        this.eventManager.subscribe(MixedEventA.class, event -> SINK++);
+        this.eventManager.subscribe(MixedEventB.class, event -> SINK++);
+        this.eventManager.subscribe(MixedEventC.class, event -> SINK++);
+        this.subscribeN(MixedEventA.class, 7);
+        this.subscribeN(MixedEventB.class, 7);
+        this.subscribeN(MixedEventC.class, 7);
+        java.util.concurrent.atomic.AtomicInteger eventCursor = new java.util.concurrent.atomic.AtomicInteger();
+        this.results.add(new Step("mixed_event_types_3x40_handlers",
+                this.measure("mixed_event_types_3x40_handlers", 5, 15, 90_000, () -> {
+                    int cursor = eventCursor.getAndIncrement();
+                    dev.waterbucket.waterbucketpe.event.Event event = mixedEvents[cursor % mixedEvents.length];
+                    if (event instanceof MixedEventA) {
+                        this.eventManager.callEvent(new MixedEventA());
+                    } else if (event instanceof MixedEventB) {
+                        this.eventManager.callEvent(new MixedEventB());
+                    } else {
+                        this.eventManager.callEvent(new MixedEventC());
+                    }
+                })));
 
         // ---------- missing-class lookup across all loaded loaders (failure path cost) ----------
         // getClassFromCache scans every plugin loader per miss; with 32 plugins loaded this
