@@ -106,6 +106,11 @@ public class PanelServer {
     private final ExecutorService commandExecutor;
 
     private final Map<String, long[]> rateBuckets = new ConcurrentHashMap<>();
+    /**
+     * Immutable classpath panel assets, decompressed once. Bounded to the four fixed resources
+     * the panel serves.
+     */
+    private final Map<String, byte[]> staticCache = new ConcurrentHashMap<>(4);
     private Channel serverChannel;
 
     public PanelServer(ProxyServer proxy, String configuredToken) {
@@ -324,22 +329,33 @@ public class PanelServer {
                 PanelServer.this.respondError(ctx, request, HttpResponseStatus.NOT_FOUND, "Not found");
                 return;
             }
-            try (InputStream stream = PanelServer.class.getClassLoader().getResourceAsStream(resource)) {
-                if (stream == null) {
-                    PanelServer.this.respondError(ctx, request, HttpResponseStatus.NOT_FOUND, "Not found");
-                    return;
-                }
-                byte[] body = stream.readAllBytes();
-                // type comes from the resource (path "/" must serve index.html as HTML,
-                // otherwise browsers treat the navigation as a download and abort it)
-                String contentType = resource.endsWith(".html") ? "text/html; charset=utf-8"
-                        : resource.endsWith(".css") ? "text/css; charset=utf-8"
-                        : resource.endsWith(".js") ? "application/javascript; charset=utf-8"
-                        : "application/octet-stream";
-                PanelServer.this.respond(ctx, request, HttpResponseStatus.OK, contentType, body);
-            } catch (IOException e) {
-                PanelServer.this.respondError(ctx, request, HttpResponseStatus.INTERNAL_SERVER_ERROR, "Failed to read resource");
+            byte[] body = PanelServer.this.staticCache.computeIfAbsent(resource, PanelServer::readStaticResource);
+            if (body == null) {
+                PanelServer.this.respondError(ctx, request, HttpResponseStatus.NOT_FOUND, "Not found");
+                return;
             }
+            // type comes from the resource (path "/" must serve index.html as HTML,
+            // otherwise browsers treat the navigation as a download and abort it)
+            String contentType = resource.endsWith(".html") ? "text/html; charset=utf-8"
+                    : resource.endsWith(".css") ? "text/css; charset=utf-8"
+                    : resource.endsWith(".js") ? "application/javascript; charset=utf-8"
+                    : "application/octet-stream";
+            PanelServer.this.respond(ctx, request, HttpResponseStatus.OK, contentType, body);
+        }
+    }
+
+    /**
+     * Reads a panel asset from the classpath once; null when absent or unreadable.
+     */
+    private static byte[] readStaticResource(String resource) {
+        try (InputStream stream = PanelServer.class.getClassLoader().getResourceAsStream(resource)) {
+            if (stream == null) {
+                return null;
+            }
+            return stream.readAllBytes();
+        } catch (IOException e) {
+            log.warn("Failed to read panel resource {}", resource, e);
+            return null;
         }
     }
 

@@ -804,7 +804,9 @@ public class ProxiedPlayer implements CommandSender {
     public void sendPopup(String message, String subtitle) {
         TextPacket packet = new TextPacket();
         packet.setType(TextPacket.Type.POPUP);
-        packet.setMessage(message);
+        // Bedrock popups render the subtitle as the text below the main popup message;
+        // dropping it entirely (upstream behavior) silently swallowed the parameter.
+        packet.setMessage(subtitle == null || subtitle.isBlank() ? message : message + "\n" + subtitle);
         packet.setXuid(this.getXuid());
         this.sendPacket(packet);
     }
