@@ -19,6 +19,8 @@ import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 
+import java.util.List;
+
 /**
  * This is a default implementation of join handler.
  * The determined server will always be the first one from the server priorities list defined in the config file.
@@ -28,6 +30,10 @@ public class DefaultJoinHandler implements IJoinHandler {
     @Override
     public ServerInfo determineServer(ProxiedPlayer player) {
         ProxyServer proxy = ProxyServer.getInstance();
-        return proxy.getServerInfo(proxy.getConfiguration().getPriorities().get(0));
+        List<String> priorities = proxy.getConfiguration().getPriorities();
+        // An empty priorities list used to throw IndexOutOfBoundsException out of the join path,
+        // which disconnected the client and additionally blocked its IP; null is the documented
+        // "no server" answer and fails the login with a clean message.
+        return priorities.isEmpty() ? null : proxy.getServerInfo(priorities.get(0));
     }
 }

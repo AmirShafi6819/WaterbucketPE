@@ -28,7 +28,7 @@ import java.util.Iterator;
  */
 public class RoundRobinReconnectHandler implements IReconnectHandler {
 
-    private RoundRobinIterator<String> iterator;
+    private volatile RoundRobinIterator<String> iterator;
 
     @Override
     public ServerInfo getFallbackServer(ProxiedPlayer player, ServerInfo oldServer, ReconnectReason reason, String kickMessage) {
@@ -41,10 +41,19 @@ public class RoundRobinReconnectHandler implements IReconnectHandler {
             this.iterator = new RoundRobinIterator<>(proxy.getConfiguration().getPriorities());
         }
 
-        while (iterator.hasNext()) {
-            String server = iterator.next();
-            if (oldServer == null || !server.equals(oldServer.getServerName())) {
-                return proxy.getServerInfo(server);
+        // Bounded selection: the old while(hasNext()) loop could spin forever on the event loop
+        // when every priority entry equals the old server (e.g. duplicated names), because the
+        // round-robin hasNext() never turns false for a non-empty list. Each server is tried at
+        // most once per call; stale names are skipped instead of nulling the whole fallback.
+        RoundRobinIterator<String> current = this.iterator;
+        for (int i = 0; i < proxy.getConfiguration().getPriorities().size(); i++) {
+            String server = current.next();
+            if (oldServer != null && server.equals(oldServer.getServerName())) {
+                continue;
+            }
+            ServerInfo info = proxy.getServerInfo(server);
+            if (info != null) {
+                return info;
             }
         }
         return null;

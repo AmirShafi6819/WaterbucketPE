@@ -32,6 +32,11 @@ public class DefaultReconnectHandler implements IReconnectHandler {
     public ServerInfo getFallbackServer(ProxiedPlayer player, ServerInfo oldServer, ReconnectReason reason, String kickMessage) {
         ProxyServer proxy = ProxyServer.getInstance();
         List<String> servers = proxy.getConfiguration().getPriorities();
+        if (servers.isEmpty()) {
+            // Same guard as the join handler: an empty list used to escape as
+            // IndexOutOfBoundsException and block the client's IP instead of a clean refusal.
+            return null;
+        }
         if (oldServer == null) {
             return proxy.getServerInfo(servers.get(0));
         }
