@@ -60,8 +60,9 @@ The full suite (including the cross-runtime example-plugin test) is green before
 
 ## 5. Validation
 
-- Clean build: `BUILD SUCCESSFUL`; **53 suites / 300 tests / 0 failures / 0 errors / 1 skipped**
-  (the benchmark, env-gated) — count grew from 294 by the six new second-pass tests.
+- Clean build: `BUILD SUCCESSFUL`; **55 suites / 304 tests / 0 failures / 0 errors / 1 skipped**
+  (the benchmark, env-gated) — count grew from 294 by the ten new second-pass tests
+  (six robustness, three fuzz scenarios, one sustained stress).
 - Fuzz: 4,900+ metadata cases deterministic-seeded, reproducible failures.
 - Static analysis: compiler + full suite; the project has no integrated analyzer (unchanged).
 
