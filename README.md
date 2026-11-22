@@ -211,6 +211,7 @@ Docker images are published from the workflow for every tagged release.
 
 - [Plugin API — Java & Python](docs/PLUGINS.md)
 - [Benchmark methodology](benchmarks/METHODOLOGY.md)
+- [Phase 2 baseline report](docs/PHASE2_BASELINE.md) · [Phase 2 final report](docs/PHASE2_FINAL_REPORT.md)
 - [Web panel](docs/PLUGINS.md) (API reference) · config comments in `configs/config.txt`
 - [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
 
