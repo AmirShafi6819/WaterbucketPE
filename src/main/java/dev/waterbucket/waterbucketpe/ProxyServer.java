@@ -197,9 +197,10 @@ public class ProxyServer {
             System.setProperty("java.net.preferIPv4Stack", "true");
         }
 
-        if (this.getConfiguration().isDebug()) {
-            WaterbucketPE.version().debug(true);
-        }
+        // Make the runtime debug flag follow the operator's config in both directions. Previously
+        // only enable_debug=true was forwarded, so a SNAPSHOT/no-git source build kept debug-level
+        // plugin loggers and raw packet logging enabled even with enable_debug: false.
+        WaterbucketPE.version().debug(this.getConfiguration().isDebug());
 
         CompressionType compression = this.getConfiguration().getCompression();
         if (compression.getBedrockAlgorithm() == null) {
@@ -288,7 +289,13 @@ public class ProxyServer {
 
         if (this.getConfiguration().isEnableAnonymousStatistics()) {
             this.logger.info("Enabling anonymous statistics.");
-            Metrics.startMetrics(this, this.getConfiguration());
+            try {
+                Metrics.startMetrics(this, this.getConfiguration());
+            } catch (Exception e) {
+                // bStats is an optional telemetry feature; a failure to create its config file
+                // (read-only filesystem) must not abort the whole boot.
+                this.logger.error("Failed to initialize anonymous statistics; continuing without them", e);
+            }
         }
 
         if (this.getConfiguration().enableResourcePacks()) {
@@ -316,15 +323,23 @@ public class ProxyServer {
             this.bootNetworks(bindAddress);
         } catch (NetworkStartupException e) {
             this.logger.error("Failed to bind to primary address {}, shutting down", bindAddress, e);
-            this.shutdown();
+            // Report failure to process supervisors: shutdown(0) used to exit with status 0,
+            // making Docker/systemd restart policies treat the failed bind as a clean exit.
+            this.shutdown(1);
             return;
         }
         for (Integer port : this.getConfiguration().getAdditionalPorts()) {
-            InetSocketAddress additionalBind = new InetSocketAddress(bindAddress.getHostString(), port);
             try {
+                if (port == null || port < 1 || port > 65535) {
+                    this.logger.error("Ignoring invalid additional port {} (must be 1-65535)", port);
+                    continue;
+                }
+                InetSocketAddress additionalBind = new InetSocketAddress(bindAddress.getHostString(), port);
                 this.bootNetworks(additionalBind);
             } catch (NetworkStartupException e) {
-                this.logger.error("Unable to bind to additional port {}, skipping", additionalBind, e);
+                this.logger.error("Unable to bind to additional port {}, skipping", port, e);
+            } catch (IllegalArgumentException e) {
+                this.logger.error("Ignoring invalid additional port {}", port, e);
             }
         }
 
@@ -422,6 +437,15 @@ public class ProxyServer {
     }
 
     public void shutdown() {
+        this.shutdown(0);
+    }
+
+    /**
+     * Tears the proxy down and force-exits with the given status code. Status 0 is the normal
+     * shutdown (console "end", SIGTERM); a non-zero status reports a failed startup to process
+     * supervisors.
+     */
+    public void shutdown(int status) {
         // Guard the check-then-act with a lock: a SIGTERM hook and a console/panel "end"
         // command can otherwise both pass the flag check and run the teardown twice.
         synchronized (this) {
@@ -436,7 +460,7 @@ public class ProxyServer {
         } catch (Exception e) {
             this.logger.error("Unable to shutdown proxy gracefully", e);
         } finally {
-            WaterbucketPE.shutdownHook();
+            WaterbucketPE.shutdownHook(status);
         }
     }
 
@@ -460,6 +484,15 @@ public class ProxyServer {
         }
 
         this.console.getConsoleThread().interrupt();
+        // Give the console thread a moment to run JLine's exit path (terminal attribute restore
+        // and history flush). Without the join, the halt below could race the restore and leave
+        // the operator's shell in raw mode after `end`.
+        try {
+            this.console.getConsoleThread().join(1000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        this.console.close();
         this.tickExecutor.shutdown();
 
         try {
@@ -478,6 +511,14 @@ public class ProxyServer {
 
         if (Metrics.get() != null) {
             Metrics.get().shutdown();
+        }
+
+        if (this.errorReporting != null) {
+            try {
+                this.errorReporting.close();
+            } catch (Exception e) {
+                this.logger.debug("Error reporting shutdown failed", e);
+            }
         }
 
         if (this.tickFuture != null && !this.tickFuture.isCancelled()) {

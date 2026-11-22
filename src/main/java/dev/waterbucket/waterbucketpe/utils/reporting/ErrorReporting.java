@@ -41,7 +41,12 @@ public class ErrorReporting {
 
     public ErrorReporting(ProxyServer server) {
         if (server.getConfiguration().isEnableAnonymousErrorReporting()) {
-            bugsnag = new Bugsnag("69403750fbff896b2e37022a56e3cde4");
+            // The project key stays the default (it identifies the fork's own dashboard, like
+            // upstream), but an operator can redirect reports elsewhere or disable collection
+            // via the enable_error_reporting config option without a rebuild.
+            String projectKey = System.getProperty("waterbucket.errorReportingKey",
+                    "69403750fbff896b2e37022a56e3cde4");
+            bugsnag = new Bugsnag(projectKey);
             bugsnag.setAppVersion(WaterbucketPE.version().baseVersion());
             this.boundDeliveryQueue();
 
@@ -109,6 +114,17 @@ public class ErrorReporting {
 
     public boolean isEnabled() {
         return bugsnag != null;
+    }
+
+    /**
+     * Flushes and releases the reporting client on shutdown so pending crash reports are still
+     * delivered and the replaced delivery executor does not linger.
+     */
+    public void close() {
+        if (this.bugsnag != null) {
+            this.bugsnag.close();
+            this.bugsnag = null;
+        }
     }
 
     public void reportError(Throwable t, Severity severity) {

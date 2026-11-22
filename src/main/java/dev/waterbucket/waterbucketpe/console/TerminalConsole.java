@@ -22,11 +22,15 @@ import net.minecrell.terminalconsole.SimpleTerminalConsole;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 
+import java.io.IOException;
+
 public class TerminalConsole extends SimpleTerminalConsole {
 
     private final ProxyServer proxy;
     @Getter
     private final ConsoleThread consoleThread;
+    // Captured in buildReader so the shutdown path can restore the terminal attributes
+    private volatile LineReader lineReader;
 
     public TerminalConsole(ProxyServer proxy) {
         this.proxy = proxy;
@@ -48,7 +52,9 @@ public class TerminalConsole extends SimpleTerminalConsole {
         builder.option(LineReader.Option.HISTORY_BEEP, false);
         builder.option(LineReader.Option.HISTORY_IGNORE_DUPS, true);
         builder.option(LineReader.Option.HISTORY_IGNORE_SPACE, true);
-        return super.buildReader(builder);
+        LineReader reader = super.buildReader(builder);
+        this.lineReader = reader;
+        return reader;
     }
 
     @Override
@@ -59,6 +65,23 @@ public class TerminalConsole extends SimpleTerminalConsole {
     @Override
     protected boolean isRunning() {
         return this.proxy.isRunning();
+    }
+
+    /**
+     * Closes the underlying JLine terminal, restoring the console attributes and flushing the
+     * command history. Called from the shutdown path after the console thread was joined; safe
+     * to call more than once.
+     */
+    public void close() {
+        LineReader reader = this.lineReader;
+        if (reader == null) {
+            return;
+        }
+        try {
+            reader.getTerminal().close();
+        } catch (IOException ignored) {
+            // The terminal may already be closed by the reader's own exit path
+        }
     }
 
 }

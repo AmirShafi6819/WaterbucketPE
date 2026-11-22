@@ -67,6 +67,9 @@ public class WaterbucketPE {
         int javaVersion = getJavaVersion();
         if (javaVersion < 17) {
             logger.error("Using unsupported Java version! Minimum supported version is Java 17, found Java " + javaVersion);
+            // A refused start must not exit with status 0: supervisors (Docker/systemd restart
+            // policies) would treat it as a clean run.
+            shutdownHook(1);
             return;
         }
 
@@ -131,7 +134,7 @@ public class WaterbucketPE {
         }
 
         Properties properties = new Properties();
-        try {
+        try (inputStream) {
             properties.load(inputStream);
         } catch (IOException e) {
             return VersionInfo.unknown();

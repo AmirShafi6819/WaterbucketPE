@@ -81,9 +81,9 @@ public class VersionInfo {
     }
 
     public void debug(boolean debug) {
-        if (debug) {
-            WaterbucketPE.setLoggerLevel(Level.DEBUG);
-        }
+        // Apply the level symmetrically: debug(false) used to leave the root logger at DEBUG
+        // while every consumer reported debugging as disabled.
+        WaterbucketPE.setLoggerLevel(debug ? Level.DEBUG : Level.INFO);
         this.debug = debug;
     }
 
