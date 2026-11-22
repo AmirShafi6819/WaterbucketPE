@@ -240,6 +240,33 @@ class PluginFailureIsolationTest {
     }
 
     @Test
+    void missingClassLookupsStayOutcomeIdentical() throws Exception {
+        // The negative-lookup cache must not change outcomes: a missing class still reports
+        // missing through every lookup path, and a runtime-registered loader forgets the
+        // negatives (it may provide previously missing classes).
+        assertFalse(this.manager.getClassFromCache("no.such.Anything") != null,
+                "a missing class must not resolve");
+        PluginClassLoader loader = new PluginClassLoader(this.manager, this.getClass().getClassLoader(),
+                this.tempDir.resolve("empty.jar").toFile());
+        assertThrows(ClassNotFoundException.class, () -> loader.loadClass("no.such.Anything"),
+                "a missing class must still throw ClassNotFoundException");
+        assertTrue(this.manager.isKnownMissingClass("no.such.Anything"),
+                "the first miss records the negative entry");
+        assertNull(this.manager.getClassFromCache("no.such.Anything"),
+                "the cached negative still reports missing");
+
+        // A runtime-registered loader clears the negatives (registerClassLoader is the only
+        // loader-registration path)
+        var register = PluginManager.class.getDeclaredMethod("registerClassLoader", PluginYAML.class, java.nio.file.Path.class);
+        register.setAccessible(true);
+        PluginYAML late = this.yaml("LateLoader", "late.Main");
+        register.invoke(this.manager, late, this.tempDir.resolve("late.jar"));
+
+        assertFalse(this.manager.isKnownMissingClass("no.such.Anything"),
+                "registering a new loader must forget the negative cache");
+    }
+
+    @Test
     void concurrentFirstLoadsShareClassesWithoutLinkageErrors() throws Exception {
         // The loader-local class map is written by every thread that first resolves a class;
         // concurrent first-loads of DIFFERENT classes can race its internal resize. The stress

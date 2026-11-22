@@ -1,0 +1,26 @@
+{
+  "label": "after",
+  "date": "2026-11-22T12:54:20.268730889Z",
+  "javaVersion": "17.0.21.1 (Eclipse Adoptium)",
+  "threadsAfterAsyncScenarios": 10,
+  "scenarios": [
+    {"name": "sync_dispatch_0_handlers", "data": {"unit": "ns/op", "median": 22.12, "rounds": [108.73, 105.96, 214.33, 102.15, 102.82, 90.82, 178.87, 18.23, 18.31, 19.14, 21.27, 18.88, 18.36, 22.12, 18.69], "p95": 214.33, "ops": 200000, "name": "sync_dispatch_0_handlers"}},
+    {"name": "sync_dispatch_1_handler", "data": {"unit": "ns/op", "median": 53.19, "rounds": [53.96, 52.94, 54.04, 58.90, 54.92, 178.89, 52.82, 59.05, 53.19, 47.56, 42.29, 48.25, 43.43, 167.18, 42.68], "p95": 178.89, "ops": 200000, "name": "sync_dispatch_1_handler"}},
+    {"name": "sync_dispatch_5_handlers_5_priorities", "data": {"unit": "ns/op", "median": 81.45, "rounds": [198.33, 78.79, 81.90, 81.45, 79.87, 190.96, 78.93, 79.06, 82.40, 83.25, 191.04, 82.17, 79.56, 81.38, 79.84], "p95": 198.33, "ops": 200000, "name": "sync_dispatch_5_handlers_5_priorities"}},
+    {"name": "sync_dispatch_40_handlers_5_priorities", "data": {"unit": "ns/op", "median": 341.49, "rounds": [341.49, 444.63, 335.77, 348.03, 338.93, 337.12, 347.52, 339.15, 346.24, 335.87, 346.19, 336.00, 335.57, 368.41, 417.41], "p95": 444.63, "ops": 100000, "name": "sync_dispatch_40_handlers_5_priorities"}},
+    {"name": "sync_dispatch_320_handlers_5_priorities", "data": {"unit": "ns/op", "median": 2335.72, "rounds": [2335.72, 2305.80, 2303.80, 2320.27, 2305.06, 2334.61, 2307.83, 2311.64, 2342.91, 2644.51, 2677.08, 2566.79, 2629.44, 2670.15, 2609.68], "p95": 2677.08, "ops": 50000, "name": "sync_dispatch_320_handlers_5_priorities"}},
+    {"name": "cancel_sync_1_handler", "data": {"unit": "ns/op", "median": 43.32, "rounds": [29.81, 36.10, 32.13, 51.59, 57.86, 52.30, 52.34, 57.40, 52.13, 43.32, 34.28, 29.73, 29.78, 42.42, 55.21], "p95": 57.86, "ops": 200000, "name": "cancel_sync_1_handler"}},
+    {"name": "completable_sync_1_handler", "data": {"unit": "ns/op", "median": 74.50, "rounds": [73.48, 75.00, 76.04, 73.87, 73.83, 75.97, 74.81, 98.60, 73.93, 74.50, 74.50, 73.72, 74.19, 73.97, 96.43], "p95": 98.60, "ops": 50000, "name": "completable_sync_1_handler"}},
+    {"name": "sync_dispatch_allocations", "data": {"name": "sync_dispatch_allocations", "unit": "bytes/op", "median": 208.00}},
+    {"name": "async_event_1_handler_roundtrip", "data": {"unit": "ns/op", "median": 3073.43, "rounds": [8635.36, 3016.98, 3109.21, 3073.43, 2848.79], "p95": 8635.36, "ops": 2000, "name": "async_event_1_handler_roundtrip"}},
+    {"name": "subscribe_unsubscribe_roundtrip", "data": {"unit": "ns/op", "median": 2984.69, "rounds": [2862.13, 2984.69, 5285.43, 3919.06, 4862.18, 2788.16, 2538.97], "p95": 5285.43, "ops": 10000, "name": "subscribe_unsubscribe_roundtrip"}},
+    {"name": "python_plugin_script_load", "data": {"name": "python_plugin_script_load", "unit": "ms", "median": 4214.58}},
+    {"name": "python_bridge_sync_1_handler", "data": {"unit": "ns/op", "ops": 2000, "median": 8340.01, "pythonHandlerInvocationsDuringWarmupAndMeasure": 0, "name": "python_bridge_sync_1_handler", "p95": 19202.99, "rounds": [13730.93, 8682.35, 8340.01, 19202.99, 8022.85, 7981.67, 7690.54]}},
+    {"name": "python_only_handler_dispatch", "data": {"unit": "ns/op", "median": 31258.34, "rounds": [35769.55, 20207.20, 31258.34, 20229.88, 31640.57, 20034.52, 31484.49], "p95": 35769.55, "ops": 2000, "name": "python_only_handler_dispatch"}},
+    {"name": "python_disable_retained_polyglot_instances", "data": {"histogramCaptured": true, "median": 0, "name": "python_disable_retained_polyglot_instances", "unit": "instances", "pythonHandlerInvocationsTotal": 18000.00}},
+    {"name": "plugin_scan_32_jars", "data": {"name": "plugin_scan_32_jars", "unit": "ms", "median": 139.85}},
+    {"name": "plugin_load_32_plugins", "data": {"name": "plugin_load_32_plugins", "unit": "ms", "median": 440.44}},
+    {"name": "plugin_enable_32_plugins", "data": {"name": "plugin_enable_32_plugins", "unit": "ms", "median": 2.13}},
+    {"name": "missing_class_lookup_32_loaders", "data": {"unit": "ns/op", "median": 23789.01, "rounds": [23207.70, 23976.81, 23789.01, 23373.91, 23645.59, 107980.09, 25035.77], "p95": 107980.09, "ops": 500, "name": "missing_class_lookup_32_loaders"}}
+  ]
+}

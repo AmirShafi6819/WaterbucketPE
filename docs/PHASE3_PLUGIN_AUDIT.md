@@ -262,3 +262,21 @@ Documented limitation (unchanged, §12): plugins execute in-process with full JV
 malicious plugin can still do anything the host process can. The boundary work above protects
 the metadata-parsing and data-folder paths that run *before* or *beside* plugin code — a
 sandbox would be a new product and is explicitly out of scope.
+
+---
+
+## Stage G — Performance optimization
+
+Per Stage C's conclusion, exactly one measured bottleneck was optimized; the event dispatch
+engine itself was left untouched (no measured bottleneck, per §6.1/§19).
+
+| Change | Scenario (identical workload, before → after) | Result |
+| --- | --- | --- |
+| Global negative-lookup cache for missing plugin classes (`PluginManager.missingClasses`, consulted by `getClassFromCache` and `PluginClassLoader.findClass`; cleared whenever a new loader registers so runtime-loaded plugins can still provide previously missing classes) | `missing_class_lookup_32_loaders`: **194 µs/miss → 23.8 µs/miss** (p95 351 µs → 108 µs) | −88 %; outcome identical (`ClassNotFoundException` still thrown, `getClassFromCache` still returns null). The residual ~24 µs is the unavoidable parent-classloader miss + exception construction, not a jar scan. |
+| (no change) | sync dispatch 5/40/320 handlers: 79/342/2328 ns → 81/341/2336 ns; async round trip 6.3 → 3.1 µs (run-to-run variance); python bridge 33.0 → 31.3 µs; plugin load 519 → 440 ms | unchanged within noise — plugin-visible behavior untouched |
+
+Regression test: `PluginFailureIsolationTest.missingClassLookupsStayOutcomeIdentical` (outcome
+identity + negative-cache invalidation on loader registration).
+
+Raw data: `benchmarks/results-plugin-phase3-before.json` (unmodified code) and
+`benchmarks/results-plugin-phase3-after.json` (final code), same harness, same JVM.
