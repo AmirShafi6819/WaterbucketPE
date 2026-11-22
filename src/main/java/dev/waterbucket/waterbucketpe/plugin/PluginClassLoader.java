@@ -15,12 +15,12 @@
 
 package dev.waterbucket.waterbucketpe.plugin;
 
-import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
-
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * Simple class loader which holds classes of plugins.
@@ -29,7 +29,13 @@ import java.net.URLClassLoader;
 public class PluginClassLoader extends URLClassLoader {
 
     private final PluginManager pluginManager;
-    private final Object2ObjectOpenHashMap<String, Class<?>> classes = new Object2ObjectOpenHashMap<>();
+
+    /*
+     * findClass runs on whichever thread first resolves a class - including Netty event
+     * loops - so this cache must be concurrent: the previous fastutil map could lose entries
+     * when two threads first-loaded different classes through a concurrent resize.
+     */
+    private final ConcurrentMap<String, Class<?>> classes = new ConcurrentHashMap<>();
 
     public PluginClassLoader(PluginManager pluginManager, ClassLoader parent, File file) throws MalformedURLException {
         super(new URL[]{file.toURI().toURL()}, parent);
@@ -51,6 +57,15 @@ public class PluginClassLoader extends URLClassLoader {
             return result;
         }
 
+        // Guard against a lost cache entry racing a concurrent first-load: this loader has
+        // already defined the class under the per-name loadClass lock, and re-entering
+        // super.findClass would defineClass it a second time and throw LinkageError.
+        result = this.findLoadedClass(name);
+        if (result != null) {
+            this.classes.put(name, result);
+            return result;
+        }
+
         if (checkGlobal) {
             result = this.pluginManager.getClassFromCache(name);
         }
@@ -58,7 +73,9 @@ public class PluginClassLoader extends URLClassLoader {
         if (result == null && (result = super.findClass(name)) != null) {
             this.pluginManager.cacheClass(name, result);
         }
-        this.classes.put(name, result);
+        if (result != null) {
+            this.classes.put(name, result);
+        }
         return result;
     }
 

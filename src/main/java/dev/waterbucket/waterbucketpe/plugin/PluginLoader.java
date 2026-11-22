@@ -77,8 +77,12 @@ public class PluginLoader {
             Plugin plugin = castedMain.getDeclaredConstructor().newInstance();
             plugin.init(pluginConfig, this.pluginManager.getProxy(), pluginJar);
             return plugin;
-        } catch (Exception e) {
-            log.error("Error while loading plugin main class(main={}, plugin={})", pluginConfig.getMain(), pluginConfig.getName(), e);
+        } catch (Throwable t) {
+            // Throwable, not Exception: an UnsupportedClassVersionError (plugin compiled for a
+            // newer JVM) or LinkageError is an Error and used to escape straight through
+            // loadAllPlugins into boot, killing the whole proxy start over one bad jar. A
+            // plugin failure drops the plugin, never the proxy.
+            log.error("Error while loading plugin main class(main={}, plugin={})", pluginConfig.getMain(), pluginConfig.getName(), t);
         }
         return null;
     }

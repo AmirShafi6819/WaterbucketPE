@@ -29,6 +29,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -192,6 +193,78 @@ class PluginLifecycleTest {
                 assertArrayEquals(payload, stream.readAllBytes());
             }
         }
+    }
+
+    /** A TestPlugin whose onEnable blocks until released; a separate class (TestPlugin is final). */
+    private static final class BlockingPlugin extends Plugin {
+        final AtomicInteger enableCalls = new AtomicInteger();
+        volatile CountDownLatch insideOnEnable;
+        volatile CountDownLatch gate;
+
+        @Override
+        public void onEnable() {
+            this.enableCalls.incrementAndGet();
+            if (this.insideOnEnable != null) {
+                this.insideOnEnable.countDown();
+            }
+            if (this.gate != null) {
+                try {
+                    this.gate.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        @Override
+        public void onDisable() {
+        }
+    }
+
+    @Test
+    void concurrentEnableChainsDoNotRejectHealthyDependencies() throws Exception {
+        // The cycle detector was a shared HashSet: while one thread was mid-enable of a
+        // dependency (its name in the set), another thread enabling a plugin that depends on
+        // it got a bogus "circular dependency" rejection. Enable chains must not interfere.
+        TestPlugin dependent = new TestPlugin();
+        this.register(dependent, descriptor("Ext", List.of("SlowBase")));
+
+        BlockingPlugin blocking = new BlockingPlugin();
+        blocking.insideOnEnable = new CountDownLatch(1);
+        blocking.gate = new CountDownLatch(1);
+        this.register(blocking, descriptor("SlowBase", null));
+
+        Thread enabler = new Thread(() -> {
+            try {
+                this.manager.enablePlugin(blocking, null);
+            } catch (Exception ignored) {
+            }
+        });
+        enabler.start();
+        assertTrue(blocking.insideOnEnable.await(5, java.util.concurrent.TimeUnit.SECONDS),
+                "the first enable must be inside onEnable");
+
+        // Second chain on its own thread: depends on the plugin that is mid-enable in the
+        // first chain. Serialized on the manager, it must wait for the first chain and then
+        // succeed; the old shared cycle set rejected it instead.
+        java.util.concurrent.atomic.AtomicBoolean dependentResult = new java.util.concurrent.atomic.AtomicBoolean(false);
+        Thread dependentEnabler = new Thread(() -> {
+            try {
+                dependentResult.set(this.manager.enablePlugin(dependent, null));
+            } catch (Exception ignored) {
+            }
+        });
+        dependentEnabler.start();
+        blocking.gate.countDown();
+        enabler.join(10_000);
+        dependentEnabler.join(10_000);
+
+        assertTrue(dependentResult.get(),
+                "a healthy dependency mid-enable in another chain must not be rejected as a cycle");
+        assertTrue(dependent.isEnabled(), "the dependent must end up enabled");
+        assertTrue(blocking.isEnabled(), "the blocking dependency must end up enabled");
+        assertEquals(1, dependent.enableCalls.get(), "the dependent must have enabled exactly once");
+        assertEquals(1, blocking.enableCalls.get(), "the blocking dependency must have enabled exactly once");
     }
 
     @Test

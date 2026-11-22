@@ -140,8 +140,11 @@ public class SimpleCommandMap implements CommandMap {
             if (!success) {
                 sender.sendMessage("§cCommand usage: " + command.getUsageMessage());
             }
-        } catch (Exception e) {
-            this.proxy.getLogger().error("Error appeared while processing command!", e);
+        } catch (Throwable t) {
+            // Throwable, not Exception: an Error thrown by a plugin command used to escape
+            // into the caller (console thread or Netty event loop). A plugin failure is
+            // contained to that command execution.
+            this.proxy.getLogger().error("Error appeared while processing command!", t);
         }
     }
 

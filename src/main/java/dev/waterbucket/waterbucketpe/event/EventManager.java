@@ -18,6 +18,7 @@ package dev.waterbucket.waterbucketpe.event;
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.utils.ThreadFactoryBuilder;
 import lombok.Getter;
+import org.cloudburstmc.protocol.common.util.Preconditions;
 
 import java.util.concurrent.*;
 import java.util.function.Consumer;
@@ -66,6 +67,11 @@ public class EventManager {
      * @see EventPriority
      */
     public <T extends Event> void subscribe(Class<T> event, Consumer<T> handler, EventPriority priority) {
+        // Clear contract-violation messages instead of a deep NullPointerException from map
+        // internals when a plugin passes null arguments.
+        Preconditions.checkArgument(event != null, "event class can not be null");
+        Preconditions.checkArgument(handler != null, "handler can not be null");
+        Preconditions.checkArgument(priority != null, "priority can not be null");
         EventHandler eventHandler = this.handlerMap.computeIfAbsent(event, e -> new EventHandler(event, this));
         eventHandler.subscribe((Consumer<Event>) handler, priority);
     }
@@ -101,6 +107,7 @@ public class EventManager {
      * @return CompletableFuture<Event> if event has AsyncEvent annotation present or null in case of non-async event
      */
     public <T extends Event> CompletableFuture<T> callEvent(T event) {
+        Preconditions.checkArgument(event != null, "event can not be null");
         EventHandler eventHandler = this.handlerMap.computeIfAbsent(event.getClass(), e -> new EventHandler(event.getClass(), this));
         return eventHandler.handle(event);
     }

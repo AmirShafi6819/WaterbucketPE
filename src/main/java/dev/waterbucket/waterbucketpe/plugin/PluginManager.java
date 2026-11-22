@@ -19,8 +19,6 @@ import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.plugin.python.PythonPluginLoader;
 import dev.waterbucket.waterbucketpe.utils.exceptions.PluginChangeStateException;
 import it.unimi.dsi.fastutil.Pair;
-import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
-import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectObjectImmutablePair;
 import lombok.Getter;
@@ -35,6 +33,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Stream;
 
 public class PluginManager {
@@ -51,8 +50,15 @@ public class PluginManager {
     private final PluginLoader pluginLoader;
     private final PythonPluginLoader pythonLoader;
 
-    protected final Object2ObjectMap<String, PluginClassLoader> pluginClassLoaders = new Object2ObjectArrayMap<>();
-    private final Object2ObjectMap<String, Plugin> pluginMap = new Object2ObjectArrayMap<>();
+    /*
+     * Both registry maps are written by the boot scan and by the public runtime APIs
+     * loadPlugin/enablePlugin (a plugin may call them from its own threads or scheduled
+     * tasks), and read concurrently by getClassFromCache on the Netty event loops and by the
+     * panel PluginsCommand, so both must be concurrent. The previous fastutil array maps
+     * could corrupt entries under a runtime load while another thread iterated.
+     */
+    protected final ConcurrentMap<String, PluginClassLoader> pluginClassLoaders = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Plugin> pluginMap = new ConcurrentHashMap<>();
     /*
      * Written by PluginClassLoader.findClass from whichever thread first loads a class -
      * including Netty event loops - and read by getClassFromCache everywhere, so the class
@@ -61,7 +67,12 @@ public class PluginManager {
     private final ConcurrentMap<String, Class<?>> cachedClasses = new ConcurrentHashMap<>();
 
     private final List<Pair<PluginYAML, Path>> pluginsToLoad = new ObjectArrayList<>();
-    private final List<Plugin> enabledOrder = new ObjectArrayList<>();
+    /*
+     * Appended from enablePlugin, which is public runtime API callable from plugin threads;
+     * a plain list lost entries under concurrent enables and produced a wrong reverse-disable
+     * order at shutdown.
+     */
+    private final List<Plugin> enabledOrder = new CopyOnWriteArrayList<>();
 
     public PluginManager(ProxyServer proxy) {
         this.proxy = proxy;
@@ -127,6 +138,14 @@ public class PluginManager {
         return this.pluginLoader.loadPluginData(pluginFile, yamlLoader);
     }
 
+    /**
+     * Package-private accessor for tests and diagnostics: parse a jar's descriptor without
+     * running the full load flow.
+     */
+    PluginYAML loadPluginDataForTest(File file) {
+        return this.pluginLoader.loadPluginData(file, yamlLoader);
+    }
+
     private PluginClassLoader registerClassLoader(PluginYAML config, Path path) {
         if (this.getPluginByName(config.getName()) != null) {
             this.proxy.getLogger().warning("Plugin is already loaded: {}", config.getName());
@@ -150,10 +169,14 @@ public class PluginManager {
     }
 
     public void loadAllPlugins() {
-        for (Pair<PluginYAML, Path> pair : this.pluginsToLoad) {
+        // Iterate a snapshot: a failed load releases its class loader, so re-reaching the
+        // loadPlugin re-load path (registerClassLoader) appends to pluginsToLoad - iterating
+        // the live list consumed its own appends and never terminated.
+        List<Pair<PluginYAML, Path>> toLoad = new ObjectArrayList<>(this.pluginsToLoad);
+        this.pluginsToLoad.clear();
+        for (Pair<PluginYAML, Path> pair : toLoad) {
             this.loadPlugin(pair.key(), pair.value());
         }
-        this.pluginsToLoad.clear();
     }
 
     public Plugin loadPlugin(PluginYAML config, Path path) {
@@ -179,19 +202,48 @@ public class PluginManager {
         }
 
         if (plugin == null) {
+            // The loader (if any) was registered before the failure; without releasing it the
+            // failed plugin kept its jar handle open, its loader registered and its classes
+            // served from the global cache to every other plugin.
+            this.releaseFailedPlugin(config.getName(), this.pluginClassLoaders.get(config.getName()));
             return null;
         }
 
         try {
             plugin.onStartup();
-        } catch (Exception e) {
-            this.proxy.getLogger().error("Failed to load plugin {}!", config.getName(), e);
+        } catch (Throwable t) {
+            // Throwable: same reasoning as loadPluginJAR - a plugin lifecycle failure is
+            // contained to that plugin, never allowed to abort the boot.
+            this.proxy.getLogger().error("Failed to load plugin {}!", config.getName(), t);
+            this.releaseFailedPlugin(config.getName(), this.pluginClassLoaders.get(config.getName()));
             return null;
         }
 
         this.proxy.getLogger().info("Loaded plugin {} successfully! (version={}, author={})", config.getName(), config.getVersion(), config.getAuthor());
         this.pluginMap.put(config.getName(), plugin);
         return plugin;
+    }
+
+    /**
+     * Releases everything a failed plugin left behind: unregisters its class loader, evicts
+     * the classes it defined from the global cache, and closes the loader (which releases the
+     * open jar handle). Python plugins have no loader; the call is a no-op for them.
+     */
+    private void releaseFailedPlugin(String pluginName, PluginClassLoader loader) {
+        if (loader == null) {
+            return;
+        }
+        this.pluginClassLoaders.remove(pluginName, loader);
+        for (Map.Entry<String, Class<?>> entry : this.cachedClasses.entrySet()) {
+            if (entry.getValue().getClassLoader() == loader) {
+                this.cachedClasses.remove(entry.getKey(), entry.getValue());
+            }
+        }
+        try {
+            loader.close();
+        } catch (IOException e) {
+            this.proxy.getLogger().debug("Could not close class loader of failed plugin {}", pluginName, e);
+        }
     }
 
     public void enableAllPlugins() {
@@ -219,14 +271,18 @@ public class PluginManager {
     }
 
     /**
-     * Plugins currently being enabled in the active enable pass; detects dependency cycles of
-     * any length. The previous check compared only against the directly-enabling parent, so a
-     * longer cycle (A→B→C→A) recursed until StackOverflowError - an Error, which escaped every
-     * handler and crashed the whole proxy boot.
+     * Enables a plugin, enabling its dependencies first. Safe to call at runtime: the whole
+     * operation is serialized on the manager, so two concurrent enable chains can not
+     * interleave (which used to either reject a healthy dependency with a bogus "circular
+     * dependency" warning or double-enable a plugin that was mid-enable).
      */
-    private final Set<String> enabling = new HashSet<>();
+    public synchronized boolean enablePlugin(Plugin plugin, String parent) {
+        // The chain set is local to this enable call: cycle detection must not leak into
+        // concurrently executing chains (the previous shared HashSet did exactly that).
+        return this.enablePluginChain(plugin, parent, new HashSet<>());
+    }
 
-    public boolean enablePlugin(Plugin plugin, String parent) {
+    private boolean enablePluginChain(Plugin plugin, String parent, Set<String> chain) {
         if (plugin.isEnabled()) return true;
         String pluginName = plugin.getName();
 
@@ -244,36 +300,36 @@ public class PluginManager {
                 }
 
                 if (!dependPlugin.isEnabled()) {
-                    // A plugin currently mid-enable in this pass means a cycle somewhere in the chain
-                    if (!this.enabling.add(depend)) {
+                    // A plugin already on the current enable chain means a cycle of any length
+                    if (!chain.add(depend)) {
                         this.proxy.getLogger().warning("§cCan not enable plugin " + pluginName + " circular dependency " + depend + "!");
                         return false;
                     }
                     try {
-                        if (!this.enablePlugin(dependPlugin, pluginName)) {
+                        if (!this.enablePluginChain(dependPlugin, pluginName, chain)) {
                             return false;
                         }
                     } finally {
-                        this.enabling.remove(depend);
+                        chain.remove(depend);
                     }
                 }
             }
         }
 
-        this.enabling.add(pluginName);
+        chain.add(pluginName);
         try {
             plugin.setEnabled(true);
         } catch (PluginChangeStateException e) {
             this.proxy.getLogger().error(e.getMessage(), e.getCause());
             return false;
         } finally {
-            this.enabling.remove(pluginName);
+            chain.remove(pluginName);
         }
         this.enabledOrder.add(plugin);
         return true;
     }
 
-    public void disableAllPlugins() {
+    public synchronized void disableAllPlugins() {
         // Disable in reverse of enable order so dependents shut down before their dependencies
         List<Plugin> order = new ObjectArrayList<>(this.enabledOrder);
         for (Plugin plugin : this.pluginMap.values()) {

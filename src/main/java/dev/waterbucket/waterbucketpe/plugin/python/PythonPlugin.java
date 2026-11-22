@@ -18,6 +18,7 @@ package dev.waterbucket.waterbucketpe.plugin.python;
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.plugin.Plugin;
 import dev.waterbucket.waterbucketpe.plugin.PluginYAML;
+import dev.waterbucket.waterbucketpe.scheduler.TaskHandler;
 import lombok.extern.log4j.Log4j2;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Value;
@@ -65,6 +66,13 @@ public class PythonPlugin extends Plugin {
     private volatile Value module;
     private final List<Subscription> eventSubscriptions = Collections.synchronizedList(new ArrayList<>());
     private final List<String> registeredCommands = Collections.synchronizedList(new ArrayList<>());
+    /*
+     * Task handlers this plugin handed to the proxy scheduler. The scheduler has no plugin
+     * attribution (adding it would be a new API), so the bridge keeps its own bookkeeping:
+     * without cancelling these on disable, a repeating task keeps firing into the closed
+     * interpreter until the proxy shuts down.
+     */
+    private final List<TaskHandler<?>> scheduledTasks = Collections.synchronizedList(new ArrayList<>());
 
     public PythonPlugin(ProxyServer proxy) {
         this.proxy = proxy;
@@ -159,13 +167,27 @@ public class PythonPlugin extends Plugin {
     @Override
     public void onDisable() {
         this.callHook("on_disable", this);
-        // Detach everything that points into the interpreter BEFORE closing it. Handlers and
-        // commands left behind used to be invoked after the context was closed - every later
-        // event dispatched a PolyglotException into a dead context, and re-enabling duplicated
-        // handlers behind commands that could no longer be re-registered.
+        // Stop scheduler-driven work first, then detach everything that points into the
+        // interpreter BEFORE closing it. Handlers and commands left behind used to be invoked
+        // after the context was closed - every later event dispatched a PolyglotException into
+        // a dead context, and re-enabling duplicated handlers behind commands that could no
+        // longer be re-registered. Scheduled tasks left alive kept firing into the dead
+        // context on every tick.
+        this.cancelScheduledTasks();
         this.detachEventSubscriptions();
         this.unregisterRegisteredCommands();
         this.closeContext();
+    }
+
+    private void cancelScheduledTasks() {
+        List<TaskHandler<?>> tasks;
+        synchronized (this.scheduledTasks) {
+            tasks = new ArrayList<>(this.scheduledTasks);
+            this.scheduledTasks.clear();
+        }
+        for (TaskHandler<?> task : tasks) {
+            task.cancel();
+        }
     }
 
     private void detachEventSubscriptions() {
@@ -224,6 +246,13 @@ public class PythonPlugin extends Plugin {
      */
     @SuppressWarnings("unchecked")
     public <T extends dev.waterbucket.waterbucketpe.event.Event> void subscribe(Class<T> eventClass, Consumer<? super T> handler) {
+        // After disable the interpreter is closed; a stale callback registering a handler
+        // would attach a consumer that throws a PolyglotException on every event.
+        if (this.context == null) {
+            this.getLogger().warn("Python plugin {} is not enabled; ignoring subscribe request for {}",
+                    this.getName(), eventClass == null ? null : eventClass.getSimpleName());
+            return;
+        }
         Consumer<T> wrapped = event -> {
             try {
                 if (event.isCompletable()) {
@@ -258,6 +287,13 @@ public class PythonPlugin extends Plugin {
      */
     public boolean registerCommand(String name, String description, String usage, List<String> aliases,
                                    String permission, PythonCommandExecutor handler) {
+        // After disable the interpreter is closed; a command registered then could never be
+        // unregistered again and executed against a dead context.
+        if (this.context == null) {
+            this.getLogger().warn("Python plugin {} is not enabled; ignoring command registration for /{}",
+                    this.getName(), name);
+            return false;
+        }
         PythonCommand command = new PythonCommand(this, name, description, usage, aliases, permission, handler);
         if (this.proxy.getCommandMap().registerCommand(command)) {
             this.registeredCommands.add(command.getName());
@@ -276,42 +312,55 @@ public class PythonPlugin extends Plugin {
 
     /**
      * Runs a Python callable on the proxy scheduler as an async task. Use this for slow work
-     * (HTTP, file IO) so event loops never wait on the interpreter.
+     * (HTTP, file IO) so event loops never wait on the interpreter. Scheduled tasks are
+     * cancelled automatically when the plugin is disabled.
      */
     public void scheduleAsync(Runnable task) {
-        this.proxy.getScheduler().scheduleAsync(() -> {
-            try {
-                task.run();
-            } catch (Throwable t) {
-                this.getLogger().error("Python plugin {} task failed", this.getName(), t);
-            }
-        });
+        if (this.context == null) {
+            this.getLogger().warn("Python plugin {} is not enabled; ignoring scheduleAsync request", this.getName());
+            return;
+        }
+        this.track(this.proxy.getScheduler().scheduleAsync(this.wrapTask(task)));
     }
 
     /**
-     * Runs a Python callable on the proxy scheduler after the given delay (ticks).
+     * Runs a Python callable on the proxy scheduler after the given delay (ticks). Scheduled
+     * tasks are cancelled automatically when the plugin is disabled.
      */
     public void scheduleDelayed(Runnable task, int delayTicks) {
-        this.proxy.getScheduler().scheduleDelayed(() -> {
-            try {
-                task.run();
-            } catch (Throwable t) {
-                this.getLogger().error("Python plugin {} task failed", this.getName(), t);
-            }
-        }, delayTicks, true);
+        if (this.context == null) {
+            this.getLogger().warn("Python plugin {} is not enabled; ignoring scheduleDelayed request", this.getName());
+            return;
+        }
+        this.track(this.proxy.getScheduler().scheduleDelayed(this.wrapTask(task), delayTicks, true));
     }
 
     /**
      * Runs a Python callable on the proxy scheduler every {@code periodTicks} ticks (async).
+     * Scheduled tasks are cancelled automatically when the plugin is disabled.
      */
     public void scheduleRepeating(Runnable task, int periodTicks) {
-        this.proxy.getScheduler().scheduleRepeating(() -> {
+        if (this.context == null) {
+            this.getLogger().warn("Python plugin {} is not enabled; ignoring scheduleRepeating request", this.getName());
+            return;
+        }
+        this.track(this.proxy.getScheduler().scheduleRepeating(this.wrapTask(task), periodTicks, true));
+    }
+
+    private Runnable wrapTask(Runnable task) {
+        return () -> {
             try {
                 task.run();
             } catch (Throwable t) {
                 this.getLogger().error("Python plugin {} task failed", this.getName(), t);
             }
-        }, periodTicks, true);
+        };
+    }
+
+    private void track(TaskHandler<?> handler) {
+        if (handler != null) {
+            this.scheduledTasks.add(handler);
+        }
     }
 
     /**

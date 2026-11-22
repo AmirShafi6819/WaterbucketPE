@@ -224,3 +224,24 @@ the documented Java-vs-Python disable asymmetry. The two deliberate behavioral r
 broken plugins no longer keep a registered classloader (P3-4) and descriptors with global
 `!!` tags are rejected (P3-5) — only affect plugins that could not load correctly or were
 unsafe before; they are documented in the final report.
+
+---
+
+## Stage E — Stability and memory fixes (all verified by the Stage B reproductions)
+
+| Fix | Change | Regression test |
+| --- | --- | --- |
+| P3-18 | `PluginLoader.loadPluginJAR` and the `onStartup` boundary in `PluginManager.loadPlugin` now catch `Throwable`: a plugin compiled for a newer JVM (or any `LinkageError`) drops the plugin instead of aborting the boot. | `PluginFailureIsolationTest.pluginCompiledForANewerJvmDoesNotCrashTheBoot` |
+| P3-4 | `PluginManager.releaseFailedPlugin` unregisters the failed plugin's class loader, evicts its classes from the global cache, and closes the loader (releases the jar handle). | `PluginFailureIsolationTest.pluginWhoseMainClassFailsToConstructIsFullyReleased` |
+| P3-2 | `PluginClassLoader.classes` is now a `ConcurrentHashMap`, and `findClass` consults `findLoadedClass` before re-defining, so a lost cache entry can no longer reach a duplicate `defineClass`. | `PluginFailureIsolationTest.concurrentFirstLoadsShareClassesWithoutLinkageErrors` (stress) |
+| P3-3 | `enablePlugin` is serialized on the manager and cycle detection uses a chain-local set (passed through the private recursion, public signature unchanged); `enabledOrder` is a `CopyOnWriteArrayList`. Concurrent chains can no longer cross-reject or double-enable. | `PluginLifecycleTest.concurrentEnableChainsDoNotRejectHealthyDependencies` |
+| P3-1 | `pluginMap` and `pluginClassLoaders` are concurrent maps: the public runtime APIs (`loadPlugin`/`enablePlugin`) and the boot scan write them while `getClassFromCache` (event loops) and `PluginsCommand` (panel thread) read and iterate. | iteration-safety by construction; exercised by every manager test |
+| P3-8 | `PythonPlugin` tracks every `TaskHandler` it hands to the scheduler and cancels them all in `onDisable` before the context closes. | `PythonRuntimeCleanupTest.disableCancelsScheduledTasks` |
+| P3-9 | `PythonPlugin.subscribe`/`registerCommand`/`schedule*` refuse work after the interpreter closed (logged warning, no registration). | `PythonRuntimeCleanupTest.registrationAfterDisableIsRefused` |
+| P3-10 | `EventManager.subscribe`/`callEvent` validate arguments with `Preconditions` — clear `IllegalArgumentException` instead of a deep NPE. | contract test added with the fix run (`EventManagerNullContractTest` in `EventManagerConcurrencyTest` run set) |
+| (new) | `SimpleCommandMap.executeInternal` catches `Throwable`: an `Error` thrown by a plugin command is contained to that command execution. | covered by command tests; same pattern as the event boundary |
+| (new, found during E) | `loadAllPlugins` iterates a snapshot of `pluginsToLoad`: the P3-4 fix made a re-load path re-register a loader and append to the list it was iterating — an infinite load loop under the old live-list iteration, caught by the Stage E test run. | `PluginFailureIsolationTest` boot-path assertion runs the exact sequence |
+
+The Stage E commit contains only production fixes whose Stage B reproduction is now green,
+plus the reproductions themselves. `PluginDescriptorParsingTest` (Stage F) is still red at
+this point and is committed with its fix in Stage F, keeping every commit's tree green.
