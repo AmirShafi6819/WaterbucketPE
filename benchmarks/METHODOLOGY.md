@@ -108,3 +108,62 @@ What changed and what did not (medians; raw repeat data attached to every metric
 To reproduce: build both jars (pre-Phase-2 from `git checkout 59c244f`, post from the
 release tag), then run the harness as described above for each jar, or run
 `python3 benchmarks/bench.py <pre.jar> Pre <post.jar> Post out.json` for the paired run.
+
+## Bedrock-level A/B (2026-11-22, closes the transfer-path gap)
+
+The Phase-2 A/B above left one path unmeasured: everything past the RakNet handshake.
+`BedrockBench.java` + `bench_bedrock.py` close that gap with real Bedrock sessions -
+built on the same CloudburstMC Protocol / RakNet libraries the proxy uses, so logins and
+transfers are byte-for-byte what real clients and servers perform:
+
+- **login** - sequential full logins (RakNet connect -> network settings -> self-signed
+  JWT login -> encryption handshake -> resource packs -> StartGame), measuring
+  connect->StartGame latency per client.
+- **rtt** - one login, then sequential TextPacket round-trips through proxy and backend.
+- **switch** - one login, then alternating fast transfers A->B->A...; the fake backend
+  sends a `TransferPacket`, the proxy fast-transfers (dials the other fake backend,
+  completes the full downstream login), and the client completes the synthetic
+  dimension-change round trip. The client-visible completion point is the second
+  `ChangeDimensionPacket` - the fast-transfer path consumes the new server's StartGame
+  as rewrite input and does not deliver a second StartGame to the client.
+
+Two fake backends (one per registered server) live in the same tool JVM as the clients;
+`HandshakeUtils`-style encryption, the resource-pack sequence and the StartGame packet
+mirror what BDS sends. Everything else follows the bench.py conventions: same shared VM,
+same JVM flags, same config for both sides, both jars built from this repository
+(`59c244f` = pre, master = post), and the tool is byte-compatible with both.
+
+Results (`results-bedrock.json`, chart `bench_bedrock_chart.png`; medians over two
+interleaved rounds per side, 30 logins / 300 round-trips / 30 switches per round):
+
+| Scenario | Pre (v1.2.0) median | Post (1.3.0) median | Delta |
+|---|---|---|---|
+| Login -> StartGame | 339-343 ms | 178-188 ms | **-46%** |
+| In-game text RTT | 20.1-29.9 ms (bimodal) | 20.0-28.9 ms (bimodal) | equal |
+| Fast transfer | 290.0-290.3 ms | 119.8-119.9 ms | **-59%** |
+| Fast transfer p95 | 315-316 ms | 145-160 ms | **-52%** |
+| Login p95 | 747-772 ms | 663-691 ms | -11% |
+
+- **Functional parity on every scenario**: 30/30 logins, 300/300 round-trips and 31/31
+  switches (login + switches) on both sides, both rounds.
+- The **fast-transfer** and **login** gains are exactly the paths the Phase-2 A/B could
+  not measure: both are dominated by proxy-generated packet batches whose drain was a
+  fixed 50 ms timer in v1.2.0 (`ClientPacketQueue`), and the transfer additionally waits
+  for the downstream login. The adaptive ~5 ms drain (C9) removes that latency; the
+  measured deltas match the baseline report's prediction ("hundreds of milliseconds
+  across a transfer").
+- The **text RTT** is bimodal on both sides (two round-trip paths: batches that catch a
+  queue drain vs batches that pass untouched) and shows no stable difference - the text
+  relay takes the untouched-batch fast path, which Phase 2 did not change.
+- One harness fix mattered: `login_throttle` defaults to 2 logins per interval, so the
+  bench config disables it (`login_throttle: -1`) alongside `connection_throttle: -1`;
+  otherwise sequential logins from one address fail by design (29 of 30 in the first
+  attempt), on both sides alike.
+
+To reproduce:
+
+```bash
+javac -cp <proxy.jar> -d /tmp/wbtest8 benchmarks/BedrockBench.java
+python3 benchmarks/bench_bedrock.py <proxy.jar> out.json            # all three scenarios
+python3 benchmarks/gen_bedrock_chart.py                             # merge + chart
+```

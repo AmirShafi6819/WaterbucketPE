@@ -72,6 +72,16 @@ harness (`benchmarks/results-phase2.json`, `benchmarks/benchmark-phase2.png`).
   unchanged. All functional benchmark counts are identical to the pre-Phase-2 build
   (300/300 handshakes, 200/200 and 500/500 held sessions, zero ping loss).
 
+### Post-release verification (2026-11-22)
+- The benchmark harness gained real Bedrock sessions (`benchmarks/BedrockBench.java` +
+  `benchmarks/bench_bedrock.py`): protocol-560 logins with self-signed JWT auth, both-leg
+  encryption, resource packs, StartGame and fast transfers against two embedded fake
+  backends. This closes the "transfer-path latency is a design improvement" gap from the
+  Phase 2 A/B: measured on the same VM, fast-transfer median dropped **290 ms -> 120 ms
+  (−59%)**, login-to-StartGame **340 ms -> 183 ms (−46%)**, in-game text round-trip
+  unchanged, functional counts identical on both sides
+  (`benchmarks/results-bedrock.json`, `benchmarks/bench_bedrock_chart.png`).
+
 ## [1.2.0] - 2026-11-22
 
 ### Fixed

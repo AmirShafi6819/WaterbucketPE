@@ -1,0 +1,263 @@
+{
+  "environment": {
+    "date": "2026-11-22",
+    "java": "Temurin 17.0.21.1 (both proxy and bench tool)",
+    "jvm_flags": "-Xms128M -Xmx512M -XX:+UseG1GC -XX:MaxGCPauseMillis=200",
+    "harness": "benchmarks/bench_bedrock.py + benchmarks/BedrockBench.java (Bedrock protocol 560 / 1.19.50)",
+    "pre_side": "this repository at 59c244f (v1.2.0, pre-Phase-2)",
+    "post_side": "this repository at master (v1.3.0)",
+    "jar_sha256": {
+      "pre": "e6a6203ff5135c38980f5094a297e0fd9fd79085498f5d0c43ce83bb820d0fcc",
+      "post": "4a6b4c79e5ffb0d4529b4401f7a6f98b72ba5db83da926b8ef4f559099d8a0a5"
+    },
+    "config": "online_mode off, login_throttle off, connection_throttle off; identical for both sides",
+    "scenario_counts": {
+      "login": 30,
+      "rtt": 300,
+      "switch": 30
+    },
+    "vm": "shared 2-core VM, same as the round-3 and Phase-2 A/B runs"
+  },
+  "runs": {
+    "pre": [
+      {
+        "startup_s": 1.7088813769996705,
+        "login": {
+          "ok": 30,
+          "failed": 0,
+          "median_ms": 339.327,
+          "p95_ms": 747.019,
+          "p99_ms": null
+        },
+        "rtt": {
+          "ok": 300,
+          "failed": 0,
+          "median_ms": 29.9065,
+          "p95_ms": 31.3659,
+          "p99_ms": 40.161379999999994
+        },
+        "switch": {
+          "ok": 31,
+          "failed": 0,
+          "median_ms": 290.022,
+          "p95_ms": 316.4067,
+          "p99_ms": null
+        },
+        "login_rss_delta_kb": 59012,
+        "switch_rss_delta_kb": 10600,
+        "source": "bb-pre-2.json"
+      },
+      {
+        "startup_s": 2.7701368739999452,
+        "login": {
+          "ok": 30,
+          "failed": 0,
+          "median_ms": 343.019,
+          "p95_ms": 772.0675,
+          "p99_ms": null
+        },
+        "rtt": {
+          "ok": 300,
+          "failed": 0,
+          "median_ms": 20.054,
+          "p95_ms": 29.9604,
+          "p99_ms": 32.08338
+        },
+        "switch": {
+          "ok": 31,
+          "failed": 0,
+          "median_ms": 290.25,
+          "p95_ms": 315.3336,
+          "p99_ms": null
+        },
+        "login_rss_delta_kb": 50132,
+        "switch_rss_delta_kb": 12972,
+        "source": "bb-pre-3.json"
+      }
+    ],
+    "post": [
+      {
+        "startup_s": 2.2243752320000567,
+        "login": {
+          "ok": 30,
+          "failed": 0,
+          "median_ms": 177.923,
+          "p95_ms": 663.49405,
+          "p99_ms": null
+        },
+        "rtt": {
+          "ok": 300,
+          "failed": 0,
+          "median_ms": 28.863,
+          "p95_ms": 30.06035,
+          "p99_ms": 30.95787
+        },
+        "switch": {
+          "ok": 31,
+          "failed": 0,
+          "median_ms": 119.9385,
+          "p95_ms": 160.48420000000002,
+          "p99_ms": null
+        },
+        "login_rss_delta_kb": 54008,
+        "switch_rss_delta_kb": 12596,
+        "source": "bb-post-2.json"
+      },
+      {
+        "startup_s": 2.7930443189998186,
+        "login": {
+          "ok": 30,
+          "failed": 0,
+          "median_ms": 188.1075,
+          "p95_ms": 690.8933000000001,
+          "p99_ms": null
+        },
+        "rtt": {
+          "ok": 300,
+          "failed": 0,
+          "median_ms": 19.96,
+          "p95_ms": 28.054599999999997,
+          "p99_ms": 29.3475
+        },
+        "switch": {
+          "ok": 31,
+          "failed": 0,
+          "median_ms": 119.828,
+          "p95_ms": 145.0514,
+          "p99_ms": null
+        },
+        "login_rss_delta_kb": 46240,
+        "switch_rss_delta_kb": 20260,
+        "source": "bb-post-3.json"
+      }
+    ]
+  },
+  "summary": {
+    "login": {
+      "median_ms": {
+        "pre": [
+          339.327,
+          343.019
+        ],
+        "post": [
+          177.923,
+          188.1075
+        ]
+      },
+      "p95_ms": {
+        "pre": [
+          747.019,
+          772.0675
+        ],
+        "post": [
+          663.49405,
+          690.8933000000001
+        ]
+      },
+      "ok": {
+        "pre": [
+          30,
+          30
+        ],
+        "post": [
+          30,
+          30
+        ]
+      },
+      "failed": {
+        "pre": [
+          0,
+          0
+        ],
+        "post": [
+          0,
+          0
+        ]
+      }
+    },
+    "rtt": {
+      "median_ms": {
+        "pre": [
+          29.9065,
+          20.054
+        ],
+        "post": [
+          28.863,
+          19.96
+        ]
+      },
+      "p95_ms": {
+        "pre": [
+          31.3659,
+          29.9604
+        ],
+        "post": [
+          30.06035,
+          28.054599999999997
+        ]
+      },
+      "ok": {
+        "pre": [
+          300,
+          300
+        ],
+        "post": [
+          300,
+          300
+        ]
+      },
+      "failed": {
+        "pre": [
+          0,
+          0
+        ],
+        "post": [
+          0,
+          0
+        ]
+      }
+    },
+    "switch": {
+      "median_ms": {
+        "pre": [
+          290.022,
+          290.25
+        ],
+        "post": [
+          119.9385,
+          119.828
+        ]
+      },
+      "p95_ms": {
+        "pre": [
+          316.4067,
+          315.3336
+        ],
+        "post": [
+          160.48420000000002,
+          145.0514
+        ]
+      },
+      "ok": {
+        "pre": [
+          31,
+          31
+        ],
+        "post": [
+          31,
+          31
+        ]
+      },
+      "failed": {
+        "pre": [
+          0,
+          0
+        ],
+        "post": [
+          0,
+          0
+        ]
+      }
+    }
+  }
+}

@@ -145,6 +145,18 @@ Documented with reasons in [PHASE2_BASELINE.md](PHASE2_BASELINE.md) §5 ("Reject
   traffic against a live Bedrock server, so chunk-relay throughput and server-switch
   latency under load are not benchmarked.
 
+> **Post-publication update (2026-11-22, same day): the first item is resolved.**
+> `benchmarks/BedrockBench.java` + `benchmarks/bench_bedrock.py` add real Bedrock
+> sessions (protocol 560) to the harness — self-signed JWT logins, both-leg encryption,
+> resource packs, StartGame, fast transfers against two embedded fake backends. The
+> follow-up A/B (`benchmarks/results-bedrock.json`, chart `benchmarks/bench_bedrock_chart.png`,
+> methodology in `benchmarks/METHODOLOGY.md`) measured v1.2.0 vs 1.3.0 on the same VM:
+> fast transfer median **290 ms -> 120 ms (−59%, p95 −52%)**, login-to-StartGame median
+> **340 ms -> 183 ms (−46%)**, text round-trip unchanged (bimodal on both sides), and
+> functional parity on every count (30/30 logins, 300/300 round-trips, 31/31 switches,
+> two rounds per side). The C9 adaptive-drain prediction is now a measurement, not an
+> argument. Chunk-relay throughput under live gameplay traffic remains unmeasured.
+
 ## 8. Final verification run (independent, this release)
 
 Executed from a fresh clone at the release commit (`22153ba`):
