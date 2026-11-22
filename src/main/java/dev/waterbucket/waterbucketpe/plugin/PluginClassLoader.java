@@ -78,9 +78,6 @@ public class PluginClassLoader extends URLClassLoader {
             return result;
         }
 
-        // Guard against a lost cache entry racing a concurrent first-load: this loader has
-        // already defined the class under the per-name loadClass lock, and re-entering
-        // super.findClass would defineClass it a second time and throw LinkageError.
         result = this.findLoadedClass(name);
         if (result != null) {
             this.classes.put(name, result);
@@ -89,12 +86,33 @@ public class PluginClassLoader extends URLClassLoader {
 
         if (checkGlobal) {
             result = this.pluginManager.getClassFromCache(name);
+            if (result != null) {
+                this.classes.put(name, result);
+                return result;
+            }
         }
 
-        if (result == null && (result = super.findClass(name)) != null) {
-            this.pluginManager.cacheClass(name, result);
+        // defineClass is only safe under the JVM's per-name loading lock. loadClass provides
+        // that lock itself, but findClass is also entered directly - the manager's cache scans
+        // and the public one-arg override - and two threads racing a first definition used to
+        // kill one of them with a duplicate-definition LinkageError. The same monitor loadClass
+        // holds is taken here; no manager calls happen inside the lock, so no new lock-ordering
+        // edge against the manager's own synchronization is introduced.
+        boolean definedHere = false;
+        synchronized (this.getClassLoadingLock(name)) {
+            result = this.classes.get(name);
+            if (result == null) {
+                result = this.findLoadedClass(name);
+            }
+            if (result == null) {
+                result = super.findClass(name);
+                definedHere = true;
+            }
         }
         if (result != null) {
+            if (definedHere) {
+                this.pluginManager.cacheClass(name, result);
+            }
             this.classes.put(name, result);
         }
         return result;
