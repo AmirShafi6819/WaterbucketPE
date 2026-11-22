@@ -240,6 +240,92 @@ class PluginFailureIsolationTest {
     }
 
     @Test
+    void sustainedConcurrentClassLoadingAndRegistryAccessStaysConsistent() throws Exception {
+        // Phase 5 second pass: upgrade P3-2 from "fixed by construction" to "verified under
+        // sustained load" - class resolution, negative lookups and registry reads/writes are
+        // hammered from many threads simultaneously (the event-loop pattern at scale).
+        StringBuilder source = new StringBuilder("package stress;\n");
+        for (int i = 0; i < 400; i++) {
+            source.append("class Gen").append(i).append(" { public int value() { return ").append(i).append("; } }\n");
+        }
+        Map<String, byte[]> classes = this.compile(Map.of("stress/GenBundle.java", source.toString()),
+                this.tempDir.resolve("work-stress2"));
+        Map<String, byte[]> entries = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, byte[]> e : classes.entrySet()) {
+            if (e.getKey().startsWith("stress/Gen")) {
+                entries.put(e.getKey(), e.getValue());
+            }
+        }
+        Path jar = this.tempDir.resolve("stress2-plugin.jar");
+        buildJar(jar, entries);
+
+        PluginClassLoader loader = new PluginClassLoader(this.manager, this.getClass().getClassLoader(), jar.toFile());
+        PluginYAML dupeConfig = this.yaml("Dupe2", "stress.Gen0");
+
+        int threads = 12;
+        int rounds = 40;
+        ExecutorService pool = Executors.newFixedThreadPool(threads + 2);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(threads + 2);
+        java.util.concurrent.ConcurrentMap<String, Class<?>> seen = new java.util.concurrent.ConcurrentHashMap<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        for (int t = 0; t < threads; t++) {
+            final int offset = t;
+            pool.execute(() -> {
+                try {
+                    start.await();
+                    for (int r = 0; r < rounds; r++) {
+                        // class resolution from many threads at once
+                        Class<?> clazz = loader.loadClass("stress.Gen" + ((offset + r * threads) % 400));
+                        Class<?> previous = seen.putIfAbsent(clazz.getName(), clazz);
+                        if (previous != null && previous != clazz) {
+                            failure.compareAndSet(null, new IllegalStateException("two Class objects for " + clazz.getName()));
+                        }
+                        // negative lookups through the global cache
+                        if (this.manager.getClassFromCache("no.such." + offset + "_" + r) != null) {
+                            failure.compareAndSet(null, new IllegalStateException("missing class resolved"));
+                        }
+                        // cross-thread class loading through the manager
+                        this.manager.getClassFromCache("stress.Gen" + ((offset * 7 + r) % 400));
+                    }
+                } catch (Throwable t2) {
+                    failure.compareAndSet(null, t2);
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+        // two registry writers racing duplicate runtime loads for the same name
+        for (int w = 0; w < 2; w++) {
+            pool.execute(() -> {
+                try {
+                    start.await();
+                    for (int r = 0; r < rounds; r++) {
+                        this.manager.loadPlugin(dupeConfig, jar);
+                    }
+                } catch (Throwable t2) {
+                    failure.compareAndSet(null, t2);
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        start.countDown();
+        assertTrue(done.await(120, TimeUnit.SECONDS), "stress finished");
+        pool.shutdownNow();
+        assertNull(failure.get(), "no thread may observe a failure: " + failure.get());
+        assertEquals(400, seen.size(), "every class must have resolved to exactly one Class object");
+        var classesField = PluginClassLoader.class.getDeclaredField("classes");
+        classesField.setAccessible(true);
+        Map<?, ?> localCache = (Map<?, ?>) classesField.get(loader);
+        assertEquals(400, localCache.size(), "the loader cache must hold every class exactly once");
+        assertEquals(0, loaders().size(),
+                "all failed duplicate-load attempts must have released their loaders");
+    }
+
+    @Test
     void missingClassLookupsStayOutcomeIdentical() throws Exception {
         // The negative-lookup cache must not change outcomes: a missing class still reports
         // missing through every lookup path, and a runtime-registered loader forgets the

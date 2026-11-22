@@ -29,6 +29,13 @@ import java.util.concurrent.ConcurrentMap;
 public class PluginClassLoader extends URLClassLoader {
 
     private final PluginManager pluginManager;
+    /*
+     * The manager-wide negative-lookup cache records names missing from every REGISTERED
+     * loader; a loader created outside registerClassLoader (public constructor) was never
+     * scanned for that verdict, so it must not trust it. Production loaders are always
+     * registered right after construction.
+     */
+    private volatile boolean registeredWithManager;
 
     /*
      * findClass runs on whichever thread first resolves a class - including Netty event
@@ -42,6 +49,14 @@ public class PluginClassLoader extends URLClassLoader {
         this.pluginManager = pluginManager;
     }
 
+    /**
+     * Marks this loader as part of the engine registry (called by the manager); from then on
+     * the negative-lookup cache may shortcut lookups.
+     */
+    void markRegisteredWithManager() {
+        this.registeredWithManager = true;
+    }
+
     @Override
     protected Class<?> findClass(String name) throws ClassNotFoundException {
         return this.findClass(name, true);
@@ -51,10 +66,10 @@ public class PluginClassLoader extends URLClassLoader {
         if (name.startsWith("dev.waterbucket.waterbucketpe.")) { // Proxy classes should be known
             throw new ClassNotFoundException(name);
         }
-        // A name already known to be missing from every plugin jar fails immediately: the
-        // previous per-lookup jar walk across all loaders (plus exception construction) was
-        // measured at ~194 µs per miss. Same outcome, no repeated scan.
-        if (this.pluginManager.isKnownMissingClass(name)) {
+        // A name already known to be missing from every registered plugin jar fails
+        // immediately: the previous per-lookup jar walk across all loaders (plus exception
+        // construction) was measured at ~194 µs per miss. Same outcome, no repeated scan.
+        if (this.registeredWithManager && this.pluginManager.isKnownMissingClass(name)) {
             throw new ClassNotFoundException(name);
         }
 

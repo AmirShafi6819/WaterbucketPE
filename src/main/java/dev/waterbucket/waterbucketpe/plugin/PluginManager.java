@@ -169,9 +169,18 @@ public class PluginManager {
 
         PluginClassLoader classLoader = this.pluginLoader.loadClassLoader(config, path.toFile());
         if (classLoader != null) {
-            this.pluginClassLoaders.put(config.getName(), classLoader);
+            // putIfAbsent closes the check-then-act window: two runtime loadPlugin calls for
+            // the same name could both create loaders, the loser leaked (jar handle open).
+            PluginClassLoader existing = this.pluginClassLoaders.putIfAbsent(config.getName(), classLoader);
+            if (existing != null) {
+                // Deliberately not closed (see releaseFailedPlugin): the loser becomes
+                // unreachable and the GC releases its jar handle.
+                this.proxy.getLogger().warning("Duplicate plugin name {}: {} will be skipped", config.getName(), path.getFileName());
+                return null;
+            }
             // A new loader may provide classes that were missing before: forget the negatives
             this.missingClasses.clear();
+            classLoader.markRegisteredWithManager();
             this.pluginsToLoad.add(ObjectObjectImmutablePair.of(config, path));
             this.proxy.getLogger().debug("Loaded class loader from {}", path.getFileName());
         }
@@ -235,9 +244,15 @@ public class PluginManager {
     }
 
     /**
-     * Releases everything a failed plugin left behind: unregisters its class loader, evicts
-     * the classes it defined from the global cache, and closes the loader (which releases the
-     * open jar handle). Python plugins have no loader; the call is a no-op for them.
+     * Releases everything a failed plugin left behind: unregisters its class loader and evicts
+     * the classes it defined from the global cache. The loader itself is intentionally NOT
+     * closed: URLClassLoader.close() closes the JVM-wide JarFileFactory-cached JarFile, which
+     * is SHARED between loaders opened over the same file URL (reachable through the public
+     * loadPlugin API with a re-named descriptor over an already-registered jar) - closing one
+     * loader then broke every other loader over that jar with "zip file closed". Once the
+     * loader is unregistered and its classes evicted, it becomes unreachable and the GC closes
+     * the handle, which reaches the same end state without the shared-jar hazard.
+     * Python plugins have no loader; the call is a no-op for them.
      */
     private void releaseFailedPlugin(String pluginName, PluginClassLoader loader) {
         if (loader == null) {
@@ -248,11 +263,6 @@ public class PluginManager {
             if (entry.getValue().getClassLoader() == loader) {
                 this.cachedClasses.remove(entry.getKey(), entry.getValue());
             }
-        }
-        try {
-            loader.close();
-        } catch (IOException e) {
-            this.proxy.getLogger().debug("Could not close class loader of failed plugin {}", pluginName, e);
         }
     }
 
