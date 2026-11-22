@@ -61,6 +61,10 @@ public class PythonPluginLoader {
     /**
      * Reads the plugin descriptor from a plugin folder. Returns null when absent, broken, or
      * when the declared plugin name is invalid (names become directory names and map keys).
+     * <p>
+     * The {@code yaml} parameter is accepted for API compatibility; parsing goes through the
+     * hardened {@link PluginLoader#parseDescriptor} (no global YAML tags, type-checked fields)
+     * so the jar and folder boundaries behave identically.
      */
     public PluginYAML loadDescriptor(Path folder, Yaml yaml) {
         Path descriptor = folder.resolve("waterbucket.yml");
@@ -71,15 +75,10 @@ public class PythonPluginLoader {
             return null;
         }
         try (InputStream stream = Files.newInputStream(descriptor)) {
-            Yaml parser = yaml != null ? yaml
-                    : new Yaml(new org.yaml.snakeyaml.constructor.CustomClassLoaderConstructor(
-                            PythonPluginLoader.class.getClassLoader()));
-            PluginYAML config = parser.loadAs(stream, PluginYAML.class);
-            if (config != null && !PluginLoader.isValidPluginName(config.getName())) {
-                log.warn("Skipping Python plugin in {}: {}", folder.getFileName(),
-                        config.getName() == null ? "descriptor declares no name"
-                                : "invalid plugin name '" + config.getName() + "'");
-                return null;
+            PluginYAML config = PluginLoader.parseDescriptor(stream,
+                    "python plugin in " + folder.getFileName());
+            if (config == null) {
+                log.warn("Skipping Python plugin in {}: broken or unsafe descriptor", folder.getFileName());
             }
             return config;
         } catch (Exception e) {

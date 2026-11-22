@@ -204,6 +204,42 @@ class PluginFailureIsolationTest {
     }
 
     @Test
+    void saveResourceCannotEscapeTheDataFolder() throws Exception {
+        // saveResource built new File(dataFolder, outputName) without confinement: a plugin
+        // could write outside its data folder with a '../' output name (defense-in-depth on
+        // a trivially misused API; Python resource reads were already confined).
+        Path jar = this.tempDir.resolve("resource-plugin.jar");
+        byte[] payload = "config: true\n".getBytes(StandardCharsets.UTF_8);
+        try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
+            out.putNextEntry(new JarEntry("config.yml"));
+            out.write(payload);
+            out.closeEntry();
+        }
+
+        PluginYAML config = this.yaml("ResPlugin", "does.not.Matter");
+        var init = Plugin.class.getDeclaredMethod("init", PluginYAML.class, ProxyServer.class, java.io.File.class);
+        init.setAccessible(true);
+        var plugin = new Plugin() {
+            @Override
+            public void onEnable() {
+            }
+        };
+        init.invoke(plugin, config, this.proxy, jar.toFile());
+
+        // Normal nested output names keep working
+        assertTrue(plugin.saveResource("config.yml", "nested/config.yml", false),
+                "a nested output name inside the data folder must keep working");
+        assertTrue(Files.exists(this.tempDir.resolve("resplugin/nested/config.yml")));
+
+        // Traversal must be refused, and nothing may be written outside the data folder
+        assertFalse(plugin.saveResource("config.yml", "../escaped.yml", false));
+        assertFalse(Files.exists(this.tempDir.resolve("escaped.yml")),
+                "no file may appear outside the plugin data folder");
+        assertFalse(plugin.saveResource("config.yml", "sub/../../escaped.yml", false));
+        assertFalse(Files.exists(this.tempDir.resolve("escaped.yml")));
+    }
+
+    @Test
     void concurrentFirstLoadsShareClassesWithoutLinkageErrors() throws Exception {
         // The loader-local class map is written by every thread that first resolves a class;
         // concurrent first-loads of DIFFERENT classes can race its internal resize. The stress

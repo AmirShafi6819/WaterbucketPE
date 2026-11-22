@@ -16,12 +16,16 @@
 package dev.waterbucket.waterbucketpe.plugin;
 
 import lombok.extern.log4j.Log4j2;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.io.File;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
@@ -100,21 +104,96 @@ public class PluginLoader {
             }
 
             try (InputStream fileStream = pluginJar.getInputStream(configEntry)) {
-                PluginYAML pluginConfig = yaml.loadAs(fileStream, PluginYAML.class);
-                if (pluginConfig.getMain() != null && pluginConfig.getName() != null) {
-                    if (!isValidPluginName(pluginConfig.getName())) {
-                        log.warn("Invalid plugin name '{}' in {}: names may only contain letters, digits, spaces, dots, dashes and underscores",
-                                pluginConfig.getName(), file.getName());
-                        return null;
-                    }
-                    // Valid plugin.yml, main and name set
-                    return pluginConfig;
-                }
+                return parseDescriptor(fileStream, file.getName());
             }
-            log.warn("Invalid plugin.yml for {}: main and/or name property missing", file.getName());
         } catch (Exception e) {
             log.error("Can not load plugin files in {}", file.getPath(), e);
         }
         return null;
+    }
+
+    /**
+     * Parses a plugin descriptor ({@code waterbucket.yml} / {@code plugin.yml}) from a stream.
+     * <p>
+     * Hardened metadata boundary: descriptors are parsed for every scanned jar and folder
+     * <em>before any plugin code runs</em>, so the parser must not honor SnakeYAML global tags
+     * ({@code !!some.Class} would instantiate arbitrary classpath classes - the CVE-2022-1471
+     * pattern). Parsing uses {@link SafeConstructor} and maps the five known fields manually.
+     * <p>
+     * Behavior contract kept from the previous bean parser: scalar values for string fields are
+     * stringified (unquoted {@code version: 1.0} keeps working), unknown keys are ignored, and
+     * a missing or invalid {@code name}/{@code main} rejects the descriptor.
+     *
+     * @return the parsed descriptor, or null when the descriptor is absent/broken/unsafe
+     */
+    public static PluginYAML parseDescriptor(InputStream stream, String source) {
+        try {
+            Object root = new Yaml(new SafeConstructor(new LoaderOptions())).load(stream);
+            if (!(root instanceof Map)) {
+                log.warn("Descriptor of {} is not a mapping", source);
+                return null;
+            }
+            Map<?, ?> fields = (Map<?, ?>) root;
+
+            PluginYAML config = new PluginYAML();
+            config.name = requiredString(fields.get("name"), "name", source);
+            config.version = scalarString(fields.get("version"), "version", source);
+            config.author = scalarString(fields.get("author"), "author", source);
+            config.main = requiredString(fields.get("main"), "main", source);
+            config.depends = dependsList(fields.get("depends"), source);
+
+            if (config.name == null || config.main == null) {
+                log.warn("Invalid plugin.yml for {}: main and/or name property missing", source);
+                return null;
+            }
+            if (!isValidPluginName(config.name)) {
+                log.warn("Invalid plugin name '{}' in {}: names may only contain letters, digits, spaces, dots, dashes and underscores",
+                        config.name, source);
+                return null;
+            }
+            return config;
+        } catch (Exception e) {
+            // Includes SafeConstructor rejections of global tags: a crafted descriptor must be
+            // skipped, never able to instantiate classpath classes while being parsed.
+            log.warn("Cannot parse plugin descriptor of {}: {}", source, e.toString());
+            return null;
+        }
+    }
+
+    /** Scalars are stringified (old bean behavior); mappings/sequences reject the descriptor. */
+    private static String scalarString(Object value, String field, String source) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof String || value instanceof Number || value instanceof Boolean || value instanceof Character) {
+            return String.valueOf(value);
+        }
+        throw new IllegalArgumentException("Descriptor of " + source + ": field '" + field + "' must be a scalar");
+    }
+
+    private static String requiredString(Object value, String field, String source) {
+        String parsed = scalarString(value, field, source);
+        if (parsed != null && parsed.isBlank()) {
+            throw new IllegalArgumentException("Descriptor of " + source + ": field '" + field + "' is blank");
+        }
+        return parsed;
+    }
+
+    private static List<String> dependsList(Object value, String source) {
+        if (value == null) {
+            return null;
+        }
+        if (!(value instanceof List)) {
+            throw new IllegalArgumentException("Descriptor of " + source + ": field 'depends' must be a list");
+        }
+        List<String> depends = new java.util.ArrayList<>();
+        for (Object element : (List<?>) value) {
+            String parsed = scalarString(element, "depends", source);
+            if (parsed == null) {
+                throw new IllegalArgumentException("Descriptor of " + source + ": 'depends' contains an empty entry");
+            }
+            depends.add(parsed);
+        }
+        return depends;
     }
 }

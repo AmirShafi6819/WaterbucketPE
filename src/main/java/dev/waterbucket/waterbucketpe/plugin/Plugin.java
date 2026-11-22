@@ -71,8 +71,10 @@ public abstract class Plugin {
 
         this.pluginFile = pluginFile;
         this.dataFolder = new File(proxy.getPluginPath() + "/" + description.getName().toLowerCase() + "/");
-        if (!this.dataFolder.exists()) {
-            this.dataFolder.mkdirs();
+        if (!this.dataFolder.exists() && !this.dataFolder.mkdirs()) {
+            // A silent mkdirs failure surfaced only later as failing config writes; make it
+            // visible immediately.
+            this.logger.warn("Could not create plugin data folder {}", this.dataFolder.getAbsolutePath());
         }
         this.configFile = new File(this.dataFolder, "config.yml");
     }
@@ -95,13 +97,17 @@ public abstract class Plugin {
         logger.addAppender(config.getAppender("Console-Plugin"), logLevel, null);
         config.addLogger(this.getName(), logger);
 
-        // Plugin class logger
-        LoggerConfig clazzLogger = LoggerConfig.createLogger(false, logLevel, this.getClass().getCanonicalName(),
+        // Plugin class logger. getCanonicalName() is null for anonymous/hidden classes; a
+        // plugin implemented as an anonymous subclass used to crash init with an NPE, so fall
+        // back to the binary name.
+        String classLoggerName = this.getClass().getCanonicalName() != null
+                ? this.getClass().getCanonicalName() : this.getClass().getName();
+        LoggerConfig clazzLogger = LoggerConfig.createLogger(false, logLevel, classLoggerName,
                 "", appenderRefs, null, config, null);
         clazzLogger.getAppenders().keySet().forEach(clazzLogger::removeAppender);
         clazzLogger.addAppender(config.getAppender("File-Plugin"), null, null);
         clazzLogger.addAppender(config.getAppender("Console-Plugin"), logLevel, null);
-        config.addLogger(this.getClass().getCanonicalName(), clazzLogger);
+        config.addLogger(classLoggerName, clazzLogger);
 
         context.updateLoggers();
         return LogManager.getLogger(this.getName());
@@ -172,7 +178,16 @@ public abstract class Plugin {
     public boolean saveResource(String filename, String outputName, boolean replace) {
         Preconditions.checkArgument(filename != null && !filename.trim().isEmpty(), "Filename can not be null!");
 
-        File file = new File(this.dataFolder, outputName);
+        // The output name is plugin-supplied: confine it to the data folder so a '../' entry
+        // cannot write outside the plugin directory (mirrors the Python resource confinement).
+        java.nio.file.Path dataRoot = this.dataFolder.toPath();
+        java.nio.file.Path target = dataRoot.resolve(outputName).normalize();
+        if (!PluginLoader.isInsideDirectory(dataRoot, target)) {
+            this.logger.warn("Plugin {} tried to save resource {} outside its data folder", this.getName(), outputName);
+            return false;
+        }
+
+        File file = target.toFile();
         if (file.exists() && !replace) {
             return false;
         }

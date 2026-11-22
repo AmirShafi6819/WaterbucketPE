@@ -245,3 +245,20 @@ unsafe before; they are documented in the final report.
 The Stage E commit contains only production fixes whose Stage B reproduction is now green,
 plus the reproductions themselves. `PluginDescriptorParsingTest` (Stage F) is still red at
 this point and is committed with its fix in Stage F, keeping every commit's tree green.
+
+---
+
+## Stage F — Security and error handling fixes (all verified by reproductions)
+
+| Fix | Change | Regression test |
+| --- | --- | --- |
+| P3-5 | Descriptor parsing now goes through `PluginLoader.parseDescriptor` using SnakeYAML `SafeConstructor` + manual field mapping: global `!!` tags can no longer instantiate classpath classes while a descriptor is parsed (jar and folder paths share the one hardened parser; the public `PluginManager.yamlLoader` field stays API-compatible but is also `SafeConstructor`-based now). | `PluginDescriptorParsingTest.globalTagsInDescriptorsInstantiateNothing` |
+| P3-19 | The same parser type-checks fields with the old parser's leniency preserved: scalars are stringified (unquoted `version: 1.0` keeps working), unknown keys stay ignored (P3-6 behavior kept), complex values (mappings/sequences) for string fields and non-list `depends` reject the descriptor with a clear warning instead of silently producing garbage. | `PluginDescriptorParsingTest.unknownDescriptorKeysDoNotRejectThePlugin`, `wrongValueTypesAreRejectedWithThePluginSkipped` |
+| P3-7 | `Plugin.saveResource(filename, outputName, …)` confines `outputName` to the plugin data folder (normalize + `isInsideDirectory`, same helper as the Python resource path); traversal returns false and writes nothing. | `PluginFailureIsolationTest.saveResourceCannotEscapeTheDataFolder` |
+| P3-11 | `Plugin.init` warns immediately when the data folder cannot be created instead of failing silently later at config-write time. | covered by all plugin tests (warn path only) |
+| P3-20 (new, found while testing) | `Plugin.buildLogger` used `getClass().getCanonicalName()`, which is null for anonymous plugin subclasses → `init` crashed with an NPE for a plugin implemented as an anonymous class; falls back to the binary name now. | `PluginFailureIsolationTest.saveResourceCannotEscapeTheDataFolder` instantiates the plugin as an anonymous subclass |
+
+Documented limitation (unchanged, §12): plugins execute in-process with full JVM rights; a
+malicious plugin can still do anything the host process can. The boundary work above protects
+the metadata-parsing and data-folder paths that run *before* or *beside* plugin code — a
+sandbox would be a new product and is explicitly out of scope.

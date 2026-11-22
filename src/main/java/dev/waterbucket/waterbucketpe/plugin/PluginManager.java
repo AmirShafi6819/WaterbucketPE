@@ -22,9 +22,9 @@ import it.unimi.dsi.fastutil.Pair;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import it.unimi.dsi.fastutil.objects.ObjectObjectImmutablePair;
 import lombok.Getter;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.CustomClassLoaderConstructor;
-import org.yaml.snakeyaml.representer.Representer;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.io.File;
 import java.io.IOException;
@@ -40,9 +40,10 @@ public class PluginManager {
 
     public static final Yaml yamlLoader;
     static {
-        Representer representer = new Representer();
-        representer.getPropertyUtils().setSkipMissingProperties(true);
-        yamlLoader = new Yaml(new CustomClassLoaderConstructor(PluginManager.class.getClassLoader()), representer);
+        // Public for API compatibility; descriptor parsing itself goes through the hardened
+        // PluginLoader.parseDescriptor. SafeConstructor: this instance must never be able to
+        // instantiate classpath classes from global YAML tags either.
+        yamlLoader = new Yaml(new SafeConstructor(new LoaderOptions()));
     }
 
     @Getter
