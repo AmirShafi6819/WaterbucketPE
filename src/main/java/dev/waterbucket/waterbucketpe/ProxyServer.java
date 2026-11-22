@@ -272,7 +272,15 @@ public class ProxyServer {
     }
 
     private void boot() {
-        this.console.getConsoleThread().start();
+        // Headless: never start the console read loop. JLine's dumb terminal returns null from
+        // readLine immediately, so the loop spun at full speed printing prompts (and burning a
+        // core's worth of CPU + log I/O) in docker/systemd/nohup runs. Interactive terminals are
+        // unaffected.
+        if (TerminalConsole.isInteractive()) {
+            this.console.getConsoleThread().start();
+        } else {
+            this.logger.info("No interactive terminal detected - console input disabled (use the web panel for commands)");
+        }
         this.pluginManager.enableAllPlugins();
         if (Boolean.parseBoolean(System.getProperty("disableFastCodec", "false"))) {
             this.logger.warning("Fast codec is disabled! This may impact the proxy performance!");

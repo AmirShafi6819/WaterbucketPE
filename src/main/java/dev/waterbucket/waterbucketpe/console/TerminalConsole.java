@@ -26,6 +26,19 @@ import java.io.IOException;
 
 public class TerminalConsole extends SimpleTerminalConsole {
 
+    /**
+     * True when the process owns an interactive terminal (real TTY on stdin). In headless
+     * deployments - docker, systemd, nohup, CI - System.console() is null and JLine falls back
+     * to a dumb terminal whose readLine returns null immediately, which spun the console read
+     * loop at full speed printing an endless prompt stream into the log. Commands in that mode
+     * still arrive through the web panel and plugins.
+     */
+    private static final boolean INTERACTIVE = System.console() != null;
+
+    public static boolean isInteractive() {
+        return INTERACTIVE;
+    }
+
     private final ProxyServer proxy;
     @Getter
     private final ConsoleThread consoleThread;

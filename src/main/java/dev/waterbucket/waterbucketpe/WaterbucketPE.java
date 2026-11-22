@@ -54,6 +54,7 @@ public class WaterbucketPE {
         Thread.currentThread().setName("WaterbucketPE-main");
         printBanner();
         System.setProperty("log4j.skipJansi", "false");
+        applyAllocatorTuning();
 
         MainLogger logger = MainLogger.getLogger();
         logger.info("§bStarting WaterbucketPE proxy software!");
@@ -155,6 +156,30 @@ public class WaterbucketPE {
         LoggerConfig loggerConfig = log4jConfig.getLoggerConfig(LogManager.ROOT_LOGGER_NAME);
         loggerConfig.setLevel(level);
         context.updateLoggers();
+    }
+
+    /**
+     * Right-sizes Netty's pooled allocator for a proxy workload. Must run before any Netty
+     * class is loaded (Netty reads these properties once into static defaults).
+     * <p>
+     * Direct arenas: Netty defaults to 2x core count, and each arena owns 16 MB chunks - on a
+     * 2-core host that pre-commits 64 MB of direct memory for buffer pooling before the first
+     * packet. The RakNet listener already binds one channel per core, so core-count arenas
+     * keep every event loop on a private arena without doubling the chunk commitment.
+     * <p>
+     * Per-thread caches: every event loop parks recently freed buffers in its thread cache
+     * (tiny 512 / small 256 / normal 64 entries by default). With hundreds of sessions the
+     * parked buffers added up to megabytes of RSS that idle connections never gave back;
+     * halving to a third of the defaults keeps allocation mostly cache-hit (the small buffers
+     * that dominate RakNet datagrams stay cached) while letting memory return to the pool.
+     */
+    private static void applyAllocatorTuning() {
+        int cores = Math.max(1, Runtime.getRuntime().availableProcessors());
+        System.setProperty("io.netty.allocator.numDirectArenas", String.valueOf(cores));
+        System.setProperty("io.netty.allocator.numHeapArenas", String.valueOf(cores));
+        System.setProperty("io.netty.allocator.tinyCacheSize", "256");
+        System.setProperty("io.netty.allocator.smallCacheSize", "64");
+        System.setProperty("io.netty.allocator.normalCacheSize", "8");
     }
 
     public static VersionInfo version() {
