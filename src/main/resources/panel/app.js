@@ -33,19 +33,38 @@ function showLogin() { loginOverlay.classList.remove("hidden"); }
 function hideLogin() { loginOverlay.classList.add("hidden"); }
 
 async function tryLogin(token) {
-  const res = await fetch("/api/status", { headers: { "X-Panel-Token": token } });
-  if (res.ok) {
-    localStorage.setItem("wb_panel_token", token);
-    hideLogin();
-    boot();
-    return true;
+  const loginError = document.getElementById("login-error");
+  try {
+    const res = await fetch("/api/status", { headers: { "X-Panel-Token": token } });
+    if (res.ok) {
+      localStorage.setItem("wb_panel_token", token);
+      hideLogin();
+      boot();
+      return true;
+    }
+    if (res.status === 401) {
+      loginError.textContent = "Invalid token";
+    } else {
+      loginError.textContent = "Proxy answered with HTTP " + res.status;
+    }
+    return false;
+  } catch (e) {
+    loginError.textContent = "Proxy unreachable - is it still running?";
+    return false;
   }
-  return false;
 }
 
-document.getElementById("login-btn").addEventListener("click", async () => {
-  const ok = await tryLogin(document.getElementById("token-input").value.trim());
-  document.getElementById("login-error").classList.toggle("hidden", ok);
+const loginBtn = document.getElementById("login-btn");
+loginBtn.addEventListener("click", async () => {
+  loginBtn.disabled = true;
+  loginBtn.textContent = "Checking…";
+  try {
+    const ok = await tryLogin(document.getElementById("token-input").value.trim());
+    document.getElementById("login-error").classList.toggle("hidden", ok);
+  } finally {
+    loginBtn.disabled = false;
+    loginBtn.textContent = "Open dashboard";
+  }
 });
 document.getElementById("token-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") document.getElementById("login-btn").click();
@@ -130,10 +149,17 @@ function pill(text, good) {
   return `<span class="pill ${good ? "good" : "bad"}">${text}</span>`;
 }
 
+/* ---------------- connection state ---------------- */
+const connBanner = document.getElementById("conn-banner");
+function setConnectionLost(lost) {
+  connBanner.classList.toggle("hidden", !lost);
+}
+
 /* ---------------- polling ---------------- */
 async function refreshStatus() {
   try {
     const s = await API.get("/api/status");
+    setConnectionLost(false);
     document.getElementById("proxy-name").textContent = s.proxyName;
     document.getElementById("proxy-version").textContent = "v" + s.proxyVersion + " · java " + s.javaVersion;
     document.getElementById("stat-cpu").textContent = s.cpu + "%";
@@ -142,19 +168,21 @@ async function refreshStatus() {
     document.getElementById("stat-players").textContent = s.players;
     document.getElementById("stat-servers").textContent = s.servers.length;
     document.getElementById("stat-uptime").textContent = fmtUptime(s.uptimeMs);
+    document.getElementById("stat-updated").textContent = fmtTime(Date.now());
     document.getElementById("bind-info").textContent = location.host;
 
     const rows = s.servers.map((srv) => {
       const online = srv.online;
       return `<tr>
-        <td>${srv.name}</td><td class="muted">${srv.address}</td>
-        <td class="muted">${srv.type}</td>
+        <td><strong>${escapeHtml(srv.name)}</strong></td><td class="muted">${escapeHtml(srv.address)}</td>
+        <td class="muted">${escapeHtml(srv.type)}</td>
         <td>${srv.players}</td>
         <td>${srv.pingMs >= 0 ? srv.pingMs + " ms" : "–"}</td>
         <td>${pill(online ? "online" : "down", online)}</td>
       </tr>`;
     });
-    document.querySelector("#server-status-table tbody").innerHTML = rows.join("");
+    document.querySelector("#server-status-table tbody").innerHTML =
+      rows.length ? rows.join("") : emptyRow(6, "No servers registered in the config");
 
     const upLabels = [], upData = [];
     s.servers.forEach((srv) => {
@@ -168,7 +196,10 @@ async function refreshStatus() {
     renderPlayers(await API.get("/api/players"));
     renderServersTable(s.servers);
   } catch (e) {
-    if (e.message !== "unauthorized") console.warn(e);
+    if (e.message !== "unauthorized") {
+      setConnectionLost(true);
+      console.warn(e);
+    }
   }
 }
 
@@ -195,6 +226,10 @@ async function refreshHistory() {
   }
 }
 
+function emptyRow(columns, text) {
+  return `<tr><td colspan="${columns}" class="muted empty-row">${escapeHtml(text)}</td></tr>`;
+}
+
 function renderPlayers(payload) {
   const players = payload.players || [];
   document.getElementById("player-count").textContent = players.length;
@@ -209,19 +244,21 @@ function renderPlayers(payload) {
       <button data-transfer="${escapeHtml(p.name)}">Transfer</button>
     </div></td>
   </tr>`);
-  document.querySelector("#players-table tbody").innerHTML = rows.join("");
+  document.querySelector("#players-table tbody").innerHTML =
+    rows.length ? rows.join("") : emptyRow(6, "No players online");
 }
 
 function renderServersTable(servers) {
   const rows = servers.map((srv) => `<tr>
     <td><strong>${escapeHtml(srv.name)}</strong></td>
-    <td class="muted">${srv.address}</td>
-    <td class="muted">${srv.type}</td>
+    <td class="muted">${escapeHtml(srv.address)}</td>
+    <td class="muted">${escapeHtml(srv.type)}</td>
     <td>${srv.players}</td>
     <td>${srv.pingMs >= 0 ? srv.pingMs + " ms" : "–"}</td>
     <td><div class="row-actions"><button data-ping="${escapeHtml(srv.name)}">Ping</button></div></td>
   </tr>`);
-  document.querySelector("#servers-table tbody").innerHTML = rows.join("");
+  document.querySelector("#servers-table tbody").innerHTML =
+    rows.length ? rows.join("") : emptyRow(6, "No servers registered in the config");
 }
 
 function escapeHtml(value) {
@@ -229,27 +266,56 @@ function escapeHtml(value) {
 }
 
 document.addEventListener("click", async (event) => {
-  const kick = event.target.getAttribute && event.target.getAttribute("data-kick");
-  const transfer = event.target.getAttribute && event.target.getAttribute("data-transfer");
-  const ping = event.target.getAttribute && event.target.getAttribute("data-ping");
+  const target = event.target;
+  const kick = target.getAttribute && target.getAttribute("data-kick");
+  const transfer = target.getAttribute && target.getAttribute("data-transfer");
+  const ping = target.getAttribute && target.getAttribute("data-ping");
   try {
     if (kick) {
-      if (confirm("Kick " + kick + "?")) await API.post("/api/players/" + encodeURIComponent(kick) + "/kick", { reason: "Kicked from the panel" });
+      if (confirm("Kick " + kick + "?")) {
+        target.disabled = true;
+        try {
+          await API.post("/api/players/" + encodeURIComponent(kick) + "/kick", { reason: "Kicked from the panel" });
+        } finally {
+          target.disabled = false;
+        }
+      }
       refreshStatus();
     } else if (transfer) {
       const server = prompt("Transfer " + transfer + " to which server?");
-      if (server) await API.post("/api/players/" + encodeURIComponent(transfer) + "/transfer", { server });
+      if (server) {
+        target.disabled = true;
+        try {
+          await API.post("/api/players/" + encodeURIComponent(transfer) + "/transfer", { server });
+        } finally {
+          target.disabled = false;
+        }
+      }
       refreshStatus();
     } else if (ping) {
-      await API.post("/api/servers/ping/" + encodeURIComponent(ping));
+      target.disabled = true;
+      target.textContent = "Pinging…";
+      try {
+        await API.post("/api/servers/ping/" + encodeURIComponent(ping));
+        setTimeout(refreshStatus, 1500);
+      } finally {
+        target.disabled = false;
+        target.textContent = "Ping";
+      }
     }
   } catch (e) {
-    if (e.message !== "unauthorized") console.warn(e);
+    if (e.message !== "unauthorized") {
+      setConnectionLost(true);
+      console.warn(e);
+    }
   }
 });
 
 /* ---------------- console ---------------- */
 const consoleOutput = document.getElementById("console-output");
+let renderedLogLines = 0;
+let lastLogPayload = [];
+
 function appendLog(line) {
   const div = document.createElement("div");
   const level = line.includes("[ERROR]") ? "log-error" : line.includes("[WARN]") ? "log-warn" : "log-info";
@@ -257,15 +323,29 @@ function appendLog(line) {
   div.textContent = line;
   consoleOutput.appendChild(div);
   while (consoleOutput.childElementCount > 400) consoleOutput.removeChild(consoleOutput.firstChild);
-  scrollConsole();
 }
 function scrollConsole() { consoleOutput.scrollTop = consoleOutput.scrollHeight; }
 
 async function refreshLogs() {
   try {
     const payload = await API.get("/api/logs");
-    consoleOutput.replaceChildren();
-    (payload.lines || []).forEach(appendLog);
+    const lines = payload.lines || [];
+    // Append only the new tail when the already rendered prefix still matches: re-rendering
+    // the whole 400-line tail three times a second caused visible console churn and wasted
+    // DOM work. A mismatch (rotation, server restart) falls back to a full rebuild.
+    if (renderedLogLines > 0 && renderedLogLines <= lastLogPayload.length && lines.length >= renderedLogLines
+        && lastLogPayload[renderedLogLines - 1] === lines[renderedLogLines - 1]) {
+      const fresh = lines.slice(renderedLogLines);
+      fresh.forEach(appendLog);
+      renderedLogLines = lines.length;
+    } else {
+      consoleOutput.replaceChildren();
+      if (!lines.length) appendLog("(no log lines yet)");
+      lines.forEach(appendLog);
+      renderedLogLines = lines.length;
+    }
+    lastLogPayload = lines;
+    scrollConsole();
   } catch (e) {
     if (e.message !== "unauthorized") console.warn(e);
   }

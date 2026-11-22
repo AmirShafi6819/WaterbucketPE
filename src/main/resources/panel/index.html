@@ -34,6 +34,7 @@
     <div class="stat"><span class="stat-label">Players</span><span class="stat-value accent" id="stat-players">–</span></div>
     <div class="stat"><span class="stat-label">Servers</span><span class="stat-value" id="stat-servers">–</span></div>
     <div class="stat"><span class="stat-label">Uptime</span><span class="stat-value" id="stat-uptime">–</span></div>
+    <div class="stat"><span class="stat-label">Updated</span><span class="stat-value" id="stat-updated">–</span></div>
     <div class="stat clock"><span class="stat-value muted" id="stat-clock">–</span></div>
   </div>
 </header>
@@ -114,6 +115,8 @@
 <footer class="footer muted">
   WaterbucketPE local panel &middot; token required for every API call &middot; bound to <span id="bind-info">127.0.0.1</span>
 </footer>
+
+<div id="conn-banner" class="conn-banner hidden">Connection to the proxy lost &mdash; retrying&hellip;</div>
 
 <script src="/chart.umd.min.js"></script>
 <script src="/app.js"></script>

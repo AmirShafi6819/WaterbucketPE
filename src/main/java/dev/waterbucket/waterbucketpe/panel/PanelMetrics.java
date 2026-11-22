@@ -111,6 +111,9 @@ public class PanelMetrics {
                 this.serverStates.computeIfAbsent(server.getServerName(), name -> new ServerState())
                         .players = server.getPlayers().size();
             }
+            // Drop states of servers that disappeared from the config so the map cannot retain
+            // stale entries forever.
+            this.serverStates.keySet().retainAll(perServer.keySet());
             point.put("perServer", perServer);
 
             synchronized (this.historyLock) {

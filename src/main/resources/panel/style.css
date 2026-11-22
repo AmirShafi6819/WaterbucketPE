@@ -67,6 +67,7 @@ html, body {
   cursor: pointer;
 }
 button:hover { filter: brightness(1.1); }
+button:disabled { opacity: 0.55; cursor: default; filter: none; }
 .login-error { color: var(--bad); }
 
 /* ---------- topbar ---------- */
@@ -221,6 +222,22 @@ tr:hover td { background: rgba(79, 195, 247, 0.05); }
   padding: 14px;
   border-top: 1px solid var(--border);
   font-size: 12px;
+}
+
+/* ---------- states ---------- */
+.empty-row { text-align: center; padding: 18px 10px; }
+.conn-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  background: rgba(239, 83, 80, 0.92);
+  color: #1d0505;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 10px;
+  z-index: 90;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
 }
 
 @media (max-width: 900px) {

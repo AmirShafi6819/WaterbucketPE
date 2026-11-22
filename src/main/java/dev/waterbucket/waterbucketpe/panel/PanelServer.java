@@ -242,7 +242,12 @@ public class PanelServer {
                         ? "max-age=3600" : "no-store")
                 .set("X-Content-Type-Options", "nosniff")
                 .set("X-Frame-Options", "DENY")
-                .set("Referrer-Policy", "no-referrer");
+                .set("Referrer-Policy", "no-referrer")
+                // The page only ever loads same-origin assets; the CSP makes any injected
+                // script/style inert on top of the escaping the frontend already applies.
+                .set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; "
+                        + "style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; "
+                        + "frame-ancestors 'none'; base-uri 'none'");
         if (HttpUtil.isKeepAlive(request)) {
             response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
             ctx.writeAndFlush(response);
