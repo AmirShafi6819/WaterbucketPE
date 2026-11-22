@@ -22,15 +22,20 @@ wd = summary["WaterdogPE"]
 wb = summary["WaterbucketPE"]
 
 fig, axes = plt.subplots(2, 3, figsize=(14.5, 8.0), constrained_layout=True)
-fig.suptitle("WaterbucketPE 1.1.0 vs WaterdogPE 2.0.4 - round 2 (same upstream commit, same machine, same JVM flags)",
+fig.suptitle("WaterbucketPE 1.2.0 vs WaterdogPE 2.0.4 - round 3 (same upstream commit, same machine, same JVM flags)",
              fontsize=13, fontweight="bold", color=TXT)
+
+
+def honest_delta(wd_val, wb_val):
+    """Signed percentage change of WaterbucketPE vs WaterdogPE; negative = Waterbucket lower."""
+    return (wb_val / wd_val - 1.0) * 100.0
 
 
 def grouped(ax, title, labels, wd_vals, wb_vals, unit="", fmt="{:.2f}", lower_is_better=None, ylabel=None):
     x = np.arange(len(labels))
     w = 0.36
     b1 = ax.bar(x - w / 2, [max(0.0, v) for v in wd_vals], w, label="WaterdogPE 2.0.4", color=WD, zorder=3)
-    b2 = ax.bar(x + w / 2, [max(0.0, v) for v in wb_vals], w, label="WaterbucketPE 1.1.0", color=WB, zorder=3)
+    b2 = ax.bar(x + w / 2, [max(0.0, v) for v in wb_vals], w, label="WaterbucketPE 1.2.0", color=WB, zorder=3)
     for bars in (b1, b2):
         for rect, raw in zip(bars, (wd_vals if bars is b1 else wb_vals)):
             ax.annotate(fmt.format(raw) + unit,
@@ -54,6 +59,11 @@ def annotate_winner(ax, text):
             fontweight="bold", va="top", bbox=dict(facecolor="#EAF6FD", edgecolor="none", boxstyle="round,pad=0.3"))
 
 
+def annotate_note(ax, text):
+    ax.text(0.02, 0.94, text, transform=ax.transAxes, fontsize=8, color="#5B6B8C",
+            fontweight="bold", va="top", bbox=dict(facecolor="#EEF1F7", edgecolor="none", boxstyle="round,pad=0.3"))
+
+
 # 1. Startup (median of 3 runs)
 grouped(axes[0][0], "Cold startup", ["median of 3 runs"],
         [wd["startup_s_median"]], [wb["startup_s_median"]], unit=" s", fmt="{:.2f}", ylabel="seconds")
@@ -63,16 +73,28 @@ grouped(axes[0][1], "Idle memory (RSS)", ["after 15s settle"],
         [wd["idle_rss_mb_median"]], [wb["idle_rss_mb_median"]], unit=" MB", fmt="{:.0f}", ylabel="MB")
 annotate_winner(axes[0][1], "-{:.0f}%".format((1 - wb["idle_rss_mb_median"] / wd["idle_rss_mb_median"]) * 100))
 
-# 3. Ping latency
+# 3. Ping latency (median/p95/p99, per proxy, from that proxy's own result record)
+wd_rtt = data["results"][0]["ping_rtt_ms"]
+wb_rtt = data["results"][1]["ping_rtt_ms"]
 grouped(axes[0][2], "RakNet ping latency", ["median", "p95", "p99"],
-        [wd["ping_rtt_ms_median"], data["results"][1]["ping_rtt_ms"]["p95"], data["results"][1]["ping_rtt_ms"]["p99"]],
-        [wb["ping_rtt_ms_median"], data["results"][0]["ping_rtt_ms"]["p95"], data["results"][0]["ping_rtt_ms"]["p99"]],
-        unit=" ms", fmt="{:.2f}", ylabel="ms")
+        [wd_rtt["median"], wd_rtt["p95"], wd_rtt["p99"]],
+        [wb_rtt["median"], wb_rtt["p95"], wb_rtt["p99"]],
+        unit=" ms", fmt="{:.2f}", lower_is_better=True, ylabel="ms")
+delta = honest_delta(wd_rtt["median"], wb_rtt["median"])
+if delta <= 0:
+    annotate_winner(axes[0][2], "{:+.0f}% median".format(delta))
+else:
+    annotate_note(axes[0][2], "{:+.0f}% median".format(delta))
 
-# 4. Per-session memory at 200 live sessions
+# 4. Per-session memory at 200 live sessions (RSS delta during the hold window; a noisy
+#    page-level metric - the class-histogram diff in METHODOLOGY.md is the object-level view)
 grouped(axes[1][0], "Memory per live session (200 held)", ["RSS delta / session"],
         [wd["kb_per_session"]], [wb["kb_per_session"]], unit=" KB", fmt="{:.1f}", ylabel="KB")
-annotate_winner(axes[1][0], "-{:.0f}%".format((1 - wb["kb_per_session"] / wd["kb_per_session"]) * 100))
+delta = honest_delta(wd["kb_per_session"], wb["kb_per_session"])
+if delta <= 0:
+    annotate_winner(axes[1][0], "{:+.0f}%".format(delta))
+else:
+    annotate_note(axes[1][0], "{:+.0f}% (RSS delta, noisy)".format(delta))
 
 # 5. Handshake churn: connect rate + latency
 grouped(axes[1][1], "Handshake churn (300 real connects)", ["connects/s", "median connect ms"],
@@ -87,7 +109,8 @@ grouped(axes[1][2], "Scale: 500 concurrent sessions", ["held sessions", "KB / se
         [wd["scale_held"], max(0.0, wd["scale_kb_per_session"])],
         [wb["scale_held"], max(0.0, wb["scale_kb_per_session"])],
         fmt="{:.0f}", lower_is_better=None)
-axes[1][2].annotate("all 500 held on both; KB/session: Waterdog 0 (allocator reused), Waterbucket 13.4",
+axes[1][2].annotate("held: Waterdog {}/500, Waterbucket {}/500; KB/session measured during the hold".format(
+                        int(wd["scale_held"]), int(wb["scale_held"])),
                     (0.5, 0.94), xycoords="axes fraction", ha="center", fontsize=7.5, color=TXT)
 
 out = "/home/z/my-project/WaterbucketPE/benchmarks/benchmark.png"

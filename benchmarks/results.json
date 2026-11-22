@@ -6,66 +6,66 @@
       "jvm_flags": "-Xms128M -Xmx512M -XX:+UseG1GC -XX:MaxGCPauseMillis=200",
       "port": 19132,
       "startup": [
-        2.782447053003125,
-        1.6803351790003944,
-        2.23044522499913
+        2.215841045999696,
+        1.6811667939982726,
+        2.8184465970007295
       ],
       "idle_rss_kb": [
-        217676,
-        210100,
-        222096
+        190480,
+        206504,
+        217176
       ],
       "idle_cpu_pct": [
-        1.3499841999198494,
-        1.3999800854932525,
-        1.2499848083721223
+        1.299983360408112,
+        1.3999808684215738,
+        1.299982831061565
       ],
       "ping_rtt_ms": {
         "count": 1500,
         "lost": 0,
-        "median": 0.2206209992436925,
-        "p95": 0.5467545488500036,
-        "p99": 1.232221709942678
+        "median": 0.2241220008727396,
+        "p95": 0.6079242002670071,
+        "p99": 1.3178364126360975
       },
       "concurrent_ping": {
         "sent": 800,
         "replies": 800,
-        "replies_per_sec": 530.4206017969273,
+        "replies_per_sec": 529.971681619459,
         "loss_pct": 0.0
       },
       "handshake_churn": {
         "ok": 300,
         "failed": 0,
-        "connect_ms_median": 2.7325,
-        "connect_ms_p95": 13.03425,
-        "wall_s": 4.512738232999254,
-        "cpu_pct": 53.18278783489095,
-        "connects_per_sec": 66.47848479361369
+        "connect_ms_median": 2.8855,
+        "connect_ms_p95": 26.1662,
+        "wall_s": 4.542837568002142,
+        "cpu_pct": 58.3335846886866,
+        "connects_per_sec": 66.03802040228672
       },
       "live_sessions": {
         "ok": 200,
         "failed": 0,
-        "connect_ms_median": 3.342,
-        "connect_ms_p95": 30.1695,
+        "connect_ms_median": 4.4715,
+        "connect_ms_p95": 32.6925,
         "held": 200,
-        "rss_delta_kb": 4636,
-        "kb_per_session": 23.18,
-        "cpu_pct": 38.550879433446795
+        "rss_delta_kb": 6860,
+        "kb_per_session": 34.3,
+        "cpu_pct": 38.32397708725432
       },
       "churn_growth_mb": [
-        0.39,
-        29.85,
-        5.67
+        0.07,
+        0.46,
+        0.46
       ],
       "scale_500": {
-        "ok": 500,
-        "failed": 0,
-        "connect_ms_median": 2.221,
-        "connect_ms_p95": 15.1288,
-        "held": 500,
-        "rss_delta_kb": 8360,
-        "kb_per_session": 16.72,
-        "cpu_pct": 27.291321655956896
+        "ok": 498,
+        "failed": 2,
+        "connect_ms_median": 1.608,
+        "connect_ms_p95": 6.44845,
+        "held": 498,
+        "rss_delta_kb": 900,
+        "kb_per_session": 1.8072289156626506,
+        "cpu_pct": 10.191481146771006
       }
     },
     {
@@ -74,119 +74,119 @@
       "jvm_flags": "-Xms128M -Xmx512M -XX:+UseG1GC -XX:MaxGCPauseMillis=200",
       "port": 19132,
       "startup": [
-        2.2424433150008554,
-        2.2325744879999547,
-        2.2280318459997943
+        2.216910529998131,
+        2.2212336560005497,
+        2.2312356420006836
       ],
       "idle_rss_kb": [
-        200692,
-        195968,
-        209936
+        193732,
+        195040,
+        206316
       ],
       "idle_cpu_pct": [
-        1.449981020473237,
-        1.2999824677864116,
-        1.2999834819548517
+        1.2999823643091206,
+        1.449981560874313,
+        1.3999802221994904
       ],
       "ping_rtt_ms": {
         "count": 1500,
         "lost": 0,
-        "median": 0.19318150043545756,
-        "p95": 0.4749810992507264,
-        "p99": 1.1059842510439921
+        "median": 0.20534299983410165,
+        "p95": 0.5874030486666015,
+        "p99": 1.765091868073796
       },
       "concurrent_ping": {
         "sent": 800,
         "replies": 800,
-        "replies_per_sec": 530.5810016887749,
+        "replies_per_sec": 530.0051834508051,
         "loss_pct": 0.0
       },
       "handshake_churn": {
         "ok": 300,
         "failed": 0,
-        "connect_ms_median": 2.6375,
-        "connect_ms_p95": 24.4748,
-        "wall_s": 4.57123820400011,
-        "cpu_pct": 52.064668122465285,
-        "connects_per_sec": 65.62773292747725
+        "connect_ms_median": 2.7185,
+        "connect_ms_p95": 26.20425,
+        "wall_s": 4.559680133999791,
+        "cpu_pct": 50.442134807873465,
+        "connects_per_sec": 65.79408887983496
       },
       "live_sessions": {
         "ok": 200,
         "failed": 0,
-        "connect_ms_median": 3.023,
-        "connect_ms_p95": 31.38425,
+        "connect_ms_median": 3.3905,
+        "connect_ms_p95": 31.35375,
         "held": 200,
-        "rss_delta_kb": 10084,
-        "kb_per_session": 50.42,
-        "cpu_pct": 40.60438902337899
+        "rss_delta_kb": 13272,
+        "kb_per_session": 66.36,
+        "cpu_pct": 33.97986285821711
       },
       "churn_growth_mb": [
-        0.22,
-        0.38,
-        1.39
+        0.09,
+        0.14,
+        0.39
       ],
       "scale_500": {
         "ok": 500,
         "failed": 0,
-        "connect_ms_median": 2.1565,
-        "connect_ms_p95": 12.415149999999999,
+        "connect_ms_median": 1.922,
+        "connect_ms_p95": 9.73835,
         "held": 500,
-        "rss_delta_kb": 18460,
-        "kb_per_session": 36.92,
-        "cpu_pct": 29.016006097058273
+        "rss_delta_kb": 11044,
+        "kb_per_session": 22.088,
+        "cpu_pct": 28.124781120924712
       }
     }
   ],
   "summary": {
     "WaterdogPE": {
-      "startup_s_median": 2.23044522499913,
-      "idle_rss_mb_median": 212.57421875,
-      "idle_cpu_pct_median": 1.3499841999198494,
-      "ping_rtt_ms_median": 0.2206209992436925,
-      "ping_rtt_p95_ms": 0.5467545488500036,
-      "ping_replies_per_sec": 530.4206017969273,
+      "startup_s_median": 2.215841045999696,
+      "idle_rss_mb_median": 201.6640625,
+      "idle_cpu_pct_median": 1.299983360408112,
+      "ping_rtt_ms_median": 0.2241220008727396,
+      "ping_rtt_p95_ms": 0.6079242002670071,
+      "ping_replies_per_sec": 529.971681619459,
       "ping_loss_pct": 0.0,
       "handshake_ok": 300,
       "handshake_failed": 0,
-      "handshake_connect_ms_median": 2.7325,
-      "handshake_connects_per_sec": 66.47848479361369,
-      "handshake_cpu_pct": 53.18278783489095,
+      "handshake_connect_ms_median": 2.8855,
+      "handshake_connects_per_sec": 66.03802040228672,
+      "handshake_cpu_pct": 58.3335846886866,
       "sessions_held": 200,
-      "kb_per_session": 23.18,
-      "sessions_cpu_pct": 38.550879433446795,
+      "kb_per_session": 34.3,
+      "sessions_cpu_pct": 38.32397708725432,
       "churn_growth_mb": [
-        0.39,
-        29.85,
-        5.67
+        0.07,
+        0.46,
+        0.46
       ],
-      "scale_held": 500,
-      "scale_kb_per_session": 16.72,
-      "scale_cpu_pct": 27.291321655956896
+      "scale_held": 498,
+      "scale_kb_per_session": 1.8072289156626506,
+      "scale_cpu_pct": 10.191481146771006
     },
     "WaterbucketPE": {
-      "startup_s_median": 2.2325744879999547,
-      "idle_rss_mb_median": 195.98828125,
-      "idle_cpu_pct_median": 1.2999834819548517,
-      "ping_rtt_ms_median": 0.19318150043545756,
-      "ping_rtt_p95_ms": 0.4749810992507264,
-      "ping_replies_per_sec": 530.5810016887749,
+      "startup_s_median": 2.2212336560005497,
+      "idle_rss_mb_median": 190.46875,
+      "idle_cpu_pct_median": 1.3999802221994904,
+      "ping_rtt_ms_median": 0.20534299983410165,
+      "ping_rtt_p95_ms": 0.5874030486666015,
+      "ping_replies_per_sec": 530.0051834508051,
       "ping_loss_pct": 0.0,
       "handshake_ok": 300,
       "handshake_failed": 0,
-      "handshake_connect_ms_median": 2.6375,
-      "handshake_connects_per_sec": 65.62773292747725,
-      "handshake_cpu_pct": 52.064668122465285,
+      "handshake_connect_ms_median": 2.7185,
+      "handshake_connects_per_sec": 65.79408887983496,
+      "handshake_cpu_pct": 50.442134807873465,
       "sessions_held": 200,
-      "kb_per_session": 50.42,
-      "sessions_cpu_pct": 40.60438902337899,
+      "kb_per_session": 66.36,
+      "sessions_cpu_pct": 33.97986285821711,
       "churn_growth_mb": [
-        0.22,
-        0.38,
-        1.39
+        0.09,
+        0.14,
+        0.39
       ],
       "scale_held": 500,
-      "scale_kb_per_session": 36.92,
-      "scale_cpu_pct": 29.016006097058273
+      "scale_kb_per_session": 22.088,
+      "scale_cpu_pct": 28.124781120924712
     }
   }
 }

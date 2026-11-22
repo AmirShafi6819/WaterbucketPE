@@ -26,17 +26,29 @@ hardening for every real bug class we could reproduce.
 
 ## Why switch from WaterdogPE?
 
-| | WaterdogPE 2.0.4 | WaterbucketPE 1.1.0 |
+Round-3 A/B benchmark (2026-11-22, shared 2-core VM, same upstream commit, same JVM flags —
+methodology and caveats in [benchmarks/METHODOLOGY.md](benchmarks/METHODOLOGY.md)):
+
+| | WaterdogPE 2.0.4 | WaterbucketPE 1.2.0 |
 |---|---|---|
-| Idle memory (RSS) | 311 MB | **250 MB (−20%)** |
-| Memory per live session (200 held) | 48.3 KB | **21.0 KB (−56%)** |
-| RakNet ping latency (median / p95) | 0.22 / 0.61 ms | **0.22 / 0.55 ms** |
-| Handshake throughput (300 real connects) | 70.9/s @ 2.25 ms | 67.6/s @ 2.76 ms |
-| 500 concurrent sessions | all held | all held |
+| Idle memory (RSS) | 202 MB | **190 MB (−6%)** |
+| RakNet ping RTT (median / p95) | 0.22 / 0.61 ms | **0.21 / 0.59 ms** |
+| Handshake latency (median, 300 real connects) | 2.89 ms | **2.72 ms** |
+| Handshake CPU during churn | 58% | **50% (−14%)** |
+| Handshake throughput | 66.0/s | 65.8/s (parity, ±1.5% run noise) |
+| Cold startup (median of 3) | 2.22 s | 2.22 s (parity) |
+| 500 concurrent sessions | 498 held | **500 held** |
+| Leak churn growth (3 rounds) | up to +0.46 MB/round | ≤ +0.39 MB/round |
 | Web panel | ✗ | **built-in, token-secured** |
 | Python plugins | ✗ | **GraalPy, zero-config** |
 | Localhost multi-port transfers | can silently bypass the proxy | **fixed** |
 | Ghost-player leak (upstream #266) | leak possible | **sweeper + tests** |
+
+Per-session memory: the held-session RSS delta is a noisy page-level metric (it moved in both
+directions between runs), so we do not headline it. The object-level evidence — a 200-session
+class-histogram diff kept in [`benchmarks/results-histograms.txt`](benchmarks/results-histograms.txt) —
+shows equal-or-lower per-session instance counts than upstream (fewer MPSC queues, less
+PoolThreadCache, fewer Object[] arrays).
 
 **Compatibility promise:** existing WaterdogPE jar plugins run unchanged; configs, commands,
 transfers, forwarding and event API semantics are preserved. The Python front-end is purely additive.
@@ -98,7 +110,7 @@ is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
 - **Release-mode leak detection actually off** — upstream's raise-only guard kept every
   release build at `SIMPLE` tracking; the largest single per-session memory win.
 
-### Real bug fixes (found upstream, fixed here)
+### Real bug fixes (found upstream or in review, fixed here)
 
 - **Fast-transfer address matching** — localhost setups running several downstreams on
   `127.0.0.1` with different ports could silently fail the fast path (the raw `TransferPacket`
@@ -110,8 +122,27 @@ is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
   `ConcurrentModificationException`. Covered by [EventManagerConcurrencyTest](src/test/java/dev/waterbucket/waterbucketpe/event/EventManagerConcurrencyTest.java).
 - **Ghost players (upstream #266)** — a lost disconnect event kept the identity registered
   forever and blocked reconnects; a periodic sweeper evicts only stale instances.
+- **Shutdown teardown** — a panel `end` command used to interrupt its own shutdown halfway
+  (interfaces stayed bound); the event executor shut down before the network and turned late
+  disconnect events into `RejectedExecutionException`; a failed start exited with code 0.
+- **Scheduler finalization** — completing a `CallbackTask` fired every callback a second time
+  with `null` from the tick thread (the scheduler called `cancel()` on finished tasks).
+- **Python/Java handler parity** — a throwing Python event handler failed the completable
+  event future and kicked players; Java handlers were only logged. Both are logged and skipped
+  now, and disabling a Python plugin detaches its subscriptions before the interpreter closes.
+- **Plugin loading** — dependency cycles longer than two crashed boot with `StackOverflowError`;
+  failed enables left plugins enabled-but-dead; `getResourceFile` leaked a `JarFile` per call;
+  duplicate plugin names kept shadow classloaders; descriptor names could escape the plugins
+  directory.
+- **Transfer queue overflow** — batches rejected by the MPSC queue leaked their pooled buffers
+  and their write promises never completed.
+- **Legacy chunk rewriter** — a failed rewrite released the packet's own buffer (latent
+  use-after-free), covered by [BlockMapOwnershipTest](src/test/java/dev/waterbucket/waterbucketpe/network/protocol/rewrite/BlockMapOwnershipTest.java).
+- **Connection throttle** — concurrent first-hits from the per-core RakNet loops undercounted
+  the per-IP limit exactly during floods (get-then-put race).
 - **Query handler** stopped doing reverse DNS on the event loop for every response.
 - Malformed transfer packets can no longer throw out of the packet handler and kill sessions.
+- `sendPopup(message, subtitle)` no longer drops the subtitle.
 
 ---
 
@@ -119,11 +150,12 @@ is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
 
 ![Benchmark](benchmarks/benchmark.png)
 
-- Idle RSS **−20%**, per-session memory at 200 held connections **−56%**, equal network latency,
-  all 500 concurrent sessions held on both.
-- Cold startup is the one trade-off (+0.5 s): the embedded Python language jars add classpath
-  scan time. The interpreter itself only loads when the first Python plugin exists.
-- Methodology, repeat counts and how to reproduce: [benchmarks/METHODOLOGY.md](benchmarks/METHODOLOGY.md).
+- Idle RSS **−6%**, ping RTT median **−8%**, handshake CPU **−14%**, equal startup, all 500
+  concurrent sessions held (upstream held 498 in the same run).
+- Every metric's methodology, environment, repeat counts and honest caveats (including which
+  numbers are noisy) are in [benchmarks/METHODOLOGY.md](benchmarks/METHODOLOGY.md); raw data in
+  [`benchmarks/results.json`](benchmarks/results.json), per-session histogram evidence in
+  [`benchmarks/results-histograms.txt`](benchmarks/results-histograms.txt).
 
 ## Quick start
 

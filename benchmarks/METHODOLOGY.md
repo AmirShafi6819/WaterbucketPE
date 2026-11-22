@@ -5,7 +5,7 @@ upstream WaterdogPE. The numbers reported in the README are produced by this scr
 run locally; everything is measured from outside the JVM so both proxy variants run
 under identical conditions.
 
-## What is measured (round 2)
+## What is measured (round 3)
 
 | Metric | How |
 | --- | --- |
@@ -16,31 +16,56 @@ under identical conditions.
 | Ping throughput | 8 sockets x 100 pings; replies per second and loss |
 | Handshake churn | 300 complete RakNet OpenConnectionRequest1+2 exchanges via `RakBenchClient` (the same CloudburstMC RakNet library the proxy uses, i.e. byte-for-byte what real connections perform); success rate, per-connect latency, connects/s, CPU% |
 | Live sessions | 200 sessions held open; RSS delta, KB per session, CPU% over the hold window |
-| Leak check (new) | 3 churn rounds of 150 handshakes each with 4 s teardown windows; RSS growth per round. Flat or falling RSS passes |
-| Scale test (new) | 500 concurrent sessions held; success rate, KB per session, CPU% |
+| Leak check | 3 churn rounds of 150 handshakes each with 4 s teardown windows; RSS growth per round. Flat or falling RSS passes |
+| Scale test | 500 concurrent sessions held; success rate, KB per session, CPU% |
+| Class histogram (new in round 3) | 200 held sessions vs idle baseline, JVM `SIGQUIT` histogram diff via `heap_diff.py`; see `results-histograms.txt` |
 
 Every scenario runs against a fresh proxy process; the traffic phases share one warmed
 process. Nothing is mocked: packets are real, sessions are real, and memory/CPU are read
 from the kernel.
+
+## Round-3 environment and caveats (read before comparing)
+
+- Date: 2026-11-22. Upstream baseline: WaterdogPE at commit `ea26e46` (2.0.4).
+  WaterbucketPE: jar built from this repository at the round-3 commit.
+- Machine: shared 2-core Linux VM (Debian 13), Temurin JDK 17.0.21.1 for both proxies,
+  identical JVM flags (`-Xms128M -Xmx512M -XX:+UseG1GC -XX:MaxGCPauseMillis=200`),
+  identical `config.yml` (connection_throttle disabled so the harness measures handshake
+  performance, not DoS protection).
+- A shared VM makes CPU/throughput numbers noisy between runs. Numbers that were stable
+  across two independent round-3 executions: idle RSS (WaterbucketPE 5-8% lower), ping
+  RTT median (8-13% lower), handshake per-connect latency and handshake CPU (10-14%
+  lower), leak churn growth (both small; upstream showed ~30 MB growth spikes in one
+  run). Numbers that wobbled between runs: connects/s (within ±1.5%), sessions CPU,
+  and especially the **held-session RSS delta** (KB/session), which is a page-level
+  allocator metric.
+- Because of that noise, the held-session RSS delta is reported as measured but is NOT
+  presented as a differentiator. The object-level evidence is the class-histogram diff
+  in `results-histograms.txt`: per-session instance counts are equal or lower for
+  WaterbucketPE than upstream (fewer MPSC queues, less PoolThreadCache, fewer Object[]
+  arrays), with no per-session object type growing materially.
+- The round-2 "+0.5 s cold start" trade-off from the embedded Python jars did not
+  reproduce in round 3: startup is equal (2.22 s vs 2.22 s medians).
 
 ## How to reproduce
 
 ```bash
 # 1. Build both jars
 git clone https://github.com/WaterdogPE/WaterdogPE waterdog-baseline
-(cd waterdog-baseline && git checkout <commit> && ./gradlew build -x test)
+(cd waterdog-baseline && git checkout ea26e46 && ./gradlew build -x test)
 ./gradlew build -x test
 
 # 2. Run the harness (Java 17 toolchain expected at $BENCH_JAVA)
 python3 benchmarks/bench.py waterdog-baseline/build/libs/Waterdog.jar WaterdogPE \
         build/libs/Waterbucket.jar WaterbucketPE results.json
+
+# 3. Optional: per-session class histogram diff (SIGQUIT histogram, ~2 min)
+python3 benchmarks/heap_diff.py build/libs/Waterbucket.jar WaterbucketPE 200
+
+# 4. Regenerate the chart from results.json
+python3 benchmarks/gen_chart.py
 ```
 
-Both variants run with identical JVM flags (`-Xms128M -Xmx512M -XX:+UseG1GC
--XX:MaxGCPauseMillis=200`), on the same machine, sequentially, with an identical
-`config.yml` (connection_throttle disabled so the harness measures handshake
-performance, not DoS protection). Raw repeat data is kept in `results.json`; the README
-chart renders medians and labels every trade-off, including the slower ones.
-
-Round-2 results (2026-11-21) live in `results.json`, the chart in `benchmark.png`,
-regenerable via `python3 benchmarks/gen_chart.py`.
+Raw repeat data is kept in `results.json`; the chart in `benchmark.png` renders medians
+and labels every trade-off, including the slower ones. Round-3 results (2026-11-22)
+live in `results.json` and `results-histograms.txt`.
