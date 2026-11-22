@@ -16,6 +16,7 @@
 package dev.waterbucket.waterbucketpe.network.protocol.handler.downstream;
 
 import dev.waterbucket.waterbucketpe.command.Command;
+import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import dev.waterbucket.waterbucketpe.network.connection.client.ClientConnection;
 import dev.waterbucket.waterbucketpe.network.protocol.ProtocolVersion;
 import dev.waterbucket.waterbucketpe.network.protocol.handler.ProxyPacketHandler;
@@ -173,9 +174,15 @@ public abstract class AbstractDownstreamHandler implements ProxyPacketHandler {
         }
         int sizeBefore = packet.getCommands().size();
 
-        for (Command command : this.player.getProxy().getCommandMap().getCommands().values()) {
-            if (command.getPermission() == null || this.player.hasPermission(command.getPermission())) {
-                packet.getCommands().add(command.getCommandData());
+        // fastutil's synchronized wrapper requires manual synchronization on the map for
+        // iteration: this runs on event loops while Python plugins may register commands at
+        // runtime, and an unsynchronized read used to race the registration path.
+        Object2ObjectMap<String, Command> commands = this.player.getProxy().getCommandMap().getCommands();
+        synchronized (commands) {
+            for (Command command : commands.values()) {
+                if (command.getPermission() == null || this.player.hasPermission(command.getPermission())) {
+                    packet.getCommands().add(command.getCommandData());
+                }
             }
         }
 

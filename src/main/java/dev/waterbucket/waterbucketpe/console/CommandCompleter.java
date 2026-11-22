@@ -66,8 +66,12 @@ public class CommandCompleter implements Completer {
 
     private void addOptions(Consumer<String> commandConsumer) {
         CommandMap commandMap = this.proxy.getCommandMap();
-        for (String command : commandMap.getCommands().keySet()) {
-            commandConsumer.accept(command);
+        // Synchronized iteration: command registration can arrive at runtime (Python plugins)
+        // while the console thread completes input (fastutil wrapper contract).
+        synchronized (commandMap.getCommands()) {
+            for (String command : commandMap.getCommands().keySet()) {
+                commandConsumer.accept(command);
+            }
         }
     }
 }

@@ -52,9 +52,13 @@ public class HelpCommand extends Command {
 
         CommandMap commandMap = sender.getProxy().getCommandMap();
         Map<String, Command> commands = new TreeMap<>();
-        for (Command command : commandMap.getCommands().values()) {
-            if (sender.hasPermission(command.getPermission())) {
-                commands.put(command.getName(), command);
+        // Synchronized iteration: command registration can arrive at runtime (Python plugins)
+        // while this map is read from the console/panel threads (fastutil wrapper contract).
+        synchronized (commandMap.getCommands()) {
+            for (Command command : commandMap.getCommands().values()) {
+                if (sender.hasPermission(command.getPermission())) {
+                    commands.put(command.getName(), command);
+                }
             }
         }
 

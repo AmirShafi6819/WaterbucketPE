@@ -123,8 +123,9 @@ public class SimpleCommandMap implements CommandMap {
             }
             return false;
         }
-        // Alias stays null when the command was invoked by its registered name
-        this.executeInternal(sender, command, this.isRegistered(alias) ? null : alias, args);
+        // Alias stays null when the command was invoked by its registered name; a null alias
+        // (public API caller) is treated like an unknown alias instead of NPE'ing in isRegistered
+        this.executeInternal(sender, command, alias != null && this.isRegistered(alias) ? null : alias, args);
         return true;
     }
 

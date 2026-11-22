@@ -177,6 +177,7 @@ public abstract class Plugin {
      */
     public boolean saveResource(String filename, String outputName, boolean replace) {
         Preconditions.checkArgument(filename != null && !filename.trim().isEmpty(), "Filename can not be null!");
+        Preconditions.checkArgument(outputName != null && !outputName.trim().isEmpty(), "Output name can not be null!");
 
         // The output name is plugin-supplied: confine it to the data folder so a '../' entry
         // cannot write outside the plugin directory (mirrors the Python resource confinement).
