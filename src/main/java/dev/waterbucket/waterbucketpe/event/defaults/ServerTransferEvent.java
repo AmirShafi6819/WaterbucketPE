@@ -22,7 +22,10 @@ import lombok.Setter;
 
 /**
  * Signalizing that player is being transferred to a new server.
- * This even is not cancellable. Use PreTransferEvent to cancel transfer.
+ * This even is not cancellable. Use {@link ServerTransferRequestEvent} to cancel the
+ * request before the proxy dials the target, or
+ * {@link dev.waterbucket.waterbucketpe.event.defaults.ServerPreConnectEvent} to hold out
+ * or redirect the dial.
  */
 @Getter
 public class ServerTransferEvent extends PlayerEvent {

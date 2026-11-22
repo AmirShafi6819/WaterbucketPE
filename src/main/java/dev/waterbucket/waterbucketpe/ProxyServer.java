@@ -340,7 +340,9 @@ public class ProxyServer {
 
         ProxiedSessionInitializer.ZLIB_RAW_STRATEGY.getDefaultCompression().setLevel(this.getConfiguration().getUpstreamCompression());
         ProxiedSessionInitializer.ZLIB_STRATEGY.getDefaultCompression().setLevel(this.getConfiguration().getUpstreamCompression());
-        // TODO: support downstream compression level too
+        // The downstream level is applied per connection with its own zlib strategy
+        // (ProxiedClientSessionInitializer / BedrockClientConnection use
+        // downstream_compression), so nothing further is needed here.
 
         Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
         this.tickFuture = this.tickExecutor.scheduleAtFixedRate(this::tickProcessor, 50, 50, TimeUnit.MILLISECONDS);
@@ -407,7 +409,10 @@ public class ProxyServer {
         try {
             this.onTick(++this.currentTick);
             this.interfaces.forEach(NetworkInterface::tick);
-        } catch (Exception e) {
+        } catch (Throwable e) {
+            // scheduleAtFixedRate silently stops on any throwable that escapes: catching only
+            // Exception let one Error permanently kill the tick loop (scheduler, sweeps, all
+            // repeating tasks) with no log and no shutdown. Log and keep ticking.
             this.logger.error("Error while ticking proxy!", e);
         }
     }

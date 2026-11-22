@@ -51,6 +51,12 @@ public class ConnectionThrottle {
         Entry entry = this.map.putIfAbsent(address, new Entry(this.limit));
         if (entry == null) {
             entry = this.map.get(address);
+            if (entry == null) {
+                // The map hit its max-size eviction (5000 addresses under a wide flood)
+                // between our put and this get. Fail closed, consistent with throttle
+                // semantics, instead of NPE-ing out of the connection path.
+                return false;
+            }
         }
 
         int value = entry.value.incrementAndGet();

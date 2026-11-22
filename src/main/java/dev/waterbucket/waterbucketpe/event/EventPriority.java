@@ -26,5 +26,11 @@ public enum EventPriority {
     LOW,
     NORMAL,
     HIGH,
-    HIGHEST
+    HIGHEST;
+
+    /**
+     * values() clones its array on every call, and EventHandler iterates it for every event
+     * dispatch on the network loops; iterate this shared copy instead.
+     */
+    public static final EventPriority[] VALUES = values();
 }

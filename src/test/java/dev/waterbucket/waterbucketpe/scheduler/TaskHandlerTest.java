@@ -17,6 +17,8 @@ package dev.waterbucket.waterbucketpe.scheduler;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -104,5 +106,55 @@ public class TaskHandlerTest {
         }
 
         assertEquals(1, cancelCalls.get(), "concurrent cancels must run onCancel() exactly once");
+    }
+
+    /**
+     * A repeating async task re-arms as soon as it is dispatched; without the execution
+     * guard, one run slower than its period spawned a new executor thread per period,
+     * without bound. Only one execution may be in flight per task handler.
+     */
+    @Test
+    void executionGuardAdmitsExactlyOneConcurrentRun() throws InterruptedException {
+        CountDownLatch running = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        TaskHandler<Runnable> handler = new TaskHandler<>(() -> {
+            running.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, 8, true);
+
+        assertTrue(handler.beginExecution(), "the first dispatch must be admitted");
+        assertFalse(handler.beginExecution(), "runs due while executing must be skipped");
+
+        // Simulate the executor finishing the run.
+        Thread worker = new Thread(() -> {
+            handler.onRun(1);
+            handler.endExecution();
+        });
+        worker.start();
+        assertTrue(running.await(5, TimeUnit.SECONDS));
+        assertFalse(handler.beginExecution(), "still admitted while the run is in flight");
+        release.countDown();
+        worker.join();
+
+        assertTrue(handler.beginExecution(), "after the run finished the task must be dispatchable again");
+        handler.endExecution();
+    }
+
+    @Test
+    void endExecutionAllowsRedispatchAfterTaskFailure() {
+        TaskHandler<Runnable> handler = new TaskHandler<>(() -> { throw new IllegalStateException("boom"); }, 9, true);
+
+        assertTrue(handler.beginExecution());
+        try {
+            handler.onRun(1); // must swallow the failure without losing the guard release
+        } finally {
+            handler.endExecution();
+        }
+        assertTrue(handler.beginExecution(), "a failed run must not wedge the execution guard");
+        handler.endExecution();
     }
 }

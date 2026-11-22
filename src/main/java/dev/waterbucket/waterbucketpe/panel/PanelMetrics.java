@@ -49,6 +49,8 @@ public class PanelMetrics {
     static final int SAMPLE_PERIOD_TICKS = 20 * 5;
     private static final int HISTORY_CAP = 432;
     private static final int LOG_CAP = 400;
+    private static final java.time.format.DateTimeFormatter TIME_FORMAT =
+            java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final ProxyServer proxy;
     private final MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
@@ -232,7 +234,9 @@ public class PanelMetrics {
                 return;
             }
             long epochMs = event.getInstant().getEpochMillisecond();
-            String line = new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date(epochMs))
+            // DateTimeFormatter is immutable and thread-safe; the previous per-line
+            // SimpleDateFormat allocation ran on the logging thread for every log line.
+            String line = TIME_FORMAT.format(java.time.Instant.ofEpochMilli(epochMs).atZone(java.time.ZoneId.systemDefault()))
                     + " [" + event.getLevel().name() + "] "
                     + event.getMessage().getFormattedMessage();
             Throwable thrown = event.getThrown();

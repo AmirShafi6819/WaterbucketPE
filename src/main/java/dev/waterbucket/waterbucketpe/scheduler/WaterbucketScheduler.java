@@ -131,7 +131,19 @@ public class WaterbucketScheduler {
         }
 
         if (taskHandler.isAsync()) {
-            this.threadedExecutor.execute(() -> taskHandler.onRun(currentTick));
+            // A repeating async task is re-armed immediately below, so without the execution
+            // guard one run slower than its period piled up concurrent executions (and executor
+            // threads) without bound. A run due while the previous one is still executing is
+            // skipped; the task keeps its schedule either way.
+            if (taskHandler.beginExecution()) {
+                this.threadedExecutor.execute(() -> {
+                    try {
+                        taskHandler.onRun(currentTick);
+                    } finally {
+                        taskHandler.endExecution();
+                    }
+                });
+            }
         } else {
             taskHandler.onRun(currentTick);
         }

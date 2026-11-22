@@ -114,19 +114,27 @@ public abstract class BedrockPacketCodec extends MessageToMessageCodec<BedrockBa
             throw new IllegalStateException("Packet has no encoded buffer");
         }
 
-        ByteBuf msg = wrapper.getPacketBuffer().retainedSlice();
+        /*
+         * The header parse only reads bytes and moves a reader index, so it runs directly on
+         * the packet buffer instead of a per-packet temporary retainedSlice - that was one
+         * throwaway allocation per packet per batch on both legs. The buffer is handed to
+         * tryDecode positioned after the header (each packet buffer holds exactly one packet),
+         * and the original index is restored on every path: the buffer's full range is later
+         * re-read by the batch encoder and the lazy decode in ProxyBatchBridge.
+         */
+        ByteBuf buffer = wrapper.getPacketBuffer();
+        int readerIndex = buffer.readerIndex();
         try {
-            int index = msg.readerIndex();
-            this.decodeHeader(msg, wrapper);
-            wrapper.setHeaderLength((byte)(msg.readerIndex() - index));
+            this.decodeHeader(buffer, wrapper);
+            wrapper.setHeaderLength((byte)(buffer.readerIndex() - readerIndex));
             if (this.alwaysDecode) { // Otherwise, we are decoding at other place
-                wrapper.setPacket(this.codec.tryDecode(helper, msg, wrapper.getPacketId(), this.inboundRecipient));
+                wrapper.setPacket(this.codec.tryDecode(helper, buffer, wrapper.getPacketId(), this.inboundRecipient));
             }
         } catch (Throwable t) {
             log.error("Failed to decode packet", t);
             throw t;
         } finally {
-            msg.release();
+            buffer.readerIndex(readerIndex);
         }
     }
 

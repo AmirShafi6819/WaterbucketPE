@@ -64,7 +64,7 @@ public class EventHandler {
 
         CompletableFuture<T> future = new CompletableFuture<>();
         Runnable dispatch = () -> {
-            for (EventPriority priority : EventPriority.values()) {
+            for (EventPriority priority : EventPriority.VALUES) {
                 this.handlePriority(priority, event);
             }
             event.completeFuture(future);
@@ -91,7 +91,7 @@ public class EventHandler {
 
     private <T extends Event> CompletableFuture<T> handleSync(T event) {
         if (!event.isCompletable()) {
-            for (EventPriority priority : EventPriority.values()) {
+            for (EventPriority priority : EventPriority.VALUES) {
                 this.handlePriority(priority, event);
             }
             // Non-completable events does not provide future.
@@ -99,7 +99,7 @@ public class EventHandler {
         }
 
         try {
-            for (EventPriority priority : EventPriority.values()) {
+            for (EventPriority priority : EventPriority.VALUES) {
                 this.handlePriority(priority, event);
             }
         } catch (Exception e) {

@@ -33,6 +33,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Stream;
 
 public class PluginManager {
@@ -51,7 +53,12 @@ public class PluginManager {
 
     protected final Object2ObjectMap<String, PluginClassLoader> pluginClassLoaders = new Object2ObjectArrayMap<>();
     private final Object2ObjectMap<String, Plugin> pluginMap = new Object2ObjectArrayMap<>();
-    private final Object2ObjectMap<String, Class<?>> cachedClasses = new Object2ObjectArrayMap<>();
+    /*
+     * Written by PluginClassLoader.findClass from whichever thread first loads a class -
+     * including Netty event loops - and read by getClassFromCache everywhere, so the class
+     * cache must be concurrent. The loader map above is written only during the boot scan.
+     */
+    private final ConcurrentMap<String, Class<?>> cachedClasses = new ConcurrentHashMap<>();
 
     private final List<Pair<PluginYAML, Path>> pluginsToLoad = new ObjectArrayList<>();
     private final List<Plugin> enabledOrder = new ObjectArrayList<>();

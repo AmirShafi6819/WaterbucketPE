@@ -19,6 +19,8 @@ import dev.waterbucket.waterbucketpe.logger.MainLogger;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 @Getter
 public class TaskHandler<T extends Runnable> {
 
@@ -41,6 +43,14 @@ public class TaskHandler<T extends Runnable> {
      * volatile for the tick thread to observe the cancellation without a race.
      */
     private volatile boolean cancelled;
+    /**
+     * Guards against execution pile-up: a repeating async task is re-armed as soon as it is
+     * dispatched, so without this flag one execution slower than its period multiplied
+     * concurrent executions - and executor threads - without bound. The flag is claimed per
+     * dispatch on the tick thread and released on the worker thread when the run finishes;
+     * a run due while the previous one is still in flight is skipped, not queued.
+     */
+    private final AtomicBoolean executing = new AtomicBoolean(false);
 
     public TaskHandler(T task, int taskId, boolean async) {
         this.task = task;
@@ -49,6 +59,20 @@ public class TaskHandler<T extends Runnable> {
         }
         this.taskId = taskId;
         this.async = async;
+    }
+
+    /**
+     * @return true if the caller may dispatch this task now (no execution is in flight).
+     */
+    public boolean beginExecution() {
+        return this.executing.compareAndSet(false, true);
+    }
+
+    /**
+     * Marks the in-flight execution as finished. Always called after {@link #onRun(int)}.
+     */
+    public void endExecution() {
+        this.executing.set(false);
     }
 
     public void onRun(int currentTick) {
