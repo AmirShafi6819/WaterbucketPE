@@ -85,7 +85,9 @@ depends: []
 
 The descriptor model currently contains only these fields. Do not rely on Bukkit/Paper fields such as api-version, softdepend, load, permissions or website; they are not implemented by this descriptor.
 
-Dependencies are hard dependencies. A missing dependency prevents the dependent plugin from enabling. Circular dependency chains are rejected. Use the exact registered plugin name in depends. There is no documented soft-dependency mechanism.
+The plugin name becomes the data-directory name and the manager key, so it is restricted to letters, digits, spaces, dots, dashes and underscores (maximum 64 characters, no path separators). Descriptors with an invalid name are rejected at load.
+
+Dependencies are hard dependencies. A missing dependency prevents the dependent plugin from enabling. Circular dependency chains (of any length) are detected and rejected without crashing the proxy. Use the exact registered plugin name in depends. There is no documented soft-dependency mechanism.
 
 ## 4. Java plugin quick start
 
@@ -258,7 +260,9 @@ The lifecycle is:
 
 Java onEnable() is abstract and must be implemented. Python hooks are looked up by name. The current Python bridge logs a warning when a hook is missing, so define all three hooks even when one is intentionally empty.
 
-A failure while loading or starting one plugin is logged and does not intentionally abort loading every other plugin. A plugin whose enable hook fails is treated as failed. Plugins are disabled in reverse enable order so dependents shut down before their dependencies.
+A failure while loading or starting one plugin is logged and does not intentionally abort loading every other plugin. A plugin whose enable hook fails stays disabled: the failed state is reverted, onDisable() is not called for it, and the error is logged with its stack trace. Plugins are disabled in reverse enable order so dependents shut down before their dependencies.
+
+On disable (or proxy shutdown), WaterbucketPE detaches what a plugin registered where the implementation can do so safely: Python plugins have their event subscriptions removed and their commands unregistered automatically before the interpreter context closes. Java plugins should unsubscribe their event handlers (EventManager.unsubscribe) and unregister their commands (CommandMap.unregisterCommand) in onDisable, because Java handlers registered directly with the event manager are not tracked per plugin.
 
 The current manager is a startup/shutdown lifecycle manager, not a full runtime module manager. There is no supported hot reload, live replacement, or general-purpose unload API.
 
@@ -303,9 +307,28 @@ The Python facade currently exposes subscribe(event_class, handler) and uses the
 
 - Synchronous events execute handlers on the thread that dispatches the event. Keep handlers short. A slow handler can delay the network path.
 - Events marked with the Java @AsyncEvent annotation use the event manager's asynchronous/completable flow. Consult the event class for its exact contract.
+- A handler that throws (in either language) is logged with its stack trace and skipped; the remaining handlers and the event pipeline continue. A broken handler never disconnects players or aborts dispatch.
+- Cancellation does not stop lower-priority or later handlers from running; all registered handlers always see the event.
+- Dispatch matches the exact event class. Subscribing to a parent class (for example PlayerEvent or ProxyPingEvent when ProxyQueryEvent is fired) does not receive subclass events; subscribe to each concrete class you need.
 - Cancellable events implement CancellableEvent. Use the event's cancellation API only where that event supports it.
 - Do not assume every event is cancellable or asynchronous.
 - Do not block a Netty event loop with file, database, network or long CPU work.
+
+### Unsubscribing (Java)
+
+Handlers registered directly with the event manager can be removed by identity:
+
+~~~java
+import dev.waterbucket.waterbucketpe.event.EventPriority;
+import dev.waterbucket.waterbucketpe.event.defaults.ProxyPingEvent;
+
+Consumer<ProxyPingEvent> handler = event -> { };
+getProxy().getEventManager().subscribe(ProxyPingEvent.class, handler, EventPriority.NORMAL);
+// later, e.g. in onDisable():
+getProxy().getEventManager().unsubscribe(ProxyPingEvent.class, handler);
+~~~
+
+Matching is by the exact consumer instance, so keep the reference you subscribed. Unsubscribing an unknown handler is a no-op. Python plugins do not need this API: their subscriptions are detached automatically on disable.
 
 ### Built-in event classes
 
@@ -473,8 +496,8 @@ Place a default **config.yml** at the root of the Python plugin directory or at 
 
 Resource access:
 
-- Java: getResourceFile(path) returns an InputStream from the plugin JAR. Close it with try-with-resources.
-- Python: getResourceFile(path) reads a file relative to the plugin directory.
+- Java: getResourceFile(path) returns an InputStream with the full content of the resource inside the plugin JAR; missing entries return null (no exception). Close it with try-with-resources.
+- Python: getResourceFile(path) reads a file relative to the Python plugin folder; paths that escape the folder (for example with ../) are rejected and return null.
 - Both: saveResource(path) copies a bundled resource into the plugin data directory; saveResource(source, outputName, replace) controls the destination name and overwrite behavior.
 
 Example:
@@ -545,7 +568,7 @@ Do not expose secrets in logs or commit API tokens/passwords to plugin folders. 
 
 ### Lifecycle limitations to account for
 
-The current event API does not expose a public unsubscribe handle in the plugin facade, and Python scheduling helpers do not return cancellation handles. Do not design plugins around runtime reload/unload or repeated enable/disable cycles. Keep registrations bounded and tasks finite where possible. These are current API limitations, not promises that registrations are automatically cleaned up on plugin disable.
+Python scheduling helpers do not return cancellation handles, so Python plugins cannot cancel their own tasks through the facade. There is no runtime hot reload, unload, or per-plugin isolation. Do not design plugins around repeated enable/disable cycles; the supported model is enable once at startup, then disable at shutdown (or when another plugin calls setEnabled(false)). When a plugin is disabled, its Python event subscriptions and commands are detached automatically; keep other external resources (files, connections) release-aware in onDisable.
 
 ## 13. Troubleshooting
 
