@@ -3,6 +3,75 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
+## [1.3.0] - 2026-11-22
+
+Phase 2: a stability- and resource-efficiency pass over the networking, rewrite and
+runtime layers. Every change is evidence-backed and listed in
+`docs/PHASE2_BASELINE.md`; the before/after numbers come from the same reproducible
+harness (`benchmarks/results-phase2.json`, `benchmarks/benchmark-phase2.png`).
+
+### Fixed
+- **Cross-loop visibility (JMM)**: the `RewriteData` entity ids, dimension, spawn
+  position, rotation, gamerules, palette rewrite, store entrypoint, startGameSettings and
+  immobile flag are written on the new downstream event loop and read by rewrites on the
+  upstream loop with no other happens-before edge; they are volatile now (one write per
+  switch). `RewriteMaps.blockMap`, `BedrockClientConnection.compressionStrategy` and
+  `ProxyBatchBridge.handler` had the same defect. Locked by a contract test.
+- **`BlockPalette` palette cache race**: the static per-version palette cache was a plain
+  fastutil map mutated from every downstream event loop during StartGame handling; two
+  loops inserting concurrently could corrupt it. It is a bounded `ConcurrentHashMap` now,
+  with identical lookup semantics and a size cap against pathological servers.
+- **Stale initial `StartGame` hijack**: `InitialHandler` (first join) applied any
+  StartGame unconditionally, so a dial whose fallback/retry had already begun could
+  overwrite `clientConnection` and the rewrite state mid-recovery. It now mirrors the
+  superseded-connection guards `SwitchDownstreamHandler` applies to transfers. Regression
+  tests cover the discarded and superseded-slot cases.
+- **Shared player state**: `ProxiedPlayer.permissions` is a `ConcurrentHashMap` (plugins
+  write it from arbitrary threads; `addPermission` uses `putIfAbsent` so concurrent
+  first-adds cannot lose a permission), `pluginPacketHandlers` is a copy-on-write list
+  (iterated per packet), and the lazily built downstream `LoginPacket` is published under
+  one lock. The chunk-radius/cache flags crossing the upstream->downstream handoff are
+  volatile.
+- **Transfer queue drain on the wrong loop**: Netty runs `handlerRemoved` on the removing
+  thread, so a transfer failure from a downstream loop drained the client-bound queue on
+  that loop; the drain (and its writes) now runs on the channel's own event loop.
+- **Scheduler pile-up**: a repeating async task re-arms at dispatch time, so one execution
+  slower than its period spawned executor threads without bound. A task handler now
+  admits at most one in-flight execution; runs due while the previous one executes are
+  skipped, not queued. The tick loop also catches `Throwable` - an escaped `Error` used
+  to kill the tick silently.
+- **`ConnectionThrottle` eviction window**: a max-size eviction between `putIfAbsent` and
+  the follow-up read NPE-ed out of the connection path during wide floods; it fails
+  closed now.
+- **Plugin class cache**: `cachedClasses` is written by `findClass` from whichever thread
+  first loads a class (including event loops); it is a `ConcurrentMap` now.
+- **Panel log tail** no longer allocates a `SimpleDateFormat` per line, and the stale
+  `ProxyServer` TODO claiming the downstream compression level was unimplemented is
+  corrected (it is per-connection since 1.1.0).
+
+### Changed
+- **Packet decode allocation**: `BedrockPacketCodec` parsed each packet header from a
+  throwaway `retainedSlice` - one allocation per packet per batch on both legs; the
+  header now parses directly on the packet buffer with the reader index restored on
+  every path.
+- **`ClientPacketQueue` drain**: the fixed 50 ms flush timer added up to 50 ms of latency
+  to every proxy-generated handshake/transfer packet (hundreds of milliseconds across a
+  transfer) and woke idle connections 20 times per second. Queued packets now drain
+  ~5 ms after the first one is queued, scheduled only while packets are queued; bursts
+  still leave as one batch and idle connections are never woken. The queue is bounded
+  (4096 packets) with the same overflow handling as the transfer queue - previously it
+  grew without limit - and its write promises complete at enqueue time.
+- **Velocity techniques evaluated** (see `docs/PHASE2_BASELINE.md`): flush consolidation,
+  fast paths for untouched batches, composite-buffer framing and lazy downstream decode
+  were already present; cross-leg `setAutoRead` backpressure was rejected with reasons
+  (RakNet legs stop ACKing when reads pause, which trades a slow queue for session
+  timeouts).
+
+### Compatibility
+- Public plugin APIs unchanged; configuration formats unchanged; protocol behavior
+  unchanged. All functional benchmark counts are identical to the pre-Phase-2 build
+  (300/300 handshakes, 200/200 and 500/500 held sessions, zero ping loss).
+
 ## [1.2.0] - 2026-11-22
 
 ### Fixed
@@ -126,6 +195,7 @@ versioning follows [semantic versioning](https://semver.org/).
 - `PlayerManager` name lookups are O(1) via a case-insensitive index; login path no longer
   compiles a regex per username.
 
+[1.3.0]: https://github.com/AmirShafi6819/WaterbucketPE/releases/tag/v1.3.0
 [1.2.0]: https://github.com/AmirShafi6819/WaterbucketPE/releases/tag/v1.2.0
 [1.1.0]: https://github.com/AmirShafi6819/WaterbucketPE/releases/tag/v1.1.0
 [1.0.0]: https://github.com/AmirShafi6819/WaterbucketPE/releases/tag/v1.0.0

@@ -69,3 +69,42 @@ python3 benchmarks/gen_chart.py
 Raw repeat data is kept in `results.json`; the chart in `benchmark.png` renders medians
 and labels every trade-off, including the slower ones. Round-3 results (2026-11-22)
 live in `results.json` and `results-histograms.txt`.
+
+## Phase-2 A/B (1.2.0 -> 1.3.0, 2026-11-22)
+
+Phase 2's own before/after run compares **two builds of this repository** - the pre-Phase-2
+jar at commit `59c244f` (sha256 `8a3ff4434e208c246a3ac130aa66dd42d7520ec16611426eae8c29db3da82ec7`)
+against the post-Phase-2 jar built from the Phase 2 commits - through the same harness
+phases, same JVM flags, same VM (`benchmarks/results-phase2.json`, chart
+`benchmark-phase2.png` from `gen_phase2_chart.py`).
+
+What changed and what did not (medians; raw repeat data attached to every metric):
+
+- **Functionally identical**: 300/300 handshakes, 200/200 and 500/500 held sessions, zero
+  ping loss on both sides. The Phase 2 fixes are compatibility-neutral by design.
+- **Ping RTT** median 0.186 -> 0.176 ms (−5.3%), p95 −2.4%, p99 −7.0% (single execution
+  each; direction consistent with the allocation reduction in the per-packet decode path).
+- **Handshake churn** parity: median connect 2.64 -> 2.69 ms, p95 25.2 -> 23.8 ms,
+  connects/s 69.0 -> 69.4.
+- **No stable memory change**: idle RSS 206.6 -> 207.2 MB (page-level noise); the held-session
+  kB/session metric wobbled across its two executions on both sides (pre 45.5-63.5, post
+  42.1-75.7) exactly like in round 3, so it is reported but not presented as a differentiator.
+- **CPU numbers wobbled on the shared 2-core VM** as in round 3: handshake CPU sampled
+  43.9-48.7% (pre) vs 46.2-55.8% (post) across two executions - overlapping ranges, no
+  stable difference; 200-session CPU 37.2 -> 35.7%.
+- **Cold startup** stayed inside its observed 1.7-2.8 s bimodal band on both sides (pre
+  median 2.23 s, post 2.79 s across four runs each; the band matches the 1.2.0 measurement
+  of 2.22 s, so no startup regression was demonstrated, but the small sample cannot prove
+  parity either).
+- The per-session class histogram (`results-histograms.txt`) was not re-run for this A/B;
+  the round-3 evidence remains the current object-level baseline. The Phase 2 allocation
+  changes (header parse without a temp slice, bounded client packet queue, COW handler
+  list) affect object churn, which the histogram would show only marginally.
+- **Transfer-path latency** (the 50 ms fixed drain replaced by a ~5 ms adaptive drain) is
+  covered by `ClientPacketQueueTest` on an EmbeddedChannel with virtual time; the harness
+  does not drive Bedrock-level logins, so it is documented as a design improvement with a
+  test, not as a harness-measured win.
+
+To reproduce: build both jars (pre-Phase-2 from `git checkout 59c244f`, post from the
+release tag), then run the harness as described above for each jar, or run
+`python3 benchmarks/bench.py <pre.jar> Pre <post.jar> Post out.json` for the paired run.

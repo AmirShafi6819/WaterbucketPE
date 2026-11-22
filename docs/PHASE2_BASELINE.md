@@ -185,3 +185,29 @@ tests, and a before/after benchmark run of the same harness on the same VM with 
 built from this repository. Metrics that the harness cannot measure (e.g. per-transfer
 handshake latency) are documented as design improvements with unit tests, not as benchmark
 wins. No claim is made about upstream WaterdogPE beyond re-running the documented harness.
+
+## 7. Resolution status (post-implementation)
+
+- **Implemented and tested**: C1 (bounded concurrent palette cache), C2/C3/C4 (volatile
+  cross-loop state + contract test), C5 (initial StartGame guards + regression tests),
+  C6 (concurrent permissions, COW handler list, synchronized login packet, volatile
+  radius flags), C7 (transfer-queue drain confined to the channel's event loop),
+  C8 (header parse without the temporary slice), C9 (bounded client packet queue,
+  adaptive ~5 ms drain, promise completion at enqueue), C10 (execution guard against
+  scheduler pile-up, tick loop survives `Throwable`), C11 (throttle fails closed on the
+  eviction window), C12 (concurrent class cache), C13 (super-call in
+  `ClientEventHandler.channelInactive`, shared log-tail formatter, cached
+  `EventPriority` array), C14 (stale TODO and javadoc corrected).
+- **Implemented with unit tests, not harness-measured**: the C9 transfer-path latency
+  improvement — the harness drives RakNet handshakes, not Bedrock-level logins
+  (`benchmarks/METHODOLOGY.md`, Phase-2 A/B section).
+- **Investigated, not implemented** (documented in §5, "Rejected"): Velocity-style
+  cross-leg autoRead backpressure on RakNet legs; skipping decode of client-bound
+  packets; bounded async-event executor queues.
+- **Benchmark outcome**: functionally identical (300/300 handshakes, 200/200 and
+  500/500 held sessions, zero ping loss), ping RTT median −5.3% / p99 −7.0%, handshake
+  p95 −5.7%, memory/CPU within the shared-VM noise band, cold startup inside its
+  observed bimodal band. Raw data: `benchmarks/results-phase2.json`, chart
+  `benchmarks/benchmark-phase2.png`.
+- **Not re-run for this A/B**: the per-session class histogram (round-3 evidence remains
+  the object-level baseline).

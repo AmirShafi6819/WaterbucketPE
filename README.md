@@ -109,9 +109,24 @@ is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
   allocations.
 - **Release-mode leak detection actually off** — upstream's raise-only guard kept every
   release build at `SIMPLE` tracking; the largest single per-session memory win.
+- **Phase 2 (1.3.0)** — per-packet header parse without a temporary slice, adaptive
+  ~5 ms drain for proxy-generated packets (was a fixed 50 ms tick), bounded client packet
+  queue, and a sweep of cross-loop visibility fixes through the relay and rewrite layers.
+  The before/after harness run of the two builds of this repository
+  ([methodology](benchmarks/METHODOLOGY.md), [raw data](benchmarks/results-phase2.json)):
+  functionally identical (300/300 handshakes, 200/200 and 500/500 held sessions, zero
+  ping loss), ping RTT median −5.3% / p99 −7.0%, handshake p95 −5.7%, memory and CPU
+  within the shared-VM noise band — no stable regression anywhere.
 
 ### Real bug fixes (found upstream or in review, fixed here)
 
+- **Cross-loop visibility (Phase 2)** — rewrite state (entity ids, dimension, spawn
+  position, gamerules, palette rewrite), the downstream compression strategy and the
+  batch bridge handler are handed between the client and server event loops with no
+  other synchronization; all of them are memory-visible now, locked by a contract test.
+- **Stale initial StartGame (Phase 2)** — the first-join handler applied a StartGame from
+  a dial whose fallback had already begun, hijacking the player mid-recovery; it mirrors
+  the transfer guards now.
 - **Fast-transfer address matching** — localhost setups running several downstreams on
   `127.0.0.1` with different ports could silently fail the fast path (the raw `TransferPacket`
   reached the client and pointed players at their own machine). Matching is now non-blocking
