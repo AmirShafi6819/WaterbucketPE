@@ -18,7 +18,6 @@ When your PR is up, we (the project maintainers) will review it. It will take at
 
 ## PR is merged
 Congratulations, your PR got merged! You are now officially a contributor to the project.
-If you contribute to the project, feel free to ping a Maintainer on Discord to receive the Contributor role on the Discord Server. 
 
 ## Project specifics
 
