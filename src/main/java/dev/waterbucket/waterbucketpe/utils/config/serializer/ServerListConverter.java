@@ -15,6 +15,7 @@
 
 package dev.waterbucket.waterbucketpe.utils.config.serializer;
 
+import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.utils.config.ServerEntry;
 import dev.waterbucket.waterbucketpe.utils.config.ServerList;
 import net.cubespace.Yamler.Config.ConfigSection;
@@ -66,12 +67,18 @@ public class ServerListConverter implements Converter {
         Converter converter = this.internalConverter.getConverter(ServerEntry.class);
 
         for (Map.Entry<Object, Object> entry : values.entrySet()) {
-            Map<String, Object> map = (Map<String, Object>) entry.getValue();
-            String name = (String) entry.getKey();
+            String name = String.valueOf(entry.getKey());
             try {
+                Map<String, Object> map = (Map<String, Object>) entry.getValue();
                 Map<String, Object> entryMap = new HashMap<>();
                 entryMap.put(name, map);
-                list.putIfAbsent(name, (ServerEntry) converter.fromConfig(ServerEntry.class, entryMap, null));
+                ServerEntry previous = list.putIfAbsent(name, (ServerEntry) converter.fromConfig(ServerEntry.class, entryMap, null));
+                if (previous != null) {
+                    // putIfAbsent is case-insensitive here: "lobby1" and "Lobby1" used to be
+                    // merged silently, leaving one configured server missing with no hint why.
+                    ProxyServer.getInstance().getLogger().warning("Duplicate server name '" + name
+                            + "' in the servers section (server names are case-insensitive); keeping the first entry and skipping this one");
+                }
             } catch (Exception e) {
                 throw new RuntimeException("Cannot parse server info for " + name, e);
             }

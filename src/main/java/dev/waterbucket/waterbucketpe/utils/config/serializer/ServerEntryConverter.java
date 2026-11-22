@@ -61,7 +61,9 @@ public class ServerEntryConverter implements Converter {
         if (object instanceof ConfigSection section) {
             address = (InetSocketAddress) inetConverter.fromConfig(InetSocketAddress.class, section.get("address"), null);
             publicAddress = (InetSocketAddress) inetConverter.fromConfig(InetSocketAddress.class, section.get("public_address"), null);
-            serverType = (String) inetConverter.fromConfig(String.class, section.get("server_type"), null);
+            // The server type is a plain string: routing it through the address converter made
+            // every entry with a non-empty server_type fail with "Invalid address 'bedrock'".
+            serverType = (String) section.get("server_type");
             return new ServerEntry(section.get("name"), address, publicAddress, this.validateServerType(serverType));
         }
 

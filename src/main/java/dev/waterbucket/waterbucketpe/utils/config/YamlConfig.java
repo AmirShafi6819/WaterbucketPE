@@ -16,7 +16,10 @@
 package dev.waterbucket.waterbucketpe.utils.config;
 
 import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.representer.Representer;
 
 import java.io.File;
 import java.io.InputStream;
@@ -25,13 +28,12 @@ import java.util.Map;
 
 public class YamlConfig extends Configuration {
 
-    private final static Yaml yaml;
+    private final static DumperOptions dumperOptions;
 
     static {
-        DumperOptions dumperOptions = new DumperOptions();
+        dumperOptions = new DumperOptions();
         dumperOptions.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
         dumperOptions.setPrettyFlow(true);
-        yaml = new Yaml(dumperOptions);
     }
 
     public YamlConfig(String file) {
@@ -53,11 +55,24 @@ public class YamlConfig extends Configuration {
     @Override
     @SuppressWarnings("unchecked")
     protected Map<String, Object> deserialize(InputStream inputStream) {
-        return yaml.loadAs(inputStream, Map.class);
+        // SafeConstructor's loadAs(Map.class) demands an explicit root tag, so the plain load()
+        // is used; a non-mapping root (or an empty document) yields null and Configuration.load
+        // turns that into an empty, usable config.
+        Object loaded = createYaml().load(inputStream);
+        return loaded instanceof Map ? (Map<String, Object>) loaded : null;
     }
 
     @Override
     protected String serialize(Map<String, Object> values) {
-        return yaml.dump(values);
+        return createYaml().dump(values);
+    }
+
+    /**
+     * SnakeYAML's {@code Yaml} is not thread-safe and this class is reachable from plugin
+     * threads, so every call gets its own instance. The safe constructor additionally refuses
+     * to instantiate arbitrary classes from {@code !!} tags in the loaded document.
+     */
+    private static Yaml createYaml() {
+        return new Yaml(new SafeConstructor(new LoaderOptions()), new Representer(dumperOptions), dumperOptions);
     }
 }

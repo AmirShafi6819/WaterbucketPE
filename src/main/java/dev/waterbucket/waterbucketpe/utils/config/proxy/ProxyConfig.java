@@ -115,10 +115,9 @@ public class ProxyConfig extends YamlConfig {
 
     @Path("permissions")
     @Comment("Case-Sensitive permission list for players (empty using {})")
-    private Object2ObjectOpenHashMap<String, List<String>> playerPermissions = new Object2ObjectOpenHashMap<>() {{
-        this.put("alemiz003", Arrays.asList("waterbucket.player.transfer", "waterbucket.player.list"));
-        this.put("TobiasDev", Arrays.asList("waterbucket.player.transfer", "waterbucket.player.list"));
-    }};
+    // Empty by default: shipping permissions for specific usernames let anyone registering
+    // those names inherit transfer/list permissions on a fresh install.
+    private Object2ObjectOpenHashMap<String, List<String>> playerPermissions = new Object2ObjectOpenHashMap<>();
 
     @Path("permissions_default")
     @Comment("List of permissions each player should get by default (empty using [])")
@@ -308,6 +307,11 @@ public class ProxyConfig extends YamlConfig {
     @Override
     protected void loadFromYaml() throws InvalidConfigurationException {
         super.loadFromYaml();
+        // Clamp the zlib levels into the range Deflater accepts: an out-of-range value used to
+        // escape as a bare IllegalArgumentException and abort the boot (or every transfer).
+        this.upstreamCompression = clampCompressionLevel("upstream_compression_level", this.upstreamCompression);
+        this.downstreamCompression = clampCompressionLevel("downstream_compression_level", this.downstreamCompression);
+
         // A file from before config_version existed is 0. A quoted "2" (string) counts as 2:
         // hand-edited files used to fail the instanceof-Number check, silently re-running every
         // migration step and flagging the file outdated on every boot.
@@ -368,5 +372,14 @@ public class ProxyConfig extends YamlConfig {
 
     public int getIdleThreads() {
         return this.defaultIdleThreads < 1 ? Runtime.getRuntime().availableProcessors() : this.defaultIdleThreads;
+    }
+
+    private static int clampCompressionLevel(String key, int level) {
+        if (level < 0 || level > 9) {
+            ProxyServer.getInstance().getLogger().warning("Config value '" + key + "' is " + level
+                    + ", but zlib levels are 0-9; using " + Math.max(0, Math.min(9, level)));
+            return Math.max(0, Math.min(9, level));
+        }
+        return level;
     }
 }

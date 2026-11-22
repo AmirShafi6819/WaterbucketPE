@@ -19,9 +19,9 @@ import dev.waterbucket.waterbucketpe.logger.MainLogger;
 import lombok.AllArgsConstructor;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -54,10 +54,14 @@ public abstract class Configuration {
             }
 
             if (inputStream == null) {
-                inputStream = Files.newInputStream(this.file.toPath());
+                // The stream we open ourselves is closed here; a caller-provided stream stays
+                // the caller's responsibility, as before.
+                try (InputStream ownStream = Files.newInputStream(this.file.toPath())) {
+                    this.load(ownStream);
+                }
+            } else {
+                this.load(inputStream);
             }
-
-            this.load(inputStream);
         } catch (IOException e) {
             MainLogger.getLogger().error("Unable to initialize Config " + this.file.toString(), e);
         }
@@ -69,9 +73,12 @@ public abstract class Configuration {
 
     public void load(InputStream inputStream) {
         try {
-            this.values = this.deserialize(inputStream);
+            Map<String, Object> loaded = this.deserialize(inputStream);
+            // An empty YAML/JSON document deserializes to null; keeping it made every later
+            // get()/getKeys() throw an NPE far away from the real cause.
+            this.values = loaded == null ? new LinkedHashMap<>() : loaded;
         } catch (Exception e) {
-            MainLogger.getLogger().error("Unable to load Config " + this.file.toString());
+            MainLogger.getLogger().error("Unable to load Config " + this.file.toString(), e);
         }
     }
 
@@ -87,9 +94,11 @@ public abstract class Configuration {
                 parentFile.mkdirs();
             }
 
-            FileWriter myWriter = new FileWriter(this.file);
-            myWriter.write(content);
-            myWriter.close();
+            // UTF-8 explicitly: the previous platform-default FileWriter corrupted non-ASCII
+            // values on platforms whose default charset is not UTF-8 (e.g. Windows-1252).
+            try (java.io.BufferedWriter writer = Files.newBufferedWriter(this.file.toPath(), StandardCharsets.UTF_8)) {
+                writer.write(content);
+            }
         } catch (IOException e) {
             MainLogger.getLogger().error("Unable to save Config " + this.file.toString(), e);
         }
@@ -170,6 +179,11 @@ public abstract class Configuration {
                 return currentValue;
             }
 
+            // A scalar in the middle of a path (e.g. key "a.b" with "a: 5") used to throw a
+            // ClassCastException; the documented contract is to return the default value.
+            if (!(currentValue instanceof Map)) {
+                return defaultValue;
+            }
             values = (Map<String, Object>) currentValue;
         }
 
@@ -193,7 +207,10 @@ public abstract class Configuration {
     }
 
     public String getString(String key, String defaultValue) {
-        return String.valueOf(this.get(key, defaultValue));
+        // Missing keys used to come back as the four-character string "null" (from
+        // String.valueOf) instead of the configured default.
+        Object value = this.get(key, defaultValue);
+        return value == null ? defaultValue : value.toString();
     }
 
     public void setInt(String key, Integer value) {
@@ -205,7 +222,16 @@ public abstract class Configuration {
     }
 
     public Integer getInt(String key, Integer defaultValue) {
-        return Integer.valueOf(String.valueOf(this.get(key, defaultValue)));
+        Object value = this.get(key, defaultValue);
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Integer.valueOf(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            MainLogger.getLogger().warning("Config value '" + key + "' is not a valid integer: " + value + ", using default " + defaultValue);
+            return defaultValue;
+        }
     }
 
     public void setLong(String key, Long value) {
@@ -217,7 +243,16 @@ public abstract class Configuration {
     }
 
     public Long getLong(String key, Long defaultValue) {
-        return Long.valueOf(String.valueOf(this.get(key, defaultValue)));
+        Object value = this.get(key, defaultValue);
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Long.valueOf(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            MainLogger.getLogger().warning("Config value '" + key + "' is not a valid long: " + value + ", using default " + defaultValue);
+            return defaultValue;
+        }
     }
 
     public void setDouble(String key, Double value) {
@@ -229,7 +264,16 @@ public abstract class Configuration {
     }
 
     public Double getDouble(String key, Double defaultValue) {
-        return Double.valueOf(String.valueOf(this.get(key, defaultValue)));
+        Object value = this.get(key, defaultValue);
+        if (value == null) {
+            return defaultValue;
+        }
+        try {
+            return Double.valueOf(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            MainLogger.getLogger().warning("Config value '" + key + "' is not a valid number: " + value + ", using default " + defaultValue);
+            return defaultValue;
+        }
     }
 
     public void setBoolean(String key, Boolean value) {
@@ -241,7 +285,13 @@ public abstract class Configuration {
     }
 
     public Boolean getBoolean(String key, Boolean defaultValue) {
-        return (Boolean) this.get(key, defaultValue);
+        Object value = this.get(key, defaultValue);
+        if (value == null) {
+            return defaultValue;
+        }
+        // Accept the quoted "true" form too: a plain cast used to ClassCastException on any
+        // string value written into the config.
+        return value instanceof Boolean ? (Boolean) value : Boolean.parseBoolean(value.toString());
     }
 
     public <T> void setList(String key, List<T> value) {

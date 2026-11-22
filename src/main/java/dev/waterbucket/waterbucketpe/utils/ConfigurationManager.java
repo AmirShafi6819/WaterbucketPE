@@ -17,6 +17,7 @@ package dev.waterbucket.waterbucketpe.utils;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.network.nethernet.NetherNetProperties;
+import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
 import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfoMap;
 import dev.waterbucket.waterbucketpe.plugin.PluginClassLoader;
 import dev.waterbucket.waterbucketpe.plugin.PluginManager;
@@ -67,9 +68,13 @@ public class ConfigurationManager {
     public void loadServerInfos(ServerInfoMap serverInfoMap) {
         for (ServerEntry entry : this.proxyConfig.getServerList().values()) {
             try {
-                serverInfoMap.putIfAbsent(entry.getServerName(), serverInfoMap.fromServerEntry(entry));
+                ServerInfo previous = serverInfoMap.putIfAbsent(entry.getServerName(), serverInfoMap.fromServerEntry(entry));
+                if (previous != null) {
+                    this.proxy.getLogger().warning("Duplicate server definition for '" + entry.getServerName()
+                            + "' (server names are case-insensitive); keeping the first entry and skipping this one");
+                }
             } catch (Exception e) {
-                this.proxy.getLogger().error("Failed to create ServerInfo from "+entry, e);
+                this.proxy.getLogger().error("Failed to create ServerInfo from " + entry, e);
             }
         }
     }

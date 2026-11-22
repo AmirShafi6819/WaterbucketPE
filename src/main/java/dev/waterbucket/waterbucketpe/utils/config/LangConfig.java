@@ -36,6 +36,8 @@ public class LangConfig {
     }
 
     public void load() {
+        // Reload must not keep keys that were removed from the file since the last load.
+        this.transactionMap.clear();
         try {
             String content = FileUtils.readFile(this.file);
             for (String line : content.split("\n")) {
@@ -47,7 +49,9 @@ public class LangConfig {
                 if (t.length < 2) {
                     continue;
                 }
-                String key = t[0];
+                // Trim the key: "key = value" used to register a key with a trailing space that
+                // no lookup could ever match.
+                String key = t[0].trim();
                 StringBuilder value = new StringBuilder();
                 for (int i = 1; i < t.length - 1; i++) {
                     value.append(t[i]).append("=");
@@ -60,7 +64,7 @@ public class LangConfig {
             }
 
         } catch (IOException e) {
-            MainLogger.getLogger().error("Unable to load Config " + this.file.toString());
+            MainLogger.getLogger().error("Unable to load Config " + this.file.toString(), e);
         }
     }
 

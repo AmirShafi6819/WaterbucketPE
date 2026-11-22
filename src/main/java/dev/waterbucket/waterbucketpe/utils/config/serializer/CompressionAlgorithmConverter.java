@@ -43,7 +43,13 @@ public class CompressionAlgorithmConverter implements Converter {
         if (object == null) {
             return null;
         }
-        return CompressionType.fromString((String) object);
+        CompressionType algorithm = CompressionType.fromString((String) object);
+        if (algorithm == null) {
+            // Fail the config load with a clear message instead of assigning null, which used
+            // to NPE at boot before the friendly "defaulting to ZLIB" fallback could run.
+            throw new IllegalArgumentException("Unknown compression algorithm '" + object + "', supported: zlib, snappy");
+        }
+        return algorithm;
     }
 
     @Override

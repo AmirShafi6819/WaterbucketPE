@@ -38,20 +38,30 @@ public class FileUtils {
         if (targetFile.exists()) {
             return;
         }
-        targetFile.createNewFile();
-
         InputStream inputStream = FileUtils.class.getClassLoader().getResourceAsStream(fileName);
-        byte[] buffer = new byte[inputStream.available()];
-        inputStream.read(buffer);
-
-        OutputStream outputStream = new FileOutputStream(targetFile);
-        outputStream.write(buffer);
-        inputStream.close();
+        if (inputStream == null) {
+            throw new FileNotFoundException("Resource not found in classpath: " + fileName);
+        }
+        // Copy properly: the previous available()+single-read approach could truncate the target,
+        // and neither stream was closed on the failure paths, which also left an empty target
+        // file behind that blocked every later attempt (createNewFile + early return).
+        try (InputStream in = inputStream; OutputStream outputStream = new FileOutputStream(targetFile)) {
+            byte[] buffer = new byte[8192];
+            int length;
+            while ((length = in.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, length);
+            }
+        } catch (IOException e) {
+            // Do not leave a truncated or empty file behind: it would make every later boot
+            // believe the resource was already written.
+            targetFile.delete();
+            throw e;
+        }
     }
 
     public static String readFile(File file) throws IOException {
         if (!file.exists() || file.isDirectory()) {
-            throw new FileNotFoundException();
+            throw new FileNotFoundException(file.getPath());
         }
         return readFile(new FileInputStream(file));
     }
@@ -59,7 +69,7 @@ public class FileUtils {
     public static String readFile(String filename) throws IOException {
         File file = new File(filename);
         if (!file.exists() || file.isDirectory()) {
-            throw new FileNotFoundException();
+            throw new FileNotFoundException(file.getPath());
         }
         return readFile(new FileInputStream(file));
     }
