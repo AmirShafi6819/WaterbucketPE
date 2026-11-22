@@ -56,6 +56,23 @@ transfers, forwarding and the event API are preserved. The Python front-end is p
 | **Servers** | **Console** |
 | ![Servers](docs/screenshots/panel-servers.png) | ![Console](docs/screenshots/panel-console.png) |
 
+## Benchmark
+
+Measured comparison against upstream WaterdogPE — same 2-core VM, identical JVM flags,
+real RakNet pings and handshakes, the same harness driving both proxies (2026-11-22):
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/benchmark-comparison.png">
+    <img alt="WaterbucketPE vs WaterdogPE benchmark" src=".github/benchmark-comparison.png" width="900">
+  </picture>
+</p>
+
+Highlights: idle memory −5.6%, ping RTT median −8.4%, handshake latency −5.8% at −13.5% CPU,
+all 500 concurrent sessions held (upstream held 498 in the same run), zero ping loss on both
+sides. The panels marked * are the metrics where upstream measured lower — shown as-is,
+nothing hidden; per-session RSS deltas are page-level and noisy between runs.
+
 ## Quick start
 
 **Requirements:** Java 17+ (Temurin recommended). Players connect with any Bedrock client ≥
