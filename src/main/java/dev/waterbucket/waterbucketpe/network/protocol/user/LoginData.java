@@ -65,14 +65,16 @@ public class LoginData {
     private final JsonObject clientData;
     private LoginPacket loginPacket;
 
-    // Values rather than packets, so every send builds its own
+    // Values rather than packets, so every send builds its own.
+    // Set on the upstream loop (RequestChunkRadiusPacket, ClientCacheStatusPacket) and read
+    // on downstream loops when the login is replayed to a server, so writes must be visible.
     @Setter
     @Builder.Default
-    private int chunkRadius = 8;
+    private volatile int chunkRadius = 8;
     @Setter
-    private int maxChunkRadius;
+    private volatile int maxChunkRadius;
     @Setter
-    private boolean cacheSupported;
+    private volatile boolean cacheSupported;
 
     private final boolean shouldSendCertificateChain;
 
@@ -88,7 +90,7 @@ public class LoginData {
      *
      * @return new LoginPacket.
      */
-    public LoginPacket rebuildLoginPacket() {
+    public synchronized LoginPacket rebuildLoginPacket() {
         LoginPacket loginPacket = new LoginPacket();
         SignedJWT signedClientData = HandshakeUtils.encodeJWT(this.keyPair, this.clientData);
         loginPacket.setClientJwt(signedClientData.serialize());
@@ -107,8 +109,11 @@ public class LoginData {
 
     /**
      * The login to send downstream, signed by the proxy.
+     * Built once, lazily, potentially from several downstream loops (parallel dials). The
+     * synchronized block makes both the build and its publication safe; the field is only
+     * read after this method, never hot.
      */
-    public LoginPacket getLoginPacket() {
+    public synchronized LoginPacket getLoginPacket() {
         if (this.loginPacket == null) {
             this.rebuildLoginPacket();
         }

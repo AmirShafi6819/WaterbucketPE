@@ -34,8 +34,9 @@ public class ClientEventHandler extends ChannelInboundHandlerAdapter {
     }
 
     @Override
-    public void channelInactive(ChannelHandlerContext ctx) {
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         this.player.onDownstreamDisconnected(this.connection);
+        super.channelInactive(ctx);
     }
 
     @Override

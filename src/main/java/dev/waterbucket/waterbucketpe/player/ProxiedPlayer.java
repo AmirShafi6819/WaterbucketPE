@@ -56,6 +56,8 @@ import org.cloudburstmc.protocol.common.util.Preconditions;
 
 import java.net.InetSocketAddress;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -132,7 +134,13 @@ public class ProxiedPlayer implements CommandSender {
     private volatile int inputLockData;
     @Getter
     private final Int2ObjectMap<ContainerType> openContainers = Int2ObjectMaps.synchronize(new Int2ObjectOpenHashMap<>()); // id -> type
-    private final Object2ObjectMap<String, Permission> permissions = new Object2ObjectOpenHashMap<>();
+    /*
+     * Permissions are read from event loops (command dispatch, AvailableCommandsPacket
+     * injection) and written by plugins and the config layer from arbitrary threads, so a
+     * concurrent map is required. Keys are stored exactly as given (like upstream), while
+     * lookups lowercase - this asymmetry is preserved deliberately for compatibility.
+     */
+    private final Map<String, Permission> permissions = new ConcurrentHashMap<>();
     private final Collection<ServerInfo> pendingServers = ObjectCollections.synchronize(new ObjectArrayList<>());
     /*
      * Written by SwitchDownstreamHandler on the new downstream loop (StartGame) and read from
@@ -181,7 +189,7 @@ public class ProxiedPlayer implements CommandSender {
      * Do not set directly BedrockPacketHandler to sessions!
      */
     @Getter
-    private final Collection<PluginPacketHandler> pluginPacketHandlers = new ObjectArrayList<>();
+    private final Collection<PluginPacketHandler> pluginPacketHandlers = new CopyOnWriteArrayList<>();
 
     public ProxiedPlayer(ProxyServer proxy, BedrockServerSession session, CompressionType compression, LoginData loginData) {
         this.proxy = proxy;
@@ -978,9 +986,11 @@ public class ProxiedPlayer implements CommandSender {
      * @return if the update was successful
      */
     public boolean addPermission(Permission permission) {
-        Permission oldPerm = this.permissions.get(permission.getName());
+        // Concurrent first-adds from plugins and the config layer must not lose a permission:
+        // the previous get-then-put let a second add overwrite the first result and report
+        // false even though both permissions were accepted.
+        Permission oldPerm = this.permissions.putIfAbsent(permission.getName(), permission);
         if (oldPerm == null) {
-            this.permissions.put(permission.getName(), permission);
             return true;
         }
         return oldPerm.getAtomicValue().getAndSet(permission.getValue()) != permission.getValue();

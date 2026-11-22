@@ -44,8 +44,21 @@ public class PacketQueueHandler extends ChannelDuplexHandler {
         }
         this.finished = true;
 
+        if (ctx.channel().eventLoop().inEventLoop()) {
+            this.finish0(ctx, send);
+        } else {
+            // Netty runs handlerRemoved on the thread that removed the handler. A transfer
+            // failure removes this handler from a downstream loop while the channel belongs
+            // to the upstream loop; draining there would interleave the queued writes with
+            // in-flight upstream writes. Do the drain (and the removal bookkeeping) on the
+            // loop that owns the channel.
+            ctx.channel().eventLoop().execute(() -> this.finish0(ctx, send));
+        }
+    }
+
+    private void finish0(ChannelHandlerContext ctx, boolean send) {
         if (ctx.pipeline().get(NAME) == this) {
-            ctx.pipeline().remove(this);
+            ctx.pipeline().remove(this); // re-enters finish(), which is guarded by the flag
         }
 
         BedrockBatchWrapper batch;
