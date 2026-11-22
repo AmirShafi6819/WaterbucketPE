@@ -167,3 +167,42 @@ javac -cp <proxy.jar> -d /tmp/wbtest8 benchmarks/BedrockBench.java
 python3 benchmarks/bench_bedrock.py <proxy.jar> out.json            # all three scenarios
 python3 benchmarks/gen_bedrock_chart.py                             # merge + chart
 ```
+
+## Progressive scale validation (bench_scale.py)
+
+Spec section 11 calls for a 500+ concurrent-session validation driven as a
+cumulative population: one `RakBenchClient hold` process per stage, each
+opened with `holdSeconds < 0` (hold forever), so live sessions accumulate
+exactly like real players rather than connect/disconnect in lockstep.
+
+`bench_scale.py` drives stages 50 -> 100 -> 200 -> 300 -> 400 -> 500 -> 600,
+where stage N targets N live sessions in total (the client opens only the
+delta). At every stage it records proxy RSS, RSS delta per new session,
+cumulative KB/session, a 3 s CPU window, and 400 paced unconnected-ping RTTs
+(p50/p95). Two honesty guards are built in:
+
+- A safety gate: five consecutive lost pings mark the stage UNSAFE and abort
+  the run - no capacity number is reported unless it was actually observed.
+- The bench clients' own JVM RSS is reported separately, never merged into
+  the proxy's footprint.
+
+The 500-session milestone itself was measured with `bench_final.py`
+(`scale_held=500`, see `results.json`), which holds a single 500-session
+population and samples the same metrics; `results.json` also carries the
+WaterdogPE equivalent (`scale_held=498`) for a like-for-like comparison.
+
+Status of the progressive run in this environment: stage 50 completed clean
+(0/400 ping loss, 0.24 ms median RTT); the stage-100 delta client held 49 of
+50 sessions (one client-side UDP connect race) and the safety gate aborted
+with the proxy still alive and serving pings - recorded verbatim in
+`results-scale.json` as `UNSAFE_STAGE_100`. The harness aborts on any
+anomaly by design; a full clean 600-session progressive run remains open
+work and is *not* claimed here.
+
+To reproduce:
+
+```bash
+javac -cp build/libs/Waterbucket.jar -d /tmp/wbtest7 benchmarks/RakBenchClient.java
+BENCH_JAVA=<jdk17>/bin/java python3 benchmarks/bench_scale.py \
+    build/libs/Waterbucket.jar benchmarks/results-scale.json
+```

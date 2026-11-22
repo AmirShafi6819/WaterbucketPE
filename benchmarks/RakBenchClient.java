@@ -62,7 +62,14 @@ public class RakBenchClient {
 
             if (mode.equals("hold")) {
                 System.out.println("HOLDING " + ok);
-                Thread.sleep(holdSeconds * 1000L);
+                if (holdSeconds < 0) {
+                    // hold until killed: the driver spawns one client per load
+                    // stage and keeps every client alive so the session
+                    // population is cumulative across stages
+                    Thread.sleep(Long.MAX_VALUE);
+                } else {
+                    Thread.sleep(holdSeconds * 1000L);
+                }
             }
 
             System.out.println("RESULT ok=" + ok + " failed=" + failed);
