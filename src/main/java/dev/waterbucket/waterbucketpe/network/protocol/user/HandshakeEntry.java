@@ -68,7 +68,8 @@ public class HandshakeEntry {
         builder.minecraftId(this.minecraftId);
         builder.xboxAuthed(this.xboxAuthed);
         builder.protocol(this.protocol);
-        JoinAddress joinAddress = JoinAddress.parse(this.clientData.get("ServerAddress").getAsString(),
+        JoinAddress joinAddress = JoinAddress.parse(this.clientData.has("ServerAddress")
+                        ? this.clientData.get("ServerAddress").getAsString() : "",
                 proxy.getConfiguration().getBindAddress().getPort());
         builder.joinHostname(joinAddress.getHost());
         builder.joinPort(joinAddress.getPort());
@@ -80,7 +81,13 @@ public class HandshakeEntry {
             builder.deviceModel(this.clientData.get("DeviceModel").getAsString());
         }
         if (this.clientData.has("DeviceOS")) {
-            builder.devicePlatform(Platform.getPlatformByID(this.clientData.get("DeviceOS").getAsInt()));
+            // A wrong-type DeviceOS (string instead of number) used to escape as
+            // ClassCastException and kill the login with an opaque error.
+            try {
+                builder.devicePlatform(Platform.getPlatformByID(this.clientData.get("DeviceOS").getAsInt()));
+            } catch (ClassCastException | NumberFormatException ignored) {
+                builder.devicePlatform(Platform.UNKNOWN);
+            }
         }
         if (this.clientData.has("DeviceId")) {
             builder.deviceId(this.clientData.get("DeviceId").getAsString());

@@ -138,16 +138,22 @@ public class ProtocolCodecs {
         HANDLED_PACKETS.add(SetPassengerOfBlockPacket.class);
     }
 
-    private static final List<ProtocolCodecUpdater> UPDATERS = new ObjectArrayList<>();
+    // Copy-on-write: addUpdater is plugin API callable from any thread, while buildCodec
+    // iterates the list during codec construction.
+    private static volatile List<ProtocolCodecUpdater> UPDATERS = List.of(new CodecUpdater419());
     private static final ProtocolCodecUpdater DEFAULT_UPDATER = (builder, codec) -> builder.retainPackets(HANDLED_PACKETS.toArray(new Class[]{}));
-    static {
-        UPDATERS.add(new CodecUpdater419());
+
+    public static synchronized void addUpdater(ProtocolCodecUpdater updater) {
+        List<ProtocolCodecUpdater> current = UPDATERS;
+        List<ProtocolCodecUpdater> updated = new ObjectArrayList<>(current);
+        updated.add(updater);
+        UPDATERS = List.copyOf(updated);
     }
 
-    public static void addUpdater(ProtocolCodecUpdater updater) {
-        UPDATERS.add(updater);
-    }
-
+    /**
+     * Returns an unmodifiable snapshot of the registered codec updaters. The previously returned
+     * live list allowed plugins to mutate the registry that {@link #buildCodec} iterates.
+     */
     public static List<ProtocolCodecUpdater> getUpdaters() {
         return UPDATERS;
     }

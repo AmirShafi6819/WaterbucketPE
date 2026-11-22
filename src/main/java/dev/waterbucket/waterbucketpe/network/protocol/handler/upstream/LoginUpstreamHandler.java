@@ -51,6 +51,10 @@ public class LoginUpstreamHandler implements BedrockPacketHandler {
 
     // Whether login was allowed
     private boolean loginInitialized;
+    // Whether a LoginPacket has already been processed; a duplicate used to re-run the whole
+    // handshake, fire the login events a second time and construct a second player for the
+    // same socket (kicking the very session that was mid-login).
+    private boolean loginProcessed;
     // Whether the login handshake completed successfully; guards the login-timeout task
     private boolean loginCompleted;
     // Kicks the connection if the login handshake is not completed in time
@@ -166,6 +170,15 @@ public class LoginUpstreamHandler implements BedrockPacketHandler {
 
     @Override
     public PacketSignal handle(LoginPacket packet) {
+        // All packets of a session are dispatched sequentially on its event loop, so a plain
+        // flag is a sufficient re-entry guard. The second LoginPacket is ignored instead of
+        // re-running the handshake and re-registering the player.
+        if (this.loginProcessed) {
+            this.proxy.getLogger().debug("[{}] <-> Ignoring duplicate LoginPacket", this.session.getSocketAddress());
+            return PacketSignal.HANDLED;
+        }
+        this.loginProcessed = true;
+
         ProtocolVersion protocol;
         if (!this.attemptLogin() || (protocol = this.checkVersion(packet.getProtocolVersion())) == null) {
             return PacketSignal.HANDLED;
@@ -251,7 +264,10 @@ public class LoginUpstreamHandler implements BedrockPacketHandler {
                 this.finishConnection();
             }
         } catch (Exception e) {
-            this.onLoginFailed(handshakeEntry, e, "Login failed: " + e.getMessage());
+            // The exception detail stays in the server log; the previous "Login failed: " +
+            // e.getMessage() leaked internal class/method names onto the client's disconnect
+            // screen for any malformed login payload.
+            this.onLoginFailed(handshakeEntry, e, "Login failed");
             this.proxy.getLogger().error("[{}] Unable to complete login", this.session.getSocketAddress(), e);
         }
         return PacketSignal.HANDLED;
@@ -271,6 +287,10 @@ public class LoginUpstreamHandler implements BedrockPacketHandler {
             return;
         }
 
+        if (this.loginCompleted) {
+            // A duplicate ClientToServerHandshake used to run initPlayer() a second time.
+            return;
+        }
         this.loginCompleted = true;
         this.cancelLoginTimeout();
 

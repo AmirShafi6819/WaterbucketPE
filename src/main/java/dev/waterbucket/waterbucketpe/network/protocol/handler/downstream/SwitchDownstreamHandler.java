@@ -66,6 +66,15 @@ public class SwitchDownstreamHandler extends AbstractDownstreamHandler {
 
     @Override
     public final PacketSignal handle(ServerToClientHandshakePacket packet) {
+        if (!this.connection.supportsEncryption()) {
+            // A downstream offering Bedrock encryption over a transport without it (NetherNet) is
+            // misconfigured: acking the handshake used to make the server encrypt every later
+            // frame while this side never installed a cipher, desynchronizing the stream.
+            log.warn("[{}] {} offered a Bedrock encryption handshake over a transport that does not support it; disconnecting",
+                    this.player.getName(), this.connection.getServerInfo().getServerName());
+            this.connection.disconnect();
+            return Signals.CANCEL;
+        }
         try {
             SignedJWT saltJwt = SignedJWT.parse(packet.getJwt());
             URI x5u = saltJwt.getHeader().getX509CertURL();
@@ -147,6 +156,10 @@ public class SwitchDownstreamHandler extends AbstractDownstreamHandler {
         // Downstream connections run on different event loops: two of them can reach START_GAME
         // concurrently, so the transfer slot must be claimed atomically. The loser aborts here.
         if (!rewriteData.trySetTransferCallback(transferCallback)) {
+            // Mirror the superseded-connection cleanup below: without dropping the handler the
+            // losing candidate kept tracking entities into the player's shared sets until its
+            // channel actually closed.
+            this.connection.setPacketHandler(null);
             this.connection.disconnect();
             String serverName = this.connection.getServerInfo().getServerName();
             this.player.sendMessage(new TranslationContainer("waterbucket.downstream.connecting", serverName));
@@ -198,47 +211,67 @@ public class SwitchDownstreamHandler extends AbstractDownstreamHandler {
         }
         this.player.getChunkBlobs().clear();
 
+        // All collections below are fastutil synchronized wrappers mutated by the old
+        // downstream event loop (EntityTracker) while this loop iterates them; fastutil wrappers
+        // require iteration under their own monitor, otherwise a concurrent batch still decoding
+        // on the old loop throws ConcurrentModificationException mid-transfer.
         Long2LongMap entityLinks = this.player.getEntityLinks();
-        for (Long2LongMap.Entry entry : entityLinks.long2LongEntrySet()) {
-            injectRemoveEntityLink(this.player.getConnection(), entry.getLongKey(), entry.getLongValue());
+        synchronized (entityLinks) {
+            for (Long2LongMap.Entry entry : entityLinks.long2LongEntrySet()) {
+                injectRemoveEntityLink(this.player.getConnection(), entry.getLongKey(), entry.getLongValue());
+            }
+            entityLinks.clear();
         }
-        entityLinks.clear();
 
         LongSet bossbars = this.player.getBossbars();
-        for (long bossbarId : bossbars) {
-            injectRemoveBossbar(this.player.getConnection(), bossbarId);
+        synchronized (bossbars) {
+            for (long bossbarId : bossbars) {
+                injectRemoveBossbar(this.player.getConnection(), bossbarId);
+            }
+            bossbars.clear();
         }
-        bossbars.clear();
 
         Collection<UUID> playerList = this.player.getPlayers();
-        injectRemoveAllPlayers(this.player.getConnection(), playerList);
-        playerList.clear();
+        synchronized (playerList) {
+            injectRemoveAllPlayers(this.player.getConnection(), playerList);
+            playerList.clear();
+        }
 
         LongSet entities = this.player.getEntities();
-        for (long entityId : entities) {
-            injectRemoveEntity(this.player.getConnection(), entityId);
+        synchronized (entities) {
+            for (long entityId : entities) {
+                injectRemoveEntity(this.player.getConnection(), entityId);
+            }
+            entities.clear();
         }
-        entities.clear();
 
         Long2ObjectMap<ScoreInfo> scoreInfos = this.player.getScoreInfos();
-        injectRemoveScoreInfos(this.player.getConnection(), scoreInfos);
-        scoreInfos.clear();
+        synchronized (scoreInfos) {
+            injectRemoveScoreInfos(this.player.getConnection(), scoreInfos);
+            scoreInfos.clear();
+        }
 
         ObjectSet<String> scoreboards = this.player.getScoreboards();
-        for (String scoreboard : scoreboards) {
-            injectRemoveObjective(this.player.getConnection(), scoreboard);
+        synchronized (scoreboards) {
+            for (String scoreboard : scoreboards) {
+                injectRemoveObjective(this.player.getConnection(), scoreboard);
+            }
+            scoreboards.clear();
         }
-        scoreboards.clear();
 
         Int2IntMap volumeEntities = this.player.getVolumeEntities();
-        for (Int2IntMap.Entry entry : volumeEntities.int2IntEntrySet()) {
-            injectRemoveVolumeEntity(this.player.getConnection(), entry.getIntKey(), entry.getIntValue());
+        synchronized (volumeEntities) {
+            for (Int2IntMap.Entry entry : volumeEntities.int2IntEntrySet()) {
+                injectRemoveVolumeEntity(this.player.getConnection(), entry.getIntKey(), entry.getIntValue());
+            }
+            volumeEntities.clear();
         }
-        volumeEntities.clear();
 
         Long2IntMap debugShapes = this.player.getDebugShapes();
-        injectRemoveDebugShapes(this.player.getConnection(), debugShapes);
-        debugShapes.clear();
+        synchronized (debugShapes) {
+            injectRemoveDebugShapes(this.player.getConnection(), debugShapes);
+            debugShapes.clear();
+        }
 
         if (this.player.isFogApplied()) {
             injectClearFog(this.player.getConnection());
@@ -257,10 +290,12 @@ public class SwitchDownstreamHandler extends AbstractDownstreamHandler {
         }
 
         Int2ObjectMap<ContainerType> openContainers = this.player.getOpenContainers();
-        for (Int2ObjectMap.Entry<ContainerType> entry : openContainers.int2ObjectEntrySet()) {
-            injectCloseContainer(this.player.getConnection(), (byte) entry.getIntKey(), entry.getValue());
+        synchronized (openContainers) {
+            for (Int2ObjectMap.Entry<ContainerType> entry : openContainers.int2ObjectEntrySet()) {
+                injectCloseContainer(this.player.getConnection(), (byte) entry.getIntKey(), entry.getValue());
+            }
+            openContainers.clear();
         }
-        openContainers.clear();
         // ContainerClosePacket can not close the player's own inventory window. If the previous server left it
         // open the client gets stuck and refuses to open any inventory, so force it shut via the SLEEPING flag.
         injectForceCloseInventory(this.player.getConnection(), rewriteData.getEntityId());

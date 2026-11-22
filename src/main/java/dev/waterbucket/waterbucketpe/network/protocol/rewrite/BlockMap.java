@@ -97,10 +97,22 @@ public class BlockMap implements BedrockPacketHandler {
                     for (int storage = 0; storage < storageCount; storage++) {
                         int flags = from.readUnsignedByte();
                         int bitsPerBlock = flags >> 1; // isRuntime = (flags & 0x1) != 0
+                        // A malformed or hostile chunk payload used to reach Integer.SIZE / 0 (or
+                        // a zero blocksPerWord) and kill the downstream session with an
+                        // ArithmeticException; skip the rewrite for out-of-range data instead.
+                        if (bitsPerBlock < 1 || bitsPerBlock > 32) {
+                            this.player.getLogger().warning("PEBlockRewrite: invalid subchunk palette size " + bitsPerBlock + ", skipping chunk rewrite");
+                            return false;
+                        }
                         int blocksPerWord = Integer.SIZE / bitsPerBlock;
                         int nWords = (nV8Blocks + blocksPerWord - 1) / blocksPerWord;
 
                         to.writeByte(flags);
+                        // A truncated payload used to throw IndexOutOfBoundsException out of the
+                        // rewrite; stop cleanly and let the packet pass through unrewritten.
+                        if (from.readableBytes() < nWords * Integer.BYTES) {
+                            return false;
+                        }
                         to.writeBytes(from, nWords * Integer.BYTES);
 
                         int nPaletteEntries = VarInts.readInt(from);
@@ -161,8 +173,12 @@ public class BlockMap implements BedrockPacketHandler {
         }
 
         EntityDataMap metaData = packet.getMetadata();
-        int runtimeId = metaData.get(EntityDataTypes.VARIANT);
-        metaData.put(EntityDataTypes.VARIANT, this.translateId(runtimeId));
+        // A falling_block without VARIANT metadata used to unbox a null and kill the session.
+        Integer variant = metaData.get(EntityDataTypes.VARIANT);
+        if (variant == null) {
+            return PacketSignal.UNHANDLED;
+        }
+        metaData.put(EntityDataTypes.VARIANT, this.translateId(variant));
         return PacketSignal.HANDLED;
     }
 }
