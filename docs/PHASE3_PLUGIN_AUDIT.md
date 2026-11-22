@@ -174,3 +174,53 @@ deduplicate them), and the class histogram capture is asserted.
 ---
 
 *Stage D (API and compatibility audit) is appended below when complete.*
+
+---
+
+## Stage D — API and compatibility audit
+
+### D.1 Machine-verified API contract
+
+The shipped example plugins are compiled and executed against the production classes in
+`PluginCompatibilityTest`:
+
+- `examples/plugins/java-example` is compiled from its real source with the production
+  classpath — this is a signature-level check of the public `Plugin`/`EventManager`/
+  `CommandMap`/`PlayerChatEvent` contracts, then the compiled jar is loaded by the real
+  `PluginManager` scan → load → enable flow.
+- `examples/plugins/python-example` is copied verbatim (descriptor + `main.py` +
+  `helper.py`) and loaded as a folder plugin; the `/pyhello` command executes through the
+  full GraalPy interop path including the sibling-module import.
+
+Verified end-to-end on unmodified code: both plugins load and enable; both hold exactly one
+`PlayerChatEvent` subscription each; chat dispatch leaves the payload unchanged and
+uncancelled; both commands execute; after `disableAllPlugins` the Python subscription and
+command are detached while the Java plugin's own registration remains — exactly the
+documented contract in `docs/PLUGINS.en.md` (Python runtime auto-detaches; Java plugins clean
+up themselves).
+
+### D.2 Documented-API cross-check (§7)
+
+| Documented (PLUGINS.en.md) | Implementation | Status |
+| --- | --- | --- |
+| Java jar plugins, `waterbucket.yml`/`plugin.yml`, fields name/version/author/main/depends | `PluginLoader.loadPluginData`, `PluginYAML` | matches |
+| Folder-based Python plugins, optional `on_startup`/`on_enable`/`on_disable` hooks | `PythonPluginLoader`, `PythonPlugin.callHook` | matches |
+| `plugin.subscribe(event, fn)` auto-detached on disable | `PythonPlugin.subscribe` + `detachEventSubscriptions` | matches |
+| `plugin.register_command(...)` unregistered on disable | `PythonPlugin.registerCommand` + `unregisterRegisteredCommands` | matches |
+| Sync handlers run on the calling thread (incl. Netty event loops) | `EventHandler.handleSync` inline dispatch | matches |
+| Failed handlers are logged, never fail the pipeline | per-handler `catch (Throwable)` in `EventHandler`/`PythonPlugin` | matches |
+| No hot reload; no Python task handles | no unload API; `schedule*` returns void | matches (and limits are re-documented in the final report) |
+| `Plugin.getResourceFile` / `saveResource` / `getConfig` | `Plugin` implementation | matches |
+
+Findings against the API contract are the P3-10 (null-argument error quality) and P3-19
+(coerced descriptor types) entries from Stage B; both are fixed in Stages E/F with the
+external contract preserved (same signatures, same successful-path behavior).
+
+### D.3 Compatibility risk assessment of the planned fixes
+
+All Stage E/F/G fixes were checked against this test before implementation: none of them
+changes a public signature, a lifecycle outcome for valid plugins, event names/payloads, or
+the documented Java-vs-Python disable asymmetry. The two deliberate behavioral refinements —
+broken plugins no longer keep a registered classloader (P3-4) and descriptors with global
+`!!` tags are rejected (P3-5) — only affect plugins that could not load correctly or were
+unsafe before; they are documented in the final report.
