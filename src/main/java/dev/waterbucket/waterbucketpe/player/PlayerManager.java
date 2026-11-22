@@ -59,7 +59,10 @@ public class PlayerManager {
         if (previousSession != null) {
             this.playersByName.remove(previousSession.getName().toLowerCase(Locale.ROOT), previousSession);
         }
-        this.playersByName.remove(player.getName().toLowerCase(Locale.ROOT));
+        // Only clear the name entry if it currently maps to THIS player: the previous
+        // unconditional remove evicted a still-online player's lookup when another identity
+        // registered with the same display name, and the put below claims the name anyway.
+        this.playersByName.remove(player.getName().toLowerCase(Locale.ROOT), player);
         this.players.put(player.getUniqueId(), player);
         this.playersByName.put(player.getName().toLowerCase(Locale.ROOT), player);
         return true;
@@ -78,9 +81,21 @@ public class PlayerManager {
     }
 
     public void removePlayer(ProxiedPlayer player) {
-        if (player != null) {
-            this.players.remove(player.getUniqueId(), player);
-            this.playersByName.remove(player.getName().toLowerCase(Locale.ROOT), player);
+        if (player == null) {
+            return;
+        }
+        String lowerName = player.getName().toLowerCase(Locale.ROOT);
+        if (this.players.remove(player.getUniqueId(), player)
+                && this.playersByName.remove(lowerName, player)) {
+            // This registration displaced the previous holder of the name; without restoring
+            // it here, the still-online player was unresolvable by name (commands, panel kick)
+            // after the newcomer left.
+            for (ProxiedPlayer other : this.players.values()) {
+                if (other != player && other.getName().toLowerCase(Locale.ROOT).equals(lowerName)) {
+                    this.playersByName.put(lowerName, other);
+                    break;
+                }
+            }
         }
     }
 

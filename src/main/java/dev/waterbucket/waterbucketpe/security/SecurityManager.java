@@ -111,16 +111,31 @@ public class SecurityManager {
             if (!success) {
                 this.loginFailed(throttled);
                 if (this.listener != null) {
-                    this.listener.onThrottleReached(addr.getAddress(), throttle);
+                    try {
+                        this.listener.onThrottleReached(addr.getAddress(), throttle);
+                    } catch (Throwable t) {
+                        // A throwing listener plugin runs inside initChannel/packet handling;
+                        // fail open instead of killing the connection it was meant to gate.
+                        this.proxy.getLogger().warning("SecurityListener.onThrottleReached threw", t);
+                    }
                 }
             }
         }
 
-        if (this.listener != null && !allowed.test(this.listener)) {
-            if (success) {
-                this.loginFailed(LoginFailure.LISTENER);
+        if (this.listener != null) {
+            boolean allowedByListener;
+            try {
+                allowedByListener = allowed.test(this.listener);
+            } catch (Throwable t) {
+                this.proxy.getLogger().warning("SecurityListener threw while checking a connection; allowing it", t);
+                allowedByListener = true;
             }
-            success = false;
+            if (!allowedByListener) {
+                if (success) {
+                    this.loginFailed(LoginFailure.LISTENER);
+                }
+                success = false;
+            }
         }
         return success;
     }
@@ -128,7 +143,11 @@ public class SecurityManager {
     public String onLoginFailed(SocketAddress address, HandshakeEntry handshakeEntry, Throwable throwable, String reason) {
         this.loginFailed(this.loginFailure(handshakeEntry, throwable));
         if (this.listener != null) {
-            return this.listener.onLoginFailed(address, handshakeEntry, throwable, reason);
+            try {
+                return this.listener.onLoginFailed(address, handshakeEntry, throwable, reason);
+            } catch (Throwable t) {
+                this.proxy.getLogger().warning("SecurityListener.onLoginFailed threw; using the default disconnect reason", t);
+            }
         }
         // TODO: probably throttle this as well?
         return reason;

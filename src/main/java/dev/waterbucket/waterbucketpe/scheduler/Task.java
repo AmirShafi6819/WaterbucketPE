@@ -41,6 +41,11 @@ public abstract class Task implements Runnable {
     }
 
     public void cancel() {
+        if (this.handler == null) {
+            // A task that was never scheduled has nothing to cancel; the previous raw NPE
+            // escaped into plugin code that could not tell what went wrong.
+            return;
+        }
         this.handler.cancel();
     }
 

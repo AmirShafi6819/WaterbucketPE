@@ -108,6 +108,25 @@ public class PlayerManagerTest {
     }
 
     @Test
+    void duplicateNameRegistrationKeepsTheDisplacedPlayerReachableAfterTheNewcomerLeaves() {
+        // Two different identities can carry the same display name. The newcomer displaces the
+        // first player's name entry (last writer wins); when the newcomer leaves, the displaced
+        // player used to stay registered but unreachable via getPlayer(String) - invisible to
+        // commands and the panel kick.
+        ProxiedPlayer first = this.player("Sam", UUID.randomUUID());
+        ProxiedPlayer second = this.player("Sam", UUID.randomUUID());
+        this.manager.registerPlayer(first);
+        this.manager.registerPlayer(second);
+        assertSame(second, this.manager.getPlayer("sam"));
+
+        this.manager.removePlayer(second);
+        assertSame(first, this.manager.getPlayer("Sam"), "the displaced player must become reachable again after the newcomer left");
+        assertNull(this.manager.getPlayer(second.getUniqueId()));
+        assertSame(first, this.manager.getPlayer(first.getUniqueId()));
+        assertEquals(1, this.manager.getPlayerCount());
+    }
+
+    @Test
     void matchPlayerFindsCaseInsensitivePrefix() {
         ProxiedPlayer notch = this.player("Notch", UUID.randomUUID());
         this.manager.registerPlayer(notch);

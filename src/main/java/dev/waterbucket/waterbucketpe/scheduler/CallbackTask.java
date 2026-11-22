@@ -53,9 +53,19 @@ public class CallbackTask<T> extends Task {
     }
 
     private void complete(T result) {
-        if (this.callbacks != null && !this.callbacks.isEmpty()) {
+        if (this.callbacks == null || this.callbacks.isEmpty()) {
+            return;
+        }
+        // Isolate callbacks from each other: a throwing callback used to skip every later
+        // callback and, on the cancel path, escaped out of TaskHandler.cancel() into whatever
+        // thread cancelled the task.
+        synchronized (this.callbacks) {
             for (Consumer<T> callback : this.callbacks) {
-                callback.accept(result);
+                try {
+                    callback.accept(result);
+                } catch (Throwable t) {
+                    this.onError(t);
+                }
             }
         }
     }
