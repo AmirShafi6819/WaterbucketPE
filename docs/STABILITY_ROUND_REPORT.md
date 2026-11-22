@@ -67,8 +67,11 @@ default). Ten contract tests pin the behavior.
   55/303 by 25 tests (three new suites, two extended).
 - The sustained concurrent class-loading stress test (the one that caught the
   `PluginClassLoader` race) re-run **5×** after the fix: clean every time.
-- Clean `./gradlew build`: shaded jar `151,770,944` bytes,
-  sha256 `91feca1e8d703bd7dd01a593439eebb53382b3279cfdd9bae020eadf3f6778bf`.
+- Clean `./gradlew build` on the final pushed tree (all 7 tasks re-executed): shaded jar
+  `151,770,944` bytes,
+  sha256 `afee75c4976c3e84a7f938a3801f5022a00bb094f238797eb5dfb8fa8f022138`. The jar embeds
+  `git.properties`, so its hash tracks the HEAD commit; a docs-only commit after the final
+  code commit therefore changes the hash without changing any class file.
 - End-to-end bounded benchmark against the hardened build
   (`benchmarks/results-harden.json`): startup median **2.22 s**; 400 RakNet pings, **0
   lost**, median RTT **0.33 ms**; concurrent pings **264 replies/s at 0% loss**; handshake
@@ -102,6 +105,11 @@ level. Both example plugins and the full plugin regression suite are green.
 | `cd78d17` | Panel connection loss, empty states, CSP, metrics pruning |
 | `258029b` | Portable harness + bounded final-phase driver + results |
 | `c6e1a6b` | 30-day log retention |
+| `2d3c5ec` / (this commit) | Stability report, README link, jar-hash precision note |
+
+Fourteen commits carry this pass (thirteen in the table above plus `2d3c5ec`); this
+correction commit is the fifteenth. The commit message of `2d3c5ec` overstates the count as
+"twenty-two"; corrected here, where the authoritative record lives.
 
 Pushed to `origin/master` as regular fast-forward non-force pushes; all commits authored as
 `AmirShafi6819 <AmirShafi6819@users.noreply.github.com>`.
