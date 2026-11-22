@@ -22,10 +22,10 @@ If you contribute to the project, feel free to ping a Maintainer on Discord to r
 
 ## Project specifics
 
-- **Performance changes** must come with numbers from `benchmarks/bench.py` (same machine,
-  same JVM flags, both variants) - the README only claims what the harness can reproduce.
 - **Bug fixes** need a regression test next to them; the transfer, event and player suites in
-  `src/test/java/dev/waterbucket/waterbucketpe/` show the harness patterns to copy.
+  `src/test/java/dev/waterbucket/waterbucketpe/` show the patterns to copy.
+- **Performance changes** must include a regression test that locks the improved path, and the
+  PR description should state the expected effect on behavior.
 - **Plugin API**: the Java API is frozen for backwards compatibility. Additive APIs are fine;
   Python-side aliases live in `dev.waterbucket.waterbucketpe.plugin.python`.
 - **Commits**: keep one logical change per commit (`fix:`, `perf:`, `feat:`, `docs:`), so
