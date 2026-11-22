@@ -36,16 +36,25 @@ public class FakeDefinitionRegistry<D extends Definition> implements DefinitionR
 
     @Override
     public D getDefinition(int runtimeId) {
-        D definition = this.runtimeMap.get(runtimeId);
-        if (definition == null) {
-            this.runtimeMap.put(runtimeId, definition = this.factory.get(runtimeId));
+        // Both legs of one player share this registry instance (the helper is installed on the
+        // upstream and the downstream codec helper), so UpdateBlockPacket decodes call into it
+        // from two different event loops concurrently. The cache-miss write into the plain
+        // fastutil map raced the resize, corrupting the map or losing entries. Synchronize:
+        // writes only happen on a miss and every hit path just reads.
+        synchronized (this.runtimeMap) {
+            D definition = this.runtimeMap.get(runtimeId);
+            if (definition == null) {
+                this.runtimeMap.put(runtimeId, definition = this.factory.get(runtimeId));
+            }
+            return definition;
         }
-        return definition;
     }
 
     @Override
     public boolean isRegistered(D definition) {
-        return this.runtimeMap.get(definition.getRuntimeId()) == definition;
+        synchronized (this.runtimeMap) {
+            return this.runtimeMap.get(definition.getRuntimeId()) == definition;
+        }
     }
 
 }

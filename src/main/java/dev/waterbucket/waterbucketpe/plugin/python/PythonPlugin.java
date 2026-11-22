@@ -63,6 +63,20 @@ public class PythonPlugin extends Plugin {
 
     private final ProxyServer proxy;
     private volatile Context context;
+
+    /**
+     * Serializes registration (subscribe/registerCommand/schedule*) against disable. The
+     * context null-check alone was a check-then-act: a handler registered concurrently with
+     * onDisable slipped past the check while the detach phase was already running, leaving a
+     * subscription or a repeating task permanently attached - every event or tick fired into
+     * the closed interpreter until shutdown. onDisable sets {@link #disabling} under this lock
+     * BEFORE any detach work, so anything registered after that point bails out here, and
+     * anything registered before it is guaranteed to be detached by the phase that follows.
+     * The lock never covers the plugin's own callbacks (on_disable hook, handlers), so a
+     * hook that re-registers cannot deadlock - it just sees the flag and stops.
+     */
+    private final Object lifecycleLock = new Object();
+    private volatile boolean disabling;
     private volatile Value module;
     private final List<Subscription> eventSubscriptions = Collections.synchronizedList(new ArrayList<>());
     private final List<String> registeredCommands = Collections.synchronizedList(new ArrayList<>());
@@ -166,6 +180,10 @@ public class PythonPlugin extends Plugin {
 
     @Override
     public void onDisable() {
+        // Publish the disabling flag before any detach work: see lifecycleLock.
+        synchronized (this.lifecycleLock) {
+            this.disabling = true;
+        }
         this.callHook("on_disable", this);
         // Stop scheduler-driven work first, then detach everything that points into the
         // interpreter BEFORE closing it. Handlers and commands left behind used to be invoked
@@ -248,30 +266,32 @@ public class PythonPlugin extends Plugin {
     public <T extends dev.waterbucket.waterbucketpe.event.Event> void subscribe(Class<T> eventClass, Consumer<? super T> handler) {
         // After disable the interpreter is closed; a stale callback registering a handler
         // would attach a consumer that throws a PolyglotException on every event.
-        if (this.context == null) {
-            this.getLogger().warn("Python plugin {} is not enabled; ignoring subscribe request for {}",
-                    this.getName(), eventClass == null ? null : eventClass.getSimpleName());
-            return;
-        }
-        Consumer<T> wrapped = event -> {
-            try {
-                if (event.isCompletable()) {
-                    CompletableFuture<Void> done = new CompletableFuture<>();
-                    event.addCompletableFuture(done);
-                    try {
-                        handler.accept(event);
-                    } finally {
-                        done.complete(null);
-                    }
-                } else {
-                    handler.accept(event);
-                }
-            } catch (Throwable t) {
-                this.getLogger().error("Python plugin {} threw in an event handler", this.getName(), t);
+        synchronized (this.lifecycleLock) {
+            if (this.context == null || this.disabling) {
+                this.getLogger().warn("Python plugin {} is not enabled; ignoring subscribe request for {}",
+                        this.getName(), eventClass == null ? null : eventClass.getSimpleName());
+                return;
             }
-        };
-        this.proxy.getEventManager().subscribe(eventClass, wrapped);
-        this.eventSubscriptions.add(new Subscription(eventClass, (Consumer<dev.waterbucket.waterbucketpe.event.Event>) wrapped));
+            Consumer<T> wrapped = event -> {
+                try {
+                    if (event.isCompletable()) {
+                        CompletableFuture<Void> done = new CompletableFuture<>();
+                        event.addCompletableFuture(done);
+                        try {
+                            handler.accept(event);
+                        } finally {
+                            done.complete(null);
+                        }
+                    } else {
+                        handler.accept(event);
+                    }
+                } catch (Throwable t) {
+                    this.getLogger().error("Python plugin {} threw in an event handler", this.getName(), t);
+                }
+            };
+            this.proxy.getEventManager().subscribe(eventClass, wrapped);
+            this.eventSubscriptions.add(new Subscription(eventClass, (Consumer<dev.waterbucket.waterbucketpe.event.Event>) wrapped));
+        }
     }
 
     /**
@@ -288,18 +308,21 @@ public class PythonPlugin extends Plugin {
     public boolean registerCommand(String name, String description, String usage, List<String> aliases,
                                    String permission, PythonCommandExecutor handler) {
         // After disable the interpreter is closed; a command registered then could never be
-        // unregistered again and executed against a dead context.
-        if (this.context == null) {
-            this.getLogger().warn("Python plugin {} is not enabled; ignoring command registration for /{}",
-                    this.getName(), name);
+        // unregistered again and executed against a dead context. Serialized against onDisable
+        // via lifecycleLock - see the field comment.
+        synchronized (this.lifecycleLock) {
+            if (this.context == null || this.disabling) {
+                this.getLogger().warn("Python plugin {} is not enabled; ignoring command registration for /{}",
+                        this.getName(), name);
+                return false;
+            }
+            PythonCommand command = new PythonCommand(this, name, description, usage, aliases, permission, handler);
+            if (this.proxy.getCommandMap().registerCommand(command)) {
+                this.registeredCommands.add(command.getName());
+                return true;
+            }
             return false;
         }
-        PythonCommand command = new PythonCommand(this, name, description, usage, aliases, permission, handler);
-        if (this.proxy.getCommandMap().registerCommand(command)) {
-            this.registeredCommands.add(command.getName());
-            return true;
-        }
-        return false;
     }
 
     /**
@@ -316,11 +339,13 @@ public class PythonPlugin extends Plugin {
      * cancelled automatically when the plugin is disabled.
      */
     public void scheduleAsync(Runnable task) {
-        if (this.context == null) {
-            this.getLogger().warn("Python plugin {} is not enabled; ignoring scheduleAsync request", this.getName());
-            return;
+        synchronized (this.lifecycleLock) {
+            if (this.context == null || this.disabling) {
+                this.getLogger().warn("Python plugin {} is not enabled; ignoring scheduleAsync request", this.getName());
+                return;
+            }
+            this.track(this.proxy.getScheduler().scheduleAsync(this.wrapTask(task)));
         }
-        this.track(this.proxy.getScheduler().scheduleAsync(this.wrapTask(task)));
     }
 
     /**
@@ -328,11 +353,13 @@ public class PythonPlugin extends Plugin {
      * tasks are cancelled automatically when the plugin is disabled.
      */
     public void scheduleDelayed(Runnable task, int delayTicks) {
-        if (this.context == null) {
-            this.getLogger().warn("Python plugin {} is not enabled; ignoring scheduleDelayed request", this.getName());
-            return;
+        synchronized (this.lifecycleLock) {
+            if (this.context == null || this.disabling) {
+                this.getLogger().warn("Python plugin {} is not enabled; ignoring scheduleDelayed request", this.getName());
+                return;
+            }
+            this.track(this.proxy.getScheduler().scheduleDelayed(this.wrapTask(task), delayTicks, true));
         }
-        this.track(this.proxy.getScheduler().scheduleDelayed(this.wrapTask(task), delayTicks, true));
     }
 
     /**
@@ -340,11 +367,13 @@ public class PythonPlugin extends Plugin {
      * Scheduled tasks are cancelled automatically when the plugin is disabled.
      */
     public void scheduleRepeating(Runnable task, int periodTicks) {
-        if (this.context == null) {
-            this.getLogger().warn("Python plugin {} is not enabled; ignoring scheduleRepeating request", this.getName());
-            return;
+        synchronized (this.lifecycleLock) {
+            if (this.context == null || this.disabling) {
+                this.getLogger().warn("Python plugin {} is not enabled; ignoring scheduleRepeating request", this.getName());
+                return;
+            }
+            this.track(this.proxy.getScheduler().scheduleRepeating(this.wrapTask(task), periodTicks, true));
         }
-        this.track(this.proxy.getScheduler().scheduleRepeating(this.wrapTask(task), periodTicks, true));
     }
 
     private Runnable wrapTask(Runnable task) {

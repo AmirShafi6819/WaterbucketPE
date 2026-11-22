@@ -550,7 +550,11 @@ public class ProxyServer {
         String[] shiftedArgs;
         if (command != null && command.getSettings().isQuoteAware()) { // Quote aware parsing
             List<String> arguments = CommandUtils.parseArguments(message);
-            arguments.remove(0);
+            // A plugin-registered quote-aware command named purely of quote characters parses
+            // to an empty argument list; remove(0) threw out of the player command path.
+            if (!arguments.isEmpty()) {
+                arguments.remove(0);
+            }
             shiftedArgs = arguments.toArray(String[]::new);
         } else {
             shiftedArgs = args.length > 1 ? Arrays.copyOfRange(args, 1, args.length) : EmptyArrays.EMPTY_STRINGS;

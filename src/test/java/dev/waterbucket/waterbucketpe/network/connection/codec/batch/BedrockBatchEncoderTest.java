@@ -112,6 +112,45 @@ class BedrockBatchEncoderTest {
         }
     }
 
+    @Test
+    void dropsUnencodablePacketsInsteadOfKillingThePeer() {
+        // A HANDLED packet whose encode failed carries no buffer. encodedLength/concat used to
+        // throw IllegalArgumentException on it, which exceptionCaught turned into a full peer
+        // disconnect plus a security-manager IP block - for one bad packet.
+        BedrockBatchWrapper batch = BedrockBatchWrapper.newInstance();
+        BedrockPacketWrapper broken = BedrockPacketWrapper.create();
+        // no packetBuffer set: encode failed
+        batch.addPacket(broken);
+        BedrockPacketWrapper good = BedrockPacketWrapper.create();
+        good.setPacketBuffer(Unpooled.buffer(4).writeZero(4));
+        batch.addPacket(good);
+
+        List<BedrockBatchWrapper> encoded = encode(batch);
+        try {
+            assertEquals(1, encoded.size());
+            assertEquals(1, encoded.get(0).getPackets().size(),
+                    "the unencodable wrapper must be dropped, the rest of the batch must travel");
+        } finally {
+            encoded.forEach(BedrockBatchWrapper::release);
+        }
+    }
+
+    @Test
+    void aBatchOfOnlyUnencodablePacketsProducesAnEmptyBatchWithoutThrowing() {
+        BedrockBatchWrapper batch = BedrockBatchWrapper.newInstance();
+        BedrockPacketWrapper broken = BedrockPacketWrapper.create();
+        batch.addPacket(broken);
+
+        List<BedrockBatchWrapper> encoded = encode(batch);
+        try {
+            assertEquals(1, encoded.size());
+            assertEquals(0, encoded.get(0).getPackets().size(),
+                    "an all-unencodable batch travels as an empty batch, not as an exception");
+        } finally {
+            encoded.forEach(BedrockBatchWrapper::release);
+        }
+    }
+
     private static final class TransportEmbeddedChannel extends EmbeddedChannel implements TransportChannel {
         TransportEmbeddedChannel(ChannelHandler... handlers) {
             super(handlers);

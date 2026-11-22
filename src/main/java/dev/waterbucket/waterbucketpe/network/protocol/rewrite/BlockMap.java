@@ -115,12 +115,20 @@ public class BlockMap implements BedrockPacketHandler {
                         }
                         to.writeBytes(from, nWords * Integer.BYTES);
 
-                        int nPaletteEntries = VarInts.readInt(from);
-                        VarInts.writeInt(to, nPaletteEntries);
-
-                        for (int i = 0; i < nPaletteEntries; i++) {
-                            int runtimeId = VarInts.readInt(from);
-                            VarInts.writeInt(to, this.translateId(runtimeId));
+                        // The palette section (a length VarInt plus one runtime-id VarInt per
+                        // entry) can be truncated mid-VarInt just like the words were; degrade
+                        // to pass-through instead of throwing out of the packet handler. Bytes
+                        // already written to `to` are discarded with it - on a false return the
+                        // caller passes the original, unrewritten buffer on.
+                        try {
+                            int nPaletteEntries = VarInts.readInt(from);
+                            VarInts.writeInt(to, nPaletteEntries);
+                            for (int i = 0; i < nPaletteEntries; i++) {
+                                int runtimeId = VarInts.readInt(from);
+                                VarInts.writeInt(to, this.translateId(runtimeId));
+                            }
+                        } catch (IndexOutOfBoundsException truncated) {
+                            return false;
                         }
                     }
                 }

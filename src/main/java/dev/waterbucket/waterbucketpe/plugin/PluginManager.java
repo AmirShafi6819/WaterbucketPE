@@ -75,6 +75,12 @@ public class PluginManager {
     private final Set<String> missingClasses = ConcurrentHashMap.newKeySet();
 
     private final List<Pair<PluginYAML, Path>> pluginsToLoad = new ObjectArrayList<>();
+    /**
+     * Flipped at the end of {@link #loadAllPlugins()}. After boot nothing consumes
+     * {@code pluginsToLoad}, so a runtime {@code loadPlugin} call that registers a class loader
+     * appended its pair to the list forever - a small per-call leak of dead bookkeeping.
+     */
+    private volatile boolean bootScanComplete = false;
     /*
      * Appended from enablePlugin, which is public runtime API callable from plugin threads;
      * a plain list lost entries under concurrent enables and produced a wrong reverse-disable
@@ -181,7 +187,9 @@ public class PluginManager {
             // A new loader may provide classes that were missing before: forget the negatives
             this.missingClasses.clear();
             classLoader.markRegisteredWithManager();
-            this.pluginsToLoad.add(ObjectObjectImmutablePair.of(config, path));
+            if (!this.bootScanComplete) {
+                this.pluginsToLoad.add(ObjectObjectImmutablePair.of(config, path));
+            }
             this.proxy.getLogger().debug("Loaded class loader from {}", path.getFileName());
         }
         return classLoader;
@@ -190,12 +198,20 @@ public class PluginManager {
     public void loadAllPlugins() {
         // Iterate a snapshot: a failed load releases its class loader, so re-reaching the
         // loadPlugin re-load path (registerClassLoader) appends to pluginsToLoad - iterating
-        // the live list consumed its own appends and never terminated.
+        // the live list consumed its own appends and never terminated. One extra drain pass
+        // lets a load that registered a genuinely new loader mid-loop still be enabled, then
+        // the list is closed (bootScanComplete) so runtime registrations stop accumulating.
         List<Pair<PluginYAML, Path>> toLoad = new ObjectArrayList<>(this.pluginsToLoad);
         this.pluginsToLoad.clear();
         for (Pair<PluginYAML, Path> pair : toLoad) {
             this.loadPlugin(pair.key(), pair.value());
         }
+        List<Pair<PluginYAML, Path>> midLoopRegistrations = new ObjectArrayList<>(this.pluginsToLoad);
+        this.pluginsToLoad.clear();
+        for (Pair<PluginYAML, Path> pair : midLoopRegistrations) {
+            this.loadPlugin(pair.key(), pair.value());
+        }
+        this.bootScanComplete = true;
     }
 
     public Plugin loadPlugin(PluginYAML config, Path path) {

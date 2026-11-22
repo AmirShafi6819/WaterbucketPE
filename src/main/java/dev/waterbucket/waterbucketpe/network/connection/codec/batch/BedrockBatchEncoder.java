@@ -31,12 +31,23 @@ public class BedrockBatchEncoder extends MessageToMessageEncoder<BedrockBatchWra
 
     @Override
     protected void encode(ChannelHandlerContext ctx, BedrockBatchWrapper msg, List<Object> out) {
+        List<BedrockPacketWrapper> packets = msg.getPackets();
+        // A packet the bridge re-encoded (HANDLED) whose encode failed in BedrockPacketCodec has
+        // a null packetBuffer. encodedLength/concat would throw on it and the resulting
+        // exceptionCaught kicked the whole peer AND IP-blocked the client for one bad packet.
+        // Drop exactly those wrappers from the batch and let the rest travel.
+        for (BedrockPacketWrapper packet : packets) {
+            if (packet.getPacketBuffer() == null) {
+                packets.removeIf(broken -> broken.getPacketBuffer() == null);
+                break;
+            }
+        }
+
         if (!msg.isModified() && (msg.getCompressed() != null || msg.getUncompressed() != null)) {
             out.add(msg.retain());
             return;
         }
 
-        List<BedrockPacketWrapper> packets = msg.getPackets();
         int maxBatchSize = maxBatchSize(ctx);
         int start = 0;
         int size = 0;
@@ -84,7 +95,8 @@ public class BedrockBatchEncoder extends MessageToMessageEncoder<BedrockBatchWra
     }
 
     private static ByteBuf concat(ChannelHandlerContext ctx, List<BedrockPacketWrapper> packets) {
-        CompositeByteBuf buf = ctx.alloc().compositeDirectBuffer(packets.size() * 2);
+        // An all-unencodable batch arrives here with zero packets: maxNumComponents must stay >= 1.
+        CompositeByteBuf buf = ctx.alloc().compositeDirectBuffer(Math.max(1, packets.size() * 2));
         try {
             for (BedrockPacketWrapper packet : packets) {
                 ByteBuf message = packet.getPacketBuffer();

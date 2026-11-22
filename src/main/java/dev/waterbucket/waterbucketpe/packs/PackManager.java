@@ -72,14 +72,24 @@ public class PackManager {
     @Getter
     private volatile Map<String, ResourcePack> packsByIdVer = new HashMap<>();
 
+    // All four swap together with the volatile maps above. Writers run on the reload scheduler
+    // thread and plugin threads, readers on event loops and the login path - without volatile
+    // a joining player could pair the new pack maps with the stale info/stack packets and be
+    // disconnected by the resource-pack handler after every reload that raced a join.
     @Getter
-    private ResourcePacksInfoPacket packsInfoPacket = new ResourcePacksInfoPacket();
+    private volatile ResourcePacksInfoPacket packsInfoPacket = new ResourcePacksInfoPacket();
     @Getter
-    private ResourcePackStackPacket stackPacket = new ResourcePackStackPacket();
+    private volatile ResourcePackStackPacket stackPacket = new ResourcePackStackPacket();
 
-    private ResourcePacksInfoPacket noCdnPacksInfoPacket;
+    private volatile ResourcePacksInfoPacket noCdnPacksInfoPacket;
 
-    private Set<Platform> disabledCdnPlatforms = EnumSet.noneOf(Platform.class);
+    private volatile Set<Platform> disabledCdnPlatforms = EnumSet.noneOf(Platform.class);
+
+    // Serializes the snapshot-swap sequences of registerPack/unregisterPack/buildPacks. Without
+    // it two concurrent registrations swapped from stale snapshots: the loser's pack vanished
+    // from both maps with its ZipFile still open (fd leak), and a racing unregister could
+    // resurrect a pack that was already closed.
+    private final Object packSwapLock = new Object();
 
     // Directories loadPacks has been called with; reloadPacks re-scans all of them.
     private final List<Path> packDirectories = new ArrayList<>();
@@ -140,11 +150,14 @@ public class PackManager {
 
         // Swap the freshly built set in first, then dispose the old one, so an in-flight chunk request
         // is already reading the new packs before we close the packs it replaced.
-        Map<UUID, ResourcePack> oldPacks = this.packs;
-        this.disabledCdnPlatforms = disabled;
-        this.packs = newPacks;
-        this.packsByIdVer = newPacksByIdVer;
-        this.rebuildPackets();
+        Map<UUID, ResourcePack> oldPacks;
+        synchronized (this.packSwapLock) {
+            oldPacks = this.packs;
+            this.disabledCdnPlatforms = disabled;
+            this.packs = newPacks;
+            this.packsByIdVer = newPacksByIdVer;
+            this.rebuildPackets();
+        }
 
         for (ResourcePack pack : oldPacks.values()) {
             try {
@@ -397,18 +410,21 @@ public class PackManager {
 
         // Build the new set as a snapshot and swap it in whole, so event-loop readers never see
         // a map mid-mutation (the previous live HashMap mutation raced packInfoFromIdVer and
-        // rebuildPackets iteration).
-        Map<UUID, ResourcePack> newPacks = new HashMap<>(this.packs);
-        Map<String, ResourcePack> newPacksByIdVer = new HashMap<>(this.packsByIdVer);
-        if (newPacks.putIfAbsent(resourcePack.getPackId(), resourcePack) != null) {
-            return false;
-        }
+        // rebuildPackets iteration). The swap lock serializes concurrent register/unregister
+        // calls so a stale snapshot cannot drop a pack that another thread just added.
+        synchronized (this.packSwapLock) {
+            Map<UUID, ResourcePack> newPacks = new HashMap<>(this.packs);
+            Map<String, ResourcePack> newPacksByIdVer = new HashMap<>(this.packsByIdVer);
+            if (newPacks.putIfAbsent(resourcePack.getPackId(), resourcePack) != null) {
+                return false;
+            }
 
-        String packIdVer = resourcePack.getPackId() + "_" + resourcePack.getVersion();
-        newPacksByIdVer.put(packIdVer, resourcePack);
-        this.packs = newPacks;
-        this.packsByIdVer = newPacksByIdVer;
-        this.rebuildPackets();
+            String packIdVer = resourcePack.getPackId() + "_" + resourcePack.getVersion();
+            newPacksByIdVer.put(packIdVer, resourcePack);
+            this.packs = newPacks;
+            this.packsByIdVer = newPacksByIdVer;
+            this.rebuildPackets();
+        }
         return true;
     }
 
@@ -418,15 +434,17 @@ public class PackManager {
             return false;
         }
 
-        Map<UUID, ResourcePack> newPacks = new HashMap<>(this.packs);
-        Map<String, ResourcePack> newPacksByIdVer = new HashMap<>(this.packsByIdVer);
-        if (newPacks.remove(packId) == null) {
-            return false;
+        synchronized (this.packSwapLock) {
+            Map<UUID, ResourcePack> newPacks = new HashMap<>(this.packs);
+            Map<String, ResourcePack> newPacksByIdVer = new HashMap<>(this.packsByIdVer);
+            if (newPacks.remove(packId) == null) {
+                return false;
+            }
+            newPacksByIdVer.values().remove(resourcePack);
+            this.packs = newPacks;
+            this.packsByIdVer = newPacksByIdVer;
+            this.rebuildPackets();
         }
-        newPacksByIdVer.values().remove(resourcePack);
-        this.packs = newPacks;
-        this.packsByIdVer = newPacksByIdVer;
-        this.rebuildPackets();
 
         try {
             resourcePack.close();

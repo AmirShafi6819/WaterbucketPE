@@ -36,8 +36,10 @@ import java.util.*;
 public class ConfigurationManager {
 
     private final ProxyServer proxy;
-    private ProxyConfig proxyConfig;
-    private LangConfig langConfig;
+    // Swapped in from the reload path (scheduler thread) and read from every event loop and
+    // scheduler task - volatile so readers never pair a new config object with stale fields.
+    private volatile ProxyConfig proxyConfig;
+    private volatile LangConfig langConfig;
 
     public ConfigurationManager(ProxyServer proxy) {
         this.proxy = proxy;

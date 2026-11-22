@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -100,5 +101,50 @@ class BlockMapOwnershipTest {
         // A second release used to be possible through the dangling reference; releasing the
         // packet again must now throw instead of corrupting a buffer nobody owns.
         assertThrows(Throwable.class, packet::release);
+    }
+
+    @Test
+    void paletteTruncatedAfterTheWordsDegradesToPassThrough() {
+        // Format 8, one storage, flags 64 (bitsPerBlock 32 -> 128 words = 512 bytes), then a
+        // palette-count VarInt saying 2 entries but the buffer ends there. The palette section
+        // read used to throw IndexOutOfBoundsException out of the rewrite and kill the session;
+        // it must pass through unrewritten instead.
+        byte[] payload = new byte[3 + 512 + 1];
+        payload[0] = 8;   // chunk version with baked-in palette
+        payload[1] = 1;   // storage count
+        payload[2] = 64;  // flags: bitsPerBlock = 32
+        payload[3 + 512] = 2; // nPaletteEntries = 2, zero entries follow
+        BlockMap blockMap = this.newBlockMap();
+        LevelChunkPacket packet = this.chunkPacket(payload);
+        ByteBuf data = packet.getData();
+
+        PacketSignal signal = blockMap.handle(packet);
+
+        assertEquals(PacketSignal.UNHANDLED, signal);
+        assertSame(data, packet.getData(), "the original buffer must pass through on a truncated palette");
+        assertEquals(1, data.refCnt());
+        packet.release();
+        assertEquals(0, data.refCnt());
+    }
+
+    @Test
+    void paletteCountTruncatedMidVarIntDegradesToPassThrough() {
+        // The palette-count VarInt itself ends with a continuation bit and no bytes behind it.
+        byte[] payload = new byte[3 + 512 + 1];
+        payload[0] = 8;
+        payload[1] = 1;
+        payload[2] = 64;
+        payload[3 + 512] = (byte) 0x80; // VarInt continuation, truncated
+        BlockMap blockMap = this.newBlockMap();
+        LevelChunkPacket packet = this.chunkPacket(payload);
+        ByteBuf data = packet.getData();
+
+        PacketSignal signal = blockMap.handle(packet);
+
+        assertEquals(PacketSignal.UNHANDLED, signal);
+        assertSame(data, packet.getData());
+        assertEquals(1, data.refCnt());
+        packet.release();
+        assertEquals(0, data.refCnt());
     }
 }

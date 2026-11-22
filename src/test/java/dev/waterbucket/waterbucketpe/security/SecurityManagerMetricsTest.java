@@ -152,4 +152,38 @@ public class SecurityManagerMetricsTest {
         this.security.onLoginTimeout(CLIENT);
         verifyNoInteractions(this.metrics);
     }
+
+    @Test
+    public void doesNotBlockBelowTheFailedLoginStreak() {
+        // A handful of failed logins (key rotation hiccups, auth-service flaps) must not
+        // penalize the address.
+        for (int i = 0; i < SecurityManager.LOGIN_FAILURE_LIMIT - 1; i++) {
+            this.security.onLoginFailed(CLIENT, entry(false), null, "disconnectionScreen.notAuthenticated");
+        }
+        assertFalse(this.security.isAddressBlocked(((InetSocketAddress) CLIENT).getAddress()));
+    }
+
+    @Test
+    public void blocksAnAddressAfterAStreakOfFailedLogins() {
+        // Each failed login costs a full ECDSA/JWT chain validation; an address that keeps
+        // failing inside the window is now blocked for the normal error timeout (the old TODO).
+        for (int i = 0; i < SecurityManager.LOGIN_FAILURE_LIMIT; i++) {
+            this.security.onLoginFailed(CLIENT, entry(false), null, "disconnectionScreen.notAuthenticated");
+        }
+        assertTrue(this.security.isAddressBlocked(((InetSocketAddress) CLIENT).getAddress()));
+    }
+
+    @Test
+    public void noErrorTimeoutMeansNoLoginStreakBookkeeping() {
+        NetworkSettings settings = mock(NetworkSettings.class, RETURNS_DEEP_STUBS);
+        when(settings.getConnectionThrottleTime()).thenReturn(50);
+        when(settings.errorTimeout()).thenReturn(0);
+        when(this.proxy.getNetworkSettings()).thenReturn(settings);
+        this.security = new SecurityManager(this.proxy);
+
+        for (int i = 0; i < SecurityManager.LOGIN_FAILURE_LIMIT * 2; i++) {
+            this.security.onLoginFailed(CLIENT, entry(false), null, "disconnectionScreen.notAuthenticated");
+        }
+        assertFalse(this.security.isAddressBlocked(((InetSocketAddress) CLIENT).getAddress()));
+    }
 }

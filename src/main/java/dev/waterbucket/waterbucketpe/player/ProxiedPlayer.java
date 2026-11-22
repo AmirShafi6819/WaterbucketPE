@@ -309,22 +309,29 @@ public class ProxiedPlayer implements CommandSender {
             return;
         }
 
-        if (this.pendingServers.contains(targetServer)) {
-            this.sendMessage(new TranslationContainer("waterbucket.downstream.connecting", targetServer.getServerName()));
-            return;
-        }
+        // The contains->add pair is not atomic on the synchronized-wrapped list (connect() runs
+        // on event loops, panel executors, command futures). Two concurrent dials to the same
+        // target both passed the check, added duplicate entries, and dialled twice; list.remove
+        // only clears one occurrence, so a leftover blocked every later connect to that server
+        // with a permanent "connecting". Check and add under the same monitor.
+        synchronized (this.pendingServers) {
+            if (this.pendingServers.contains(targetServer)) {
+                this.sendMessage(new TranslationContainer("waterbucket.downstream.connecting", targetServer.getServerName()));
+                return;
+            }
 
-        // Deny new transfers while another one is mid-flight: starting a second transfer before the
-        // dimension change sequence completes corrupts the client state and the transfer queue.
-        TransferCallback activeTransfer = this.rewriteData.getTransferCallback();
-        if (activeTransfer != null && activeTransfer.getPhase() != TransferCallback.TransferPhase.RESET) {
-            this.sendMessage(new TranslationContainer("waterbucket.downstream.connecting", activeTransfer.getTargetServer().getServerName()));
-            this.getLogger().debug("[{}] Denied transfer to {}: transfer to {} is still in progress",
-                    this.getName(), targetServer.getServerName(), activeTransfer.getTargetServer().getServerName());
-            return;
-        }
+            // Deny new transfers while another one is mid-flight: starting a second transfer before the
+            // dimension change sequence completes corrupts the client state and the transfer queue.
+            TransferCallback activeTransfer = this.rewriteData.getTransferCallback();
+            if (activeTransfer != null && activeTransfer.getPhase() != TransferCallback.TransferPhase.RESET) {
+                this.sendMessage(new TranslationContainer("waterbucket.downstream.connecting", activeTransfer.getTargetServer().getServerName()));
+                this.getLogger().debug("[{}] Denied transfer to {}: transfer to {} is still in progress",
+                        this.getName(), targetServer.getServerName(), activeTransfer.getTargetServer().getServerName());
+                return;
+            }
 
-        this.pendingServers.add(targetServer);
+            this.pendingServers.add(targetServer);
+        }
 
         ClientConnection connectingServer = this.getPendingConnection();
         if (connectingServer != null) {

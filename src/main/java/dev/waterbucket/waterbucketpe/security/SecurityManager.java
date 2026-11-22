@@ -46,6 +46,25 @@ public class SecurityManager {
 
     private final Map<InetAddress, Long> blockedConnections = new ConcurrentHashMap<>();
 
+    /**
+     * Failed-login penalty: an address that keeps failing the crypto-heavy login chain is
+     * consuming ECDSA/JWT CPU per attempt (and plugin listener time). The login throttle
+     * already bounds attempts when enabled, but an operator can set it to 0, and blocked
+     * or throttled-rejected attempts never penalized the address at all. After
+     * {@link #LOGIN_FAILURE_LIMIT} failures inside the window the address is blocked for the
+     * normal error timeout, reusing the swept {@link #blockedConnections} structure.
+     */
+    static final int LOGIN_FAILURE_LIMIT = 32;
+    static final long LOGIN_FAILURE_WINDOW_MS = 60_000;
+
+    private final Map<InetAddress, LoginStreak> failedLogins = new ConcurrentHashMap<>();
+
+    /** Count + window start for one address. Approximate under races by design - throttling. */
+    private static final class LoginStreak {
+        final java.util.concurrent.atomic.AtomicLong count = new java.util.concurrent.atomic.AtomicLong();
+        volatile long windowStart;
+    }
+
     @Getter
     @Setter
     private SecurityListener listener;
@@ -75,6 +94,9 @@ public class SecurityManager {
                 this.proxy.getLogger().info("Unblocked address {}", entry.getKey());
             }
         }
+
+        // Drop stale failure counters so the map stays bounded by the active window.
+        this.failedLogins.values().removeIf(streak -> currTime - streak.windowStart > LOGIN_FAILURE_WINDOW_MS);
     }
 
     public void blockAddress(InetAddress address, long time, TimeUnit unit) {
@@ -142,6 +164,9 @@ public class SecurityManager {
 
     public String onLoginFailed(SocketAddress address, HandshakeEntry handshakeEntry, Throwable throwable, String reason) {
         this.loginFailed(this.loginFailure(handshakeEntry, throwable));
+        if (address instanceof InetSocketAddress inet) {
+            this.recordLoginFailure(inet.getAddress());
+        }
         if (this.listener != null) {
             try {
                 return this.listener.onLoginFailed(address, handshakeEntry, throwable, reason);
@@ -149,8 +174,33 @@ public class SecurityManager {
                 this.proxy.getLogger().warning("SecurityListener.onLoginFailed threw; using the default disconnect reason", t);
             }
         }
-        // TODO: probably throttle this as well?
         return reason;
+    }
+
+    /**
+     * Counts a failed login for the source address and blocks it once the streak exceeds the
+     * limit. Called per failed login only, so the steady-state cost for healthy traffic is a
+     * single map lookup.
+     */
+    private void recordLoginFailure(InetAddress address) {
+        int timeout = this.proxy.getNetworkSettings().errorTimeout();
+        if (timeout == 0) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        LoginStreak streak = this.failedLogins.compute(address, (addr, existing) -> {
+            if (existing == null || now - existing.windowStart > LOGIN_FAILURE_WINDOW_MS) {
+                existing = new LoginStreak();
+                existing.windowStart = now;
+            }
+            return existing;
+        });
+        if (streak.count.incrementAndGet() == LOGIN_FAILURE_LIMIT) {
+            this.blockedConnections.put(address, now + TimeUnit.SECONDS.toMillis(timeout));
+            this.failedLogins.remove(address);
+            this.proxy.getLogger().warning("Blocked address {} after {} failed logins within {}s",
+                    address, LOGIN_FAILURE_LIMIT, LOGIN_FAILURE_WINDOW_MS / 1000);
+        }
     }
 
     /**

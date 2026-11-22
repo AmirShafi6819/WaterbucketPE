@@ -115,14 +115,17 @@ public class FileUtils {
             file.createNewFile();
         }
 
-        FileOutputStream stream = new FileOutputStream(file);
-
-        byte[] buffer = new byte[1024];
-        int length;
-        while ((length = content.read(buffer)) != -1) {
-            stream.write(buffer, 0, length);
+        // Try-with-resources: neither stream used to be closed when the read or the write threw
+        // (disk full, quota), leaking the file descriptor - and on Windows the write lock on the
+        // target file - until GC finalization.
+        try (FileOutputStream stream = new FileOutputStream(file)) {
+            byte[] buffer = new byte[1024];
+            int length;
+            while ((length = content.read(buffer)) != -1) {
+                stream.write(buffer, 0, length);
+            }
+        } finally {
+            content.close();
         }
-        content.close();
-        stream.close();
     }
 }

@@ -25,6 +25,7 @@ import org.jline.reader.ParsedLine;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 public class CommandCompleter implements Completer {
@@ -54,9 +55,12 @@ public class CommandCompleter implements Completer {
         }
 
         if (parsedLine.wordIndex() > 1 && !parsedLine.word().isEmpty()) {
-            String world = parsedLine.word();
+            // matchPlayer lower-cases both sides; this completion path forgot the input side,
+            // so /send <TAB> never matched a player when the typed prefix contained an
+            // uppercase letter.
+            String world = parsedLine.word().toLowerCase(Locale.ROOT);
             for (ProxiedPlayer player : this.proxy.getPlayers().values()) {
-                if (player.getName().toLowerCase().startsWith(world)) {
+                if (player.getName().toLowerCase(Locale.ROOT).startsWith(world)) {
                     candidates.add(new Candidate(player.getName()));
                 }
 
