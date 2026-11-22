@@ -24,8 +24,13 @@ public class RewriteMaps {
 
     private final EntityTracker entityTracker;
     private final EntityMap entityMap;
+    /**
+     * Set during StartGame handling on the joining downstream's event loop and read by
+     * LevelChunkPacket rewrites on whichever downstream loop produced the chunk, so the
+     * reference handoff must be memory-visible.
+     */
     @Setter
-    private BlockMap blockMap;
+    private volatile BlockMap blockMap;
 
     public RewriteMaps(ProxiedPlayer player) {
         this.entityTracker = new EntityTracker(player);

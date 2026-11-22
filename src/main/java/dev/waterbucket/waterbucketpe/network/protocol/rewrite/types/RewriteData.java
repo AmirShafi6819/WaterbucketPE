@@ -39,56 +39,64 @@ import java.util.function.LongConsumer;
 @Setter
 public class RewriteData {
 
+    /*
+     * Everything from here down to immobileFlag is written once per server join/switch in
+     * StartGame handling on the new downstream event loop, while rewrites of client->server
+     * packets read it on the upstream loop and other loops. Plain fields had no happens-before
+     * edge between those threads (the volatile transferCallback write happens before these
+     * updates, not after), so readers could observe stale entity ids or dimensions. Writes are
+     * once per switch, so volatile is free for the relay hot path.
+     */
     /**
      * The original entityId known to the client
      */
     @Getter
-    private long entityId;
+    private volatile long entityId;
     /**
      * The downstream-known runtime entityId
      */
     @Getter
-    private long originalRuntimeEntityId;
+    private volatile long originalRuntimeEntityId;
     /**
      * The downstream-known unique entityId, BDS keeps it apart from the runtime one
      */
     @Getter
-    private long originalUniqueEntityId;
+    private volatile long originalUniqueEntityId;
 
     @Getter
-    private BlockPalette blockPalette;
+    private volatile BlockPalette blockPalette;
     @Getter
-    private BlockPaletteRewrite blockPaletteRewrite;
+    private volatile BlockPaletteRewrite blockPaletteRewrite;
     @Getter
-    private List<BlockPropertyData> blockProperties;
+    private volatile List<BlockPropertyData> blockProperties;
 
     /**
      * A list of GameRules currently known to the client.
      */
     @Getter
-    private List<GameRuleData<?>> gameRules;
+    private volatile List<GameRuleData<?>> gameRules;
     /**
      * The dimensionId the player is currently in
      */
     @Getter
-    private int dimension = 0;
+    private volatile int dimension = 0;
     @Getter
     private volatile TransferCallback transferCallback;
     /**
      * Captured from the first StartGamePacket: settings the client can not change without a reconnect.
      */
     @Getter
-    private StartGameSettings startGameSettings;
+    private volatile StartGameSettings startGameSettings;
     /**
      * The store entrypoint currently known to the client.
      */
     @Getter
-    private ClientStoreEntrypointConfiguration storeEntrypoint;
+    private volatile ClientStoreEntrypointConfiguration storeEntrypoint;
 
     @Getter
-    private Vector3f spawnPosition;
+    private volatile Vector3f spawnPosition;
     @Getter
-    private Vector2f rotation;
+    private volatile Vector2f rotation;
     /**
      * Whether the client is on the death screen of the current server
      */
@@ -103,7 +111,7 @@ public class RewriteData {
      * Server known value of immobile flag
      * Actually applied value may be different during server transfer
      */
-    private boolean immobileFlag;
+    private volatile boolean immobileFlag;
 
     /**
      * The name that is shown up in the player list (or pause menu)

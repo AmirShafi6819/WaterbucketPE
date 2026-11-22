@@ -65,7 +65,11 @@ public class BedrockClientConnection extends SimpleChannelInboundHandler<Bedrock
     private final List<Runnable> disconnectListeners = new ObjectArrayList<>();
 
     private volatile BedrockPacketHandler packetHandler;
-    private CompressionStrategy compressionStrategy;
+    /**
+     * Replaced by CompressionInitHandler on this connection's event loop, but read from the
+     * upstream loop by sendPacket while relaying client batches; must be memory-visible.
+     */
+    private volatile CompressionStrategy compressionStrategy;
 
     public BedrockClientConnection(ProxiedPlayer player, ServerInfo serverInfo, Channel channel) {
         this.player = player;

@@ -16,8 +16,6 @@
 package dev.waterbucket.waterbucketpe.network.protocol.rewrite.types;
 
 import dev.waterbucket.waterbucketpe.network.protocol.ProtocolVersion;
-import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
-import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ShortLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ShortMap;
 import it.unimi.dsi.fastutil.shorts.Short2ObjectLinkedOpenHashMap;
@@ -26,13 +24,30 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.cloudburstmc.nbt.NbtList;
 import org.cloudburstmc.nbt.NbtMap;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * Class used to map Block Palettes, as some server-softwares are randomizing them.
  * Prevents glitches with blocks.
  */
 public class BlockPalette {
 
-    private static final Int2ObjectMap<BlockPalette> paletteCache = new Int2ObjectOpenHashMap<>();
+    /**
+     * StartGame handling runs on every player's downstream event loop, so the cache is
+     * read and written concurrently. The previous plain {@code Int2ObjectOpenHashMap} with a
+     * contains-get-put sequence could corrupt its internal buckets when two loops inserted
+     * the same or different palettes at once.
+     */
+    private static final Map<Integer, BlockPalette> paletteCache = new ConcurrentHashMap<>();
+    /**
+     * The cache is unbounded by design otherwise: every distinct palette hash is retained for
+     * the proxy's lifetime. Real deployments see a handful of palettes (per game version and
+     * server software), so this cap only protects against pathological servers that send a
+     * fresh palette per player; past the cap new palettes are built per use, which is correct
+     * but uncached.
+     */
+    private static final int PALETTE_CACHE_MAX_ENTRIES = 256;
     private final Object2ShortMap<BlockPair> entryToId = new Object2ShortLinkedOpenHashMap<>();
     private final Short2ObjectMap<BlockPair> idToEntry = new Short2ObjectLinkedOpenHashMap<>();
 
@@ -46,13 +61,16 @@ public class BlockPalette {
 
     public static BlockPalette getPalette(NbtList<NbtMap> paletteData, ProtocolVersion protocol) {
         int hashId = paletteData.hashCode();
-        if (paletteCache.containsKey(hashId)) {
-            return paletteCache.get(hashId);
+        BlockPalette cached = paletteCache.get(hashId);
+        if (cached != null) {
+            return cached;
         }
 
         BlockPalette palette = new BlockPalette(paletteData, protocol);
-        paletteCache.put(hashId, palette);
-        return palette;
+        if (paletteCache.size() < PALETTE_CACHE_MAX_ENTRIES) {
+            paletteCache.putIfAbsent(hashId, palette);
+        }
+        return paletteCache.getOrDefault(hashId, palette);
     }
 
     public BlockPaletteRewrite createRewrite(BlockPalette upstreamPalette) {

@@ -44,7 +44,13 @@ public class ProxyBatchBridge implements BedrockPacketHandler {
     private final BedrockCodec codec;
     private final BedrockCodecHelper helper;
 
-    private ProxyPacketHandler handler;
+    /*
+     * Replaced by setHandler when a session finishes its handshake or completes a transfer.
+     * That call runs on the loop whose batch processing triggered the swap (e.g. the upstream
+     * loop on transfer phase 2), while batches continue to be processed on the other leg's
+     * loop - so the field must be volatile to guarantee the swap is observed.
+     */
+    private volatile ProxyPacketHandler handler;
     private boolean forceEncode;
     private PacketDirection direction;
     /** Packet ids from downstream that already failed to decode, so each is logged once per connection. */
