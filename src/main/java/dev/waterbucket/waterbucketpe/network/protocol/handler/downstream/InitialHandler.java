@@ -32,6 +32,7 @@ import dev.waterbucket.waterbucketpe.network.protocol.rewrite.types.StartGameSet
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.network.protocol.Signals;
 import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
+import lombok.extern.log4j.Log4j2;
 import org.cloudburstmc.protocol.bedrock.util.EncryptionUtils;
 import org.cloudburstmc.protocol.common.PacketSignal;
 
@@ -41,6 +42,7 @@ import java.security.interfaces.ECPublicKey;
 import java.util.Base64;
 import java.util.concurrent.ThreadLocalRandom;
 
+@Log4j2
 public class InitialHandler extends AbstractDownstreamHandler {
 
     public InitialHandler(ProxiedPlayer player, ClientConnection connection) {
@@ -113,6 +115,22 @@ public class InitialHandler extends AbstractDownstreamHandler {
     @Override
     public final PacketSignal handle(StartGamePacket packet) {
         RewriteData rewriteData = this.player.getRewriteData();
+        if (!this.player.isConnected()) {
+            this.connection.disconnect();
+            return Signals.CANCEL;
+        }
+
+        // A newer connect() request (fallback, retry) discards this initial dial asynchronously,
+        // but its START_GAME may already be in flight. Without this check the stale connection
+        // would overwrite clientConnection and the rewrite data mid-recovery, mirroring the
+        // guard SwitchDownstreamHandler applies to every transfer.
+        if (this.player.getPendingConnection() != this.connection) {
+            this.connection.disconnect();
+            log.warn("[{}] Aborted initial connection to {} because the connection was discarded!",
+                    this.player.getName(), this.connection.getServerInfo().getServerName());
+            return Signals.CANCEL;
+        }
+
         rewriteData.setOriginalRuntimeEntityId(packet.getRuntimeEntityId());
         rewriteData.setOriginalUniqueEntityId(packet.getUniqueEntityId());
         rewriteData.setEntityId(ThreadLocalRandom.current().nextInt(10000, 15000));

@@ -16,12 +16,18 @@
 package dev.waterbucket.waterbucketpe.transfer;
 
 import dev.waterbucket.waterbucketpe.event.defaults.ServerTransferFailedEvent;
+import dev.waterbucket.waterbucketpe.event.defaults.InitialServerConnectedEvent;
 import dev.waterbucket.waterbucketpe.network.connection.client.ClientConnection;
 import dev.waterbucket.waterbucketpe.network.connection.handler.ReconnectReason;
 import dev.waterbucket.waterbucketpe.network.protocol.handler.downstream.InitialHandler;
 import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
+import org.cloudburstmc.math.vector.Vector2f;
+import org.cloudburstmc.math.vector.Vector3f;
+import org.cloudburstmc.protocol.bedrock.data.AuthoritativeMovementMode;
+import org.cloudburstmc.protocol.bedrock.data.GameType;
 import org.cloudburstmc.protocol.bedrock.packet.DisconnectPacket;
 import org.cloudburstmc.protocol.bedrock.packet.PlayStatusPacket;
+import org.cloudburstmc.protocol.bedrock.packet.StartGamePacket;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -65,6 +72,65 @@ public class InitialHandlerTest {
         PlayStatusPacket packet = new PlayStatusPacket();
         packet.setStatus(PlayStatusPacket.Status.LOGIN_FAILED_SERVER_OLD);
         return packet;
+    }
+
+    private static StartGamePacket newStartGame() {
+        StartGamePacket packet = new StartGamePacket();
+        packet.setRuntimeEntityId(100);
+        packet.setUniqueEntityId(100);
+        packet.setPlayerPosition(Vector3f.from(0, 64, 0));
+        packet.setRotation(Vector2f.ZERO);
+        packet.setDimensionId(0);
+        packet.setPlayerGameType(GameType.SURVIVAL);
+        packet.setLevelGameType(GameType.SURVIVAL);
+        packet.setDifficulty(1);
+        packet.setDayCycleStopTime(0);
+        packet.setAuthoritativeMovementMode(AuthoritativeMovementMode.SERVER);
+        packet.setRewindHistorySize(20);
+        packet.setServerAuthoritativeBlockBreaking(true);
+        packet.setInventoriesServerAuthoritative(true);
+        packet.setBlockNetworkIdsHashed(false);
+        return packet;
+    }
+
+    @Test
+    void startGameJoinsTheInitialServer() {
+        this.handler.handle(newStartGame());
+
+        assertSame(this.initialConnection, this.harness.player.getDownstreamConnection());
+        assertNull(this.harness.player.getPendingConnection(), "a completed join must clear the pending slot");
+        assertEquals(1, this.harness.events(InitialServerConnectedEvent.class).size());
+        assertTrue(this.initialConnection == this.harness.player.getPendingConnection()
+                || this.harness.player.getPendingConnection() == null);
+    }
+
+    @Test
+    void abortsStartGameFromDiscardedConnection() {
+        // Mirrors the fallback race: onTransferFailure ran while the dial's START_GAME was in
+        // flight and the pending slot no longer names this connection.
+        this.harness.setPendingConnection(null);
+
+        this.handler.handle(newStartGame());
+
+        verify(this.initialConnection).disconnect();
+        assertNull(this.harness.player.getDownstreamConnection(),
+                "a discarded dial must not hijack the player's downstream");
+        assertEquals(0, this.harness.events(InitialServerConnectedEvent.class).size());
+        assertTrue(this.harness.player.isConnected());
+    }
+
+    @Test
+    void abortsStartGameWhenAnotherConnectionIsPending() {
+        ServerInfo newer = this.harness.newServer("fallback");
+        ClientConnection newerConnection = this.harness.newDownstream(newer);
+        this.harness.setPendingConnection(newerConnection);
+
+        this.handler.handle(newStartGame());
+
+        verify(this.initialConnection).disconnect();
+        assertNull(this.harness.player.getDownstreamConnection());
+        assertSame(newerConnection, this.harness.player.getPendingConnection(),
+                "the newer dial must keep the pending slot");
     }
 
     @Test
