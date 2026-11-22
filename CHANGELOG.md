@@ -3,6 +3,59 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
+## [1.4.0] - 2026-11-22
+
+The final engineering pass. Two full rounds since 1.3.0 — a plugin-engine
+audit-and-hardening round (Phase 3 + Phase 5, 13 commits) and a proxy-wide
+stability hardening round (14 commits) — plus the final-phase benchmarking
+and scale-validation tooling. Everything is evidence-backed: 328 tests green
+on the release build, and the WaterdogPE comparison was re-measured on the
+same VM with the same harness and JVM flags.
+
+### Added
+- **Progressive scale-validation harness** (`benchmarks/bench_scale.py`):
+  drives cumulative hold stages (50 -> 600 sessions, one hold-forever
+  `RakBenchClient` per delta) sampling RSS/session, CPU and paced
+  unconnected-ping RTT, with a 5-loss safety gate that aborts instead of
+  reporting unobserved capacity. `RakBenchClient` gained `holdSeconds < 0`
+  (hold until killed) for cumulative populations. The partial run in this
+  environment is recorded verbatim (`results-scale.json`); the 500-session
+  milestone remains covered by `bench_final.py` (`scale_held=500`).
+- **WaterdogPE comparison, like-for-like** (`benchmarks/results.json`): same
+  VM, same harness, same flags — startup, idle RSS/CPU, ping RTT, handshake
+  churn, 200 held sessions, ~500 held sessions, churn-leak probes on both
+  proxies. Full context and caveats in `benchmarks/METHODOLOGY.md`.
+- **Final engineering report** (`docs/FINAL_ENGINEERING_REPORT.md`): the
+  whole project — architecture, method, numbers, comparison verdict,
+  limitations — in one place, with the Gate A-F verification matrix.
+- Bedrock-level A/B benchmark for transfers (`BedrockBench.java`,
+  `bench_bedrock.py`): fast transfers measured end-to-end, not inferred.
+- Bounded, portable final-phase driver (`bench_final.py`): no hardcoded JDK
+  paths (`BENCH_JAVA` selects the runtime).
+
+### Fixed (plugin engine, Phase 3 + 5)
+- Descriptor parsing hardened and plugin file boundaries enforced (Stage F);
+  negative class cache scoped to registered loaders, failed loaders released
+  without closing shared jars (Stage G).
+- Plugin failures contained, enable chains serialized, callback and
+  security-listener failures isolated, displaced players restored (Stage E).
+- Command-map iteration synchronized, plugin API null contracts validated,
+  event descriptors fuzzed, disable and mixed-event-type workloads measured
+  (Phase 5).
+
+### Fixed (proxy-wide stability round)
+- Transfer handoff guarded against duplicate logins and hostile payloads;
+  malformed pongs, failed channel inits and listener floods contained;
+  round-robin fallback bounded and empty priority lists refused cleanly.
+- Configuration accessor contracts honored, parse errors survived without
+  killing the proxy; displaced packs closed, manifests validated, chunk
+  requests bounded.
+- Panel: connection loss surfaced, empty states handled, a content security
+  policy added; rolled log archives pruned after 30 days; startup/shutdown
+  reported honestly to supervisors and terminals; runtime NetherNet identity
+  material kept out of version control; plugin class definition serialized
+  under the JVM per-name loading lock.
+
 ## [1.3.0] - 2026-11-22
 
 Phase 2: a stability- and resource-efficiency pass over the networking, rewrite and
