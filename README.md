@@ -214,6 +214,7 @@ Docker images are published from the workflow for every tagged release.
 - [Phase 2 baseline report](docs/PHASE2_BASELINE.md) · [Phase 2 final report](docs/PHASE2_FINAL_REPORT.md)
 - [Phase 3 plugin architecture map](docs/PHASE3_PLUGIN_ARCHITECTURE.md) · [Phase 3 plugin audit](docs/PHASE3_PLUGIN_AUDIT.md) · [Phase 3 final report](docs/PHASE3_FINAL_REPORT.md)
 - [Phase 5 plugin second-pass report](docs/PHASE5_PLUGIN_REPORT.md)
+- [Proxy-wide stability hardening report (third pass)](docs/STABILITY_ROUND_REPORT.md)
 - [Web panel](docs/PLUGINS.md) (API reference) · config comments in `configs/config.txt`
 - [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Changelog](CHANGELOG.md)
 
