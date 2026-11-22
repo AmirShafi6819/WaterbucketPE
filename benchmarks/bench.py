@@ -104,7 +104,9 @@ class ProxyProcess:
         with open(os.path.join(self.workdir, "config.yml"), "w") as fh:
             fh.write(BENCH_CONFIG)
         env = dict(os.environ)
-        env["JAVA_HOME"] = "/home/z/jdk17"
+        # Derived from the selected binary: the previous hardcoded path broke the harness on
+        # machines whose JDK lives elsewhere; BENCH_JAVA already selects the runtime.
+        env["JAVA_HOME"] = os.path.dirname(os.path.dirname(JAVA))
         self.log = open(log_path, "wb")
         self.proc = subprocess.Popen(
             [JAVA, *JVM_FLAGS, "-jar", self.jar],

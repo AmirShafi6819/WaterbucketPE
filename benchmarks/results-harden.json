@@ -1,0 +1,65 @@
+{
+  "results": [
+    {
+      "name": "harden-round",
+      "jar": "Waterbucket.jar",
+      "jvm_flags": "-Xms128M -Xmx512M -XX:+UseG1GC -XX:MaxGCPauseMillis=200",
+      "port": 19132,
+      "params": {
+        "startup_runs": 2,
+        "ping_count": 400,
+        "churn_count": 100,
+        "hold_count": 120,
+        "hold_seconds": 6,
+        "leak_rounds": 2
+      },
+      "startup": [
+        2.2233147690003534,
+        2.220426829999269
+      ],
+      "idle_rss_kb": [
+        233500,
+        227956
+      ],
+      "idle_cpu_pct": [
+        16.399539614085615,
+        20.998734061918782
+      ],
+      "ping_rtt_ms": {
+        "count": 400,
+        "lost": 0,
+        "median": 0.3283285013822024,
+        "p95": 0.814515699767071
+      },
+      "concurrent_ping": {
+        "sent": 200,
+        "replies": 200,
+        "replies_per_sec": 264.52311209271784,
+        "loss_pct": 0.0
+      },
+      "handshake_churn": {
+        "ok": 100,
+        "failed": 0,
+        "connect_ms_median": 3.4355,
+        "connect_ms_p95": 29.61585,
+        "wall_s": 3.623825521000981,
+        "cpu_pct": 38.35725511464611,
+        "connects_per_sec": 27.595147564493608
+      },
+      "live_sessions": {
+        "ok": 120,
+        "failed": 0,
+        "connect_ms_median": 3.779,
+        "connect_ms_p95": 32.0918,
+        "held": 120,
+        "rss_delta_kb": 14268,
+        "kb_per_session": 118.9,
+        "cpu_pct": 33.040062849843544
+      },
+      "churn_growth_mb": [
+        4.93,
+        1.41
+      ]
+    }
+  ]
+}
