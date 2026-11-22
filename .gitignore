@@ -41,3 +41,6 @@ config.yml
 !.github/ISSUE_TEMPLATE/config.yml
 lang.ini
 plugins/
+
+# Runtime NetherNet identity material - never commit private keys
+nethernet/
