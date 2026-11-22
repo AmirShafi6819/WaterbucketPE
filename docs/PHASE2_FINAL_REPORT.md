@@ -264,9 +264,11 @@ operations (see §13).
 
 Measured and architectural facts left on the table, in priority order:
 
-1. **Harness capability**: a Bedrock-level login client would let Phase 3 measure
-   transfer-path latency, chunk-relay throughput and server-switch p99 — the three
-   currently unmeasurable paths (§7). This is the highest-leverage next investment.
+1. **Harness capability**: RESOLVED for two of the three paths — the Bedrock-level
+   client added after publication (see the §7 postscript) now measures transfer-path
+   latency (−59%) and switch completion (−59%, p95 −52%). **Chunk-relay throughput
+   under live gameplay traffic** remains unmeasured and is the highest-leverage next
+   harness investment.
 2. **Backpressure for slow clients**: with autoRead-based cross-leg backpressure ruled
    unsound on RakNet legs, the remaining lever is application-level write-queue depth
    accounting per leg with a kick threshold — designed but not scheduled.
