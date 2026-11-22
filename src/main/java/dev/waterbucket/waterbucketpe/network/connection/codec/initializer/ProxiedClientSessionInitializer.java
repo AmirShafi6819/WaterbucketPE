@@ -56,7 +56,19 @@ public class ProxiedClientSessionInitializer extends ChannelInitializer<Channel>
     }
 
     @Override
-    protected void initChannel(Channel channel) {
+    protected void initChannel(Channel channel) throws Exception {
+        try {
+            this.initChannel0(channel);
+        } catch (Exception e) {
+            // Netty's ChannelInitializer swallows an initChannel failure and just closes the
+            // channel; the connect promise used to stay unresolved forever, leaving the player
+            // stuck with a pendingServers entry and a permanent "connecting..." state.
+            this.promise.tryFailure(e);
+            throw e;
+        }
+    }
+
+    private void initChannel0(Channel channel) {
         int rakVersion = this.getTransportProfile().codecVersion();
         CompressionType compression = this.player.getProxy().getConfiguration().getCompression();
 
@@ -127,6 +139,14 @@ public class ProxiedClientSessionInitializer extends ChannelInitializer<Channel>
     private static class ChannelActiveHandler extends ChannelInboundHandlerAdapter {
         private final ClientConnection connection;
         private final Promise<ClientConnection> promise;
+
+        @Override
+        public void handlerAdded(ChannelHandlerContext ctx) {
+            // Safety net for a channel that closes before it ever becomes active; once the
+            // promise has succeeded via channelActive this is a no-op.
+            ctx.channel().closeFuture().addListener(future ->
+                    this.promise.tryFailure(new java.nio.channels.ClosedChannelException()));
+        }
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {

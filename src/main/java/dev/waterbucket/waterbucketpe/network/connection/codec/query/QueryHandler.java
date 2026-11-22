@@ -62,7 +62,10 @@ public class QueryHandler extends SimpleChannelInboundHandler<DatagramPacket> {
     }
 
     public void onQueryExpired(InetAddress address, QuerySession session) {
-        this.proxy.getLogger().warning("Pending query from " + address + " has expired: token=" + session.token);
+        // Debug level, without the token: an address that only handshakes (spoofed sources,
+        // scanners hitting the session cap) would otherwise sustain a warning flood, and the
+        // session token is not for the log file.
+        this.proxy.getLogger().debug("Pending query from " + address + " has expired");
     }
 
     private void writeInt(ByteBuf buf, int i) {

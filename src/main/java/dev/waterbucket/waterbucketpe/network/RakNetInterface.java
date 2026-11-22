@@ -44,8 +44,10 @@ public class RakNetInterface implements NetworkInterface {
     private final long serverId;
 
     /**
-     * Written by whoever triggers the shutdown (tick thread, console, shutdown hook) and read
-     * from the re-entry guard below; volatile so two shutdown callers cannot both pass it.
+     * Written by the boot thread in start() and read from whichever thread triggers shutdown
+     * (tick thread, console, shutdown hook); volatile so shutdown observes the started state.
+     * Note this is visibility only - the check-then-act in shutdown() is not atomic, but the
+     * close() it guards is idempotent.
      */
     private volatile boolean running = false;
 

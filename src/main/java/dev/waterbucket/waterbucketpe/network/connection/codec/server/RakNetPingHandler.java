@@ -46,15 +46,22 @@ public class RakNetPingHandler extends SimpleChannelInboundHandler<RakPing> {
 
         StringJoiner joiner = new StringJoiner(";");
         joiner.add("MCPE");
-        joiner.add(event.getMotd().replace(";", "\\;")); // MOTD
+        // The pong is a ';'-joined record: escape every config/plugin-supplied text field, not
+        // just the MOTD, so a ';' in the sub-motd can no longer shift the player counts or drop
+        // the trailing fields on the client.
+        joiner.add(escapeField(event.getMotd())); // MOTD
         joiner.add(Integer.toString(ProtocolVersion.latest().getProtocol())); // Protocol id
-        joiner.add(event.getVersion()); // Game version
+        joiner.add(escapeField(event.getVersion())); // Game version
         joiner.add(Integer.toString(event.getPlayerCount())); // Player count
         joiner.add(Integer.toString(event.getMaximumPlayerCount())); // Max players
         joiner.add(Long.toUnsignedString(guid)); // Server guid
-        joiner.add(event.getSubMotd()); // Sub-motd
-        joiner.add(event.getGameType()); // Game type
+        joiner.add(escapeField(event.getSubMotd())); // Sub-motd
+        joiner.add(escapeField(event.getGameType())); // Game type
         joiner.add("1"); // Nintendo limited
         ctx.writeAndFlush(rakPing.reply(guid, Unpooled.wrappedBuffer(joiner.toString().getBytes(StandardCharsets.UTF_8))));
+    }
+
+    private static String escapeField(String field) {
+        return field == null ? "" : field.replace(";", "\\;");
     }
 }

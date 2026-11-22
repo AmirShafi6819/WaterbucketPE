@@ -80,7 +80,12 @@ public class NetherNetInterface implements NetworkInterface, SignalingService {
     private volatile NetherNetProvider provider;
     /** Stable for the lifetime of the process, like the BDS advertisement nonce. */
     private OperatorIdentity identity;
-    private boolean running;
+    /**
+     * Written by the boot thread in start(), read by shutdown/isRunning from other threads
+     * (shutdown hook, tick, panel); volatile so shutdown always observes a completed start,
+     * matching {@code RakNetInterface}.
+     */
+    private volatile boolean running;
     /** Whether the listener started first, the only one that registers with NXS, has started. */
     private boolean primaryStarted;
     /** The media port of the first listener, 0 until NetherNet runs there. */

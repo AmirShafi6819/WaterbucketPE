@@ -60,9 +60,29 @@ public class ClientPingHandler extends ChannelDuplexHandler {
             this.timeoutFuture = null;
         }
 
-        ctx.channel().close();
+        try {
+            // fromRakNet parses the pong record and can throw on a malformed one; a throw used
+            // to leave the promise unresolved forever (the panel ping hung) and the RakPong's
+            // retained slice unreleased.
+            this.future.trySuccess(BedrockPong.fromRakNet(rakPong.getPongData()));
+        } catch (Throwable t) {
+            this.future.tryFailure(t);
+        } finally {
+            // The pong holds a retained slice of a pooled buffer; as the last handler in the
+            // pipeline nothing after us releases it.
+            rakPong.release();
+            ctx.channel().close();
+        }
+    }
 
-        this.future.trySuccess(BedrockPong.fromRakNet(rakPong.getPongData()));
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        // A channel that closes before the pong arrives (refused downstream, network drop) used
+        // to cancel the timeout via close() without ever completing the promise.
+        if (!this.future.isDone()) {
+            this.future.tryFailure(new java.nio.channels.ClosedChannelException());
+        }
+        super.channelInactive(ctx);
     }
 
     @Override

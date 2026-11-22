@@ -35,7 +35,7 @@ public class EventLoops {
     private static final ChannelType CHANNEL_TYPE;
 
     static {
-        boolean disableNative = System.getProperties().contains("disableNativeEventLoop");
+        boolean disableNative = System.getProperties().containsKey("disableNativeEventLoop");
 
         if (!disableNative && Epoll.isAvailable()) {
             CHANNEL_TYPE = ChannelType.EPOLL;

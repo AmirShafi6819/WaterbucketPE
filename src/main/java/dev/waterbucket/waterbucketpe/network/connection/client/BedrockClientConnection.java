@@ -85,7 +85,16 @@ public class BedrockClientConnection extends SimpleChannelInboundHandler<Bedrock
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        this.disconnectListeners.forEach(Runnable::run);
+        // Isolate the listeners: a throwing listener used to abort the forEach, skip the
+        // remaining listeners and stop the channelInactive chain before ClientEventHandler's
+        // own inactive handling (transfer/failure recovery) could run.
+        for (Runnable listener : List.copyOf(this.disconnectListeners)) {
+            try {
+                listener.run();
+            } catch (Throwable t) {
+                log.warn("A disconnect listener of {} threw", this.getSocketAddress(), t);
+            }
+        }
         super.channelInactive(ctx);
     }
 
