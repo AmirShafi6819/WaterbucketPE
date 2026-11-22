@@ -80,8 +80,21 @@ public class ZipResourcePack extends ResourcePack {
     @Override
     public void saveToCache() throws IOException {
         try (FileChannel fileChannel = FileChannel.open(this.packPath)) {
-            ByteBuffer buffer = ByteBuffer.allocateDirect((int) fileChannel.size());
-            fileChannel.read(buffer);
+            long size = fileChannel.size();
+            if (size > Integer.MAX_VALUE) {
+                // A pack larger than the cached-bytebuffer capacity is simply not cached; the
+                // previous (int) cast silently wrapped to a negative size.
+                return;
+            }
+            ByteBuffer buffer = ByteBuffer.allocateDirect((int) size);
+            // FileChannel.read is allowed to stop short; a partial fill used to send zero-padded
+            // chunks to clients.
+            while (buffer.hasRemaining()) {
+                int read = fileChannel.read(buffer);
+                if (read < 0) {
+                    break;
+                }
+            }
             buffer.rewind();
             this.cachedPack = buffer;
         }

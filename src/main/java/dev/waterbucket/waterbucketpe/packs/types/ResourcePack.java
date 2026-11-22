@@ -62,7 +62,9 @@ public abstract class ResourcePack {
         try (InputStream stream = this.getStream(PackManifest.MANIFEST_PATH)) {
             if (stream != null) {
                 this.packManifest = PackManifest.fromStream(stream);
-                return true;
+                // An empty manifest.json deserializes to null; reporting success used to push
+                // the NPE into every later getPackManifest() call.
+                return this.packManifest != null;
             }
         }
         return false;

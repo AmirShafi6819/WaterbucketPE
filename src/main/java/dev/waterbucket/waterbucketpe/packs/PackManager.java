@@ -65,10 +65,12 @@ public class PackManager {
 
     private final ProxyServer proxy;
     // Rebuilt and swapped in as a whole on (re)load so joining players read a complete, consistent set.
+    // Volatile + snapshot swaps: registerPack/unregisterPack (plugin threads) must never mutate the
+    // live maps the event loops read, mirroring how buildPacks replaces them.
     @Getter
-    private Map<UUID, ResourcePack> packs = new HashMap<>();
+    private volatile Map<UUID, ResourcePack> packs = new HashMap<>();
     @Getter
-    private Map<String, ResourcePack> packsByIdVer = new HashMap<>();
+    private volatile Map<String, ResourcePack> packsByIdVer = new HashMap<>();
 
     @Getter
     private ResourcePacksInfoPacket packsInfoPacket = new ResourcePacksInfoPacket();
@@ -167,10 +169,24 @@ public class PackManager {
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(packsDirectory)) {
             for (Path path : stream) {
                 ResourcePack resourcePack = this.constructPack(path);
-                if (resourcePack != null) {
-                    packsByIdVer.put(resourcePack.getPackId() + "_" + resourcePack.getPackManifest().getHeader().getVersion(), resourcePack);
-                    packs.put(resourcePack.getPackId(), resourcePack);
+                if (resourcePack == null) {
+                    continue;
                 }
+                ResourcePack previous = packs.put(resourcePack.getPackId(), resourcePack);
+                if (previous != null && previous != resourcePack) {
+                    // A duplicate UUID used to silently overwrite the first pack and leak its
+                    // open ZipFile; close the displaced pack and drop its id-version entry.
+                    this.proxy.getLogger().warning("Local resource pack " + path.getFileName()
+                            + " has the same UUID as an already loaded pack (" + resourcePack.getPackId()
+                            + ")! Keeping the first one and skipping this duplicate.");
+                    packs.put(resourcePack.getPackId(), previous);
+                    packsByIdVer.values().remove(previous);
+                    try {
+                        resourcePack.close();
+                    } catch (IOException ignored) {}
+                    continue;
+                }
+                packsByIdVer.put(resourcePack.getPackId() + "_" + resourcePack.getPackManifest().getHeader().getVersion(), resourcePack);
             }
         } catch (IOException e) {
             this.proxy.getLogger().error("Can not load packs!", e);
@@ -338,17 +354,27 @@ public class PackManager {
 
     private ResourcePack loadPack(Path packPath, Class<? extends ResourcePack> clazz) throws Exception {
         ResourcePack pack = clazz.getDeclaredConstructor(Path.class).newInstance(packPath);
-        if (!pack.loadManifest() || !pack.getPackManifest().validate()) {
-            return null;
-        }
+        try {
+            if (!pack.loadManifest() || !pack.getPackManifest().validate()) {
+                // The ZipFile was opened in the constructor; a rejected manifest used to leak it.
+                pack.close();
+                return null;
+            }
 
-        File contentKeyFile = new File(packPath.getParent().toFile(), packPath.toFile().getName() + ".key");
-        pack.setContentKey(contentKeyFile.exists() ? Files.readString(contentKeyFile.toPath(), StandardCharsets.UTF_8).replace("\n", "") : "");
+            File contentKeyFile = new File(packPath.getParent().toFile(), packPath.toFile().getName() + ".key");
+            pack.setContentKey(contentKeyFile.exists() ? Files.readString(contentKeyFile.toPath(), StandardCharsets.UTF_8).replace("\n", "") : "");
 
-        if (this.proxy.getConfiguration().getPackCacheSize() >= (pack.getPackSize() / FileUtils.INT_MEGABYTE)) {
-            pack.saveToCache();
+            if (this.proxy.getConfiguration().getPackCacheSize() >= (pack.getPackSize() / FileUtils.INT_MEGABYTE)) {
+                pack.saveToCache();
+            }
+            return pack;
+        } catch (Exception e) {
+            // Same leak on any later failure (content key read, cache write).
+            try {
+                pack.close();
+            } catch (IOException ignored) {}
+            throw e;
         }
-        return pack;
     }
 
     /**
@@ -366,31 +392,45 @@ public class PackManager {
 
     public boolean registerPack(ResourcePack resourcePack) {
         Preconditions.checkNotNull(resourcePack, "Resource pack can not be null!");
-        Preconditions.checkArgument(resourcePack.getPackManifest().validate(), "Resource pack has invalid manifest!");
+        Preconditions.checkArgument(resourcePack.getPackManifest() != null && resourcePack.getPackManifest().validate(),
+                "Resource pack has invalid manifest!");
 
-        if (this.packs.get(resourcePack.getPackId()) != null) {
+        // Build the new set as a snapshot and swap it in whole, so event-loop readers never see
+        // a map mid-mutation (the previous live HashMap mutation raced packInfoFromIdVer and
+        // rebuildPackets iteration).
+        Map<UUID, ResourcePack> newPacks = new HashMap<>(this.packs);
+        Map<String, ResourcePack> newPacksByIdVer = new HashMap<>(this.packsByIdVer);
+        if (newPacks.putIfAbsent(resourcePack.getPackId(), resourcePack) != null) {
             return false;
         }
 
         String packIdVer = resourcePack.getPackId() + "_" + resourcePack.getVersion();
-        this.packsByIdVer.put(packIdVer, resourcePack);
-        this.packs.put(resourcePack.getPackId(), resourcePack);
+        newPacksByIdVer.put(packIdVer, resourcePack);
+        this.packs = newPacks;
+        this.packsByIdVer = newPacksByIdVer;
         this.rebuildPackets();
         return true;
     }
 
     public boolean unregisterPack(UUID packId) {
-        ResourcePack resourcePack = this.packs.remove(packId);
+        ResourcePack resourcePack = this.packs.get(packId);
         if (resourcePack == null) {
             return false;
         }
+
+        Map<UUID, ResourcePack> newPacks = new HashMap<>(this.packs);
+        Map<String, ResourcePack> newPacksByIdVer = new HashMap<>(this.packsByIdVer);
+        if (newPacks.remove(packId) == null) {
+            return false;
+        }
+        newPacksByIdVer.values().remove(resourcePack);
+        this.packs = newPacks;
+        this.packsByIdVer = newPacksByIdVer;
+        this.rebuildPackets();
+
         try {
             resourcePack.close();
         } catch (IOException ignored) {}
-
-        String packIdVer = resourcePack.getPackId() + "_" + resourcePack.getVersion();
-        this.packsByIdVer.remove(packIdVer);
-        this.rebuildPackets();
         return true;
     }
 
@@ -408,15 +448,21 @@ public class PackManager {
         boolean hasCdnPacks = false;
         for (ResourcePack pack : this.packs.values()) {
             // The CDN URL goes straight into the packet entry; disabled platforms get a stripped copy below.
+            String type = pack.getType();
+            if (type == null) {
+                // Defensive: an unresolvable pack type must not abort the whole rebuild.
+                this.proxy.getLogger().warning("Resource pack " + pack.getPackName() + " (" + pack.getPackId() + ") has no module type; it is not offered to clients");
+                continue;
+            }
             ResourcePacksInfoPacket.Entry infoEntry = this.createInfoEntry(pack, pack.getCdnUrl());
             ResourcePackStackPacket.Entry stackEntry = new ResourcePackStackPacket.Entry(pack.getPackId().toString(), pack.getVersion().toString(), "");
             if (pack.getCdnUrl() != null) {
                 hasCdnPacks = true;
             }
-            if (pack.getType().equals(ResourcePack.TYPE_RESOURCES)) {
+            if (type.equals(ResourcePack.TYPE_RESOURCES)) {
                 infoPacket.getResourcePackInfos().add(infoEntry);
                 stackPacket.getResourcePacks().add(stackEntry);
-            } else if (pack.getType().equals(ResourcePack.TYPE_DATA)) {
+            } else if (type.equals(ResourcePack.TYPE_DATA)) {
                 infoPacket.getBehaviorPackInfos().add(infoEntry);
                 stackPacket.getBehaviorPacks().add(stackEntry);
             }
@@ -504,11 +550,20 @@ public class PackManager {
             return null;
         }
 
+        long offset = CHUNK_SIZE * (long) from.getChunkIndex();
+        // The index was validated against the offered info packet, which can describe an older
+        // (larger) pack after a mid-download reload; an out-of-range offset used to reach
+        // getChunk() and throw NegativeArraySizeException on the event loop. Returning null
+        // cleanly disconnects the requesting client instead.
+        if (offset < 0 || offset >= resourcePack.getPackSize()) {
+            return null;
+        }
+
         ResourcePackChunkDataPacket packet = new ResourcePackChunkDataPacket();
         packet.setPackId(from.getPackId());
         packet.setPackVersion(from.getPackVersion());
         packet.setChunkIndex(from.getChunkIndex());
-        packet.setData(Unpooled.wrappedBuffer(resourcePack.getChunk((int) CHUNK_SIZE * from.getChunkIndex(), (int) CHUNK_SIZE)));
+        packet.setData(Unpooled.wrappedBuffer(resourcePack.getChunk((int) offset, (int) CHUNK_SIZE)));
         packet.setProgress(CHUNK_SIZE * from.getChunkIndex());
         return packet;
     }

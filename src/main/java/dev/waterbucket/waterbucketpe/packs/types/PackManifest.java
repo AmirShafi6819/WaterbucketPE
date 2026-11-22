@@ -53,6 +53,11 @@ public class PackManifest {
         if (this.formatVersion == null || this.header == null || this.modules == null) {
             return false;
         }
+        // The pack type is read from the first module; an empty modules list used to pass this
+        // check and then crash the boot (or half-corrupt a reload) in rebuildPackets.
+        if (this.modules.isEmpty() || this.modules.get(0).getType() == null) {
+            return false;
+        }
         return this.header.description != null && this.header.name != null && this.header.uuid != null && this.header.version != null;
     }
 

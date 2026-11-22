@@ -26,6 +26,8 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
@@ -61,5 +63,41 @@ class PackManagerTest {
         ResourcePackChunkDataPacket last = packManager.packChunkDataPacket(id + "_1.0.0", request);
         assertEquals(204_800, last.getProgress());
         assertEquals(45_200, last.getData().readableBytes());
+    }
+
+    @Test
+    void outOfRangeChunkIndexIsRejectedWithoutThrowing() {
+        // A chunk index validated against a larger offered pack (mid-download reload) used to
+        // produce a negative array size inside getChunk and kill the event loop.
+        PackManager packManager = new PackManager(mock(ProxyServer.class, RETURNS_DEEP_STUBS));
+        UUID id = UUID.randomUUID();
+        ResourcePack pack = mock(ResourcePack.class, RETURNS_DEEP_STUBS);
+        when(pack.getPackManifest().validate()).thenReturn(true);
+        when(pack.getPackId()).thenReturn(id);
+        when(pack.getVersion()).thenReturn(new PackedVersion(1, 0, 0));
+        when(pack.getType()).thenReturn(ResourcePack.TYPE_RESOURCES);
+        when(pack.getContentKey()).thenReturn("");
+        when(pack.getPackSize()).thenReturn((long) PACK_SIZE);
+        packManager.registerPack(pack);
+
+        ResourcePackChunkRequestPacket request = new ResourcePackChunkRequestPacket();
+        request.setPackId(id);
+        request.setPackVersion("1.0.0");
+        request.setChunkIndex(99);
+        assertNull(packManager.packChunkDataPacket(id + "_1.0.0", request));
+
+        request.setChunkIndex(-1);
+        assertNull(packManager.packChunkDataPacket(id + "_1.0.0", request));
+    }
+
+    @Test
+    void registerPackRejectsAMissingManifest() {
+        // registerPack used to NPE inside getPackManifest().validate() for a pack whose
+        // manifest never loaded; the documented answer is an IllegalArgumentException.
+        PackManager packManager = new PackManager(mock(ProxyServer.class, RETURNS_DEEP_STUBS));
+        ResourcePack pack = mock(ResourcePack.class);
+        when(pack.getPackManifest()).thenReturn(null);
+
+        assertThrows(IllegalArgumentException.class, () -> packManager.registerPack(pack));
     }
 }
