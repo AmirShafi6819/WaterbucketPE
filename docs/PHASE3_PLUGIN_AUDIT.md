@@ -87,3 +87,90 @@ Descriptor parsing runs before any plugin code executes and for every scanned ja
 
 *Stage C (event engine audit) and Stage D (API and compatibility audit) are appended below as
 they complete.*
+
+---
+
+## Stage C — Event engine audit
+
+### C.1 Dispatch correctness (§6.2/§6.3)
+
+Verified by the existing suite (all green before any Phase 3 change) plus the Phase 3
+reproduction tests; the full set re-runs after every fix stage as the behavior fingerprint:
+
+- priority ordering `LOWEST → NORMAL → HIGHEST` and same-priority registration order
+  (`EventManagerConcurrencyTest.priorityOrderingIsPreserved`);
+- duplicate subscription runs once per call (`duplicateSubscriptionOfSameHandlerRunsItOncePerCall`);
+- concurrent subscribe + dispatch never loses a handler or fails
+  (`eventCallsWhileSubscribingNeverFailOrLoseHandlers`);
+- one broken handler cannot stop later handlers (`brokenHandlerDoesNotBreakOthers`);
+- unsubscribe-by-identity and no-op unsubscribe (`unsubscribeStopsDispatchAndUnknownHandlersAreNoOps`);
+- concurrent subscribe/unsubscribe stays consistent
+  (`concurrentSubscribeAndUnsubscribeStayConsistent`);
+- Python handlers share the exact same failure semantics (logged, never propagated)
+  (`PythonPluginTest.brokenPythonHandlersDoNotBreakEventDispatch`,
+  `brokenCompletableHandlerDoesNotFailTheEventPipeline`).
+
+Cancellation, payload and ordering semantics are untouched by every Phase 3 change (§6.2);
+the behavior fingerprint re-run is part of Stage H.
+
+### C.2 Measured performance (§6.1/§13)
+
+Method: `plugin/python/Phase3PluginEngineBenchmark.java` (runs only with `PHASE3_BENCH=true`),
+single JVM, per scenario 2–5 warmup rounds + 7–15 measured rounds, per-op nanos; identical
+workloads for the before/after runs (label via `PHASE3_BENCH_LABEL`). Every scenario drives
+the real production dispatch path — no bypassing of hooks. Full raw data:
+`benchmarks/results-plugin-phase3-before.json`.
+
+Baseline (unmodified code, JDK 17.0.21.1, Linux sandbox):
+
+| Scenario | Median | p95 | Note |
+| --- | --- | --- | --- |
+| sync dispatch, 0 handlers | 170 ns/op | 283 ns | empty pipeline incl. event alloc |
+| sync dispatch, 1 handler | 320 ns/op | 471 ns | noisy single-scenario (see rounds); same order as below |
+| sync dispatch, 5 handlers × 5 priorities | 79 ns/op | 226 ns | |
+| sync dispatch, 40 handlers × 5 priorities | 342 ns/op | 587 ns | ≈ 7 ns per handler |
+| sync dispatch, 320 handlers × 5 priorities | 2 328 ns/op | 2 472 ns | scales linearly |
+| cancellation (1 handler, cancelled) | 30 ns/op | 37 ns | |
+| completable sync event (1 handler) | 70 ns/op | 607 ns | future creation incl. |
+| allocations, 320-handler dispatch | 208 B/op | — | event + iterator |
+| async event round trip (1 handler) | 6.3 µs/op | 28 µs | pool scheduling + future |
+| subscribe + unsubscribe round trip | 2.6 µs/op | 5.3 µs | management operation |
+| **Python script load (context init)** | **4.22 s** | — | one-time per plugin, interpreter mode |
+| **Python no-op handler dispatch** | **33 µs/op** | 48 µs | pure bridge+interpreter cost |
+| Python bridge delta (320 java + 1 python) | 17.6 µs/op | 30 µs | python handler adds ~15 µs |
+| retained polyglot instances after disable | 0 | — | histogram captured; clean release |
+| plugin scan, 32 jars | 90 ms | — | 2.8 ms/jar descriptor parse |
+| plugin load, 32 plugins | 519 ms | — | 16.2 ms/plugin classload+init |
+| plugin enable, 32 plugins | 2.4 ms | — | |
+| **missing-class lookup across 32 loaders** | **194 µs/miss** | 351 µs | full jar-scan + exception fill per miss |
+
+Harness validity controls: the python handler execution is counted (`pythonHandlerInvocationsTotal`),
+handler instances are distinct anonymous objects (lambda call-site caching would silently
+deduplicate them), and the class histogram capture is asserted.
+
+### C.3 Stage C conclusions
+
+1. **The Java dispatch path has no measured bottleneck that warrants a code change.** Per
+   handler cost ≈ 7 ns; sync events are not on the per-packet path (packet handling does not
+   call `callEvent` per packet — events fire on lifecycle/chat/transfer boundaries), so even
+   2 µs dispatch with 320 handlers is negligible against the network pipeline. No change →
+   per §6.1 and §19, the dispatch engine is left untouched.
+2. **P3-14 is a measured bottleneck on the failure path**: one missing-class lookup costs
+   194 µs at 32 loaded plugins (each miss scans every plugin jar and fills 32 exceptions).
+   A plugin referencing a missing class repeatedly burns measurable CPU. Fixed in Stage G
+   with a global negative-lookup cache (outcome-identical: the same `ClassNotFoundException`),
+   measured before/after.
+3. **P3-13 (thread-per-concurrent-async-event) documented with numbers**: sequential async
+   round trips reuse pool threads (10 threads after 11 000 sequential dispatches); a
+   concurrent burst still allocates one thread per in-flight event — the bounded-queue
+   alternative was already rejected in Phase 2 (it would push blocking back into event
+   loops); the design is restated as an accepted, documented limit.
+4. **Python bridge overhead is inherent to the runtime choice** (GraalPy interpreter mode on
+   a standard JDK — docs/PLUGINS.md documents the GraalVM-JDK JIT caveat). Optimizing it
+   would mean changing the runtime architecture, which is out of scope. The one-time 4.2 s
+   interpreter initialization per Python plugin is likewise inherent; it happens during
+   `loadAllPlugins`, before the proxy accepts players.
+
+---
+
+*Stage D (API and compatibility audit) is appended below when complete.*
