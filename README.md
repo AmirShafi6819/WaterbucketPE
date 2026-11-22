@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/logo.png">
-    <img alt="WaterbucketPE" src=".github/logo.png" width="200">
+    <img alt="Water Bucket" src=".github/logo.png" width="200">
   </picture>
   <br>
   WaterbucketPE
@@ -19,6 +19,17 @@
   <a href="https://www.minecraft.net/"><img alt="Platform" src="https://img.shields.io/badge/platform-Bedrock%20Edition-62B47A"></a>
   <a href="https://github.com/AmirShafi6819/WaterbucketPE/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/AmirShafi6819/WaterbucketPE/build.yml?branch=master&label=build"></a>
   <a href="https://github.com/WaterdogPE/WaterdogPE"><img alt="Upstream" src="https://img.shields.io/badge/upstream-WaterdogPE-5B6B8C"></a>
+</p>
+
+<p align="center">
+  <a href="#about">About</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#screenshots">Screenshots</a> ·
+  <a href="#benchmark">Benchmark</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#plugins">Plugins</a> ·
+  <a href="#documentation">Docs</a> ·
+  <a href="#contributing">Contributing</a>
 </p>
 
 ---
@@ -79,15 +90,15 @@ nothing hidden; per-session RSS deltas are page-level and noisy between runs.
 the latest supported game version.
 
 ```bash
-# Linux
+# Linux / macOS
 java -jar Waterbucket.jar
 # or the provided script
 ./start.sh
 ```
 
 ```bat
-:: Windows - the release ships a native launcher
-Waterbucket.exe
+:: Windows
+start.bat
 ```
 
 Download the latest jar from the
@@ -96,7 +107,12 @@ source (below). The first start writes `configs/config.txt` (servers, priorities
 compression, panel), prints the web panel token location, and binds RakNet on port `19132`.
 Point your Bedrock clients at the proxy and register downstream servers under `servers:`.
 
-Docker images are published from the workflow for every tagged release.
+**Docker** — images are published to GitHub Container Registry for every tagged release:
+
+```bash
+docker run -d -p 19132:19132/udp -p 19132:19132/tcp \
+  ghcr.io/amirshafi6819/waterbucketpe:latest
+```
 
 ## Configuration highlights
 
@@ -158,6 +174,7 @@ Bug fixes need a regression test next to them; the transfer, event and player su
 Built on [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE) and the
 CloudburstMC protocol stack. Flush-consolidation tuning follows
 [Velocity](https://github.com/PaperMC/Velocity)'s published pipeline approach.
+See [NOTICE](NOTICE) for attribution details.
 
 ## License
 
