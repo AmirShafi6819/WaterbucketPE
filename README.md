@@ -4,12 +4,13 @@
     <img alt="Water Bucket" src=".github/logo.png" width="200">
   </picture>
   <br>
-  WaterbucketPE
+  WaterBucketPE
 </h1>
 
 <p align="center">
-  <strong>A fast, memory-efficient Minecraft: Bedrock Edition proxy</strong><br>
-  Forked from the well-known <a href="https://github.com/WaterdogPE/WaterdogPE">WaterdogPE</a> proxy
+  <strong>The Bedrock proxy that stays smooth when players show up.</strong><br>
+  A drop-in WaterdogPE replacement with a rebuilt networking core, a Liquid Glass web panel,
+  plugins in Java <em>and</em> Python, and benchmarks we publish even when they hurt.
 </p>
 
 <p align="center">
@@ -27,8 +28,9 @@
   <a href="#screenshots">Screenshots</a> ·
   <a href="#benchmark">Benchmark</a> ·
   <a href="#quick-start">Quick start</a> ·
+  <a href="#the-web-panel">Web panel</a> ·
   <a href="#plugins">Plugins</a> ·
-  <a href="#documentation">Docs</a> ·
+  <a href="#roadmap">Roadmap</a> ·
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -36,44 +38,59 @@
 
 ## About
 
-WaterbucketPE is a drop-in replacement for WaterdogPE: same protocol behavior, the same
-plugin API, and the same configuration format — with a rebuilt networking core, a built-in
-web panel, an embedded **Python plugin runtime** next to the classic Java one, and hardening
-against the real bug classes we could reproduce.
+WaterBucketPE is what WaterdogPE would be if it were rebuilt around one question: *what does
+an operator actually feel?* Smooth joins instead of CPU spikes, a panel you can read at a
+glance in two languages, messages you can reword without touching code, and a benchmark chart
+that shows upstream winning whenever it actually does.
 
-**Compatibility promise:** existing WaterdogPE jar plugins run unchanged. Configs, commands,
-transfers, forwarding and the event API are preserved. The Python front-end is purely additive.
+Everything WaterdogPE offers still works here: the same protocol behavior, the same plugin
+API, the same configuration format. **Existing WaterdogPE jar plugins run unchanged** —
+configs, transfers, forwarding and the event API are preserved, and the old `wd*` commands
+answer as aliases of the rebranded `wb*` ones. The Python front-end is purely additive.
+
+| | |
+|---|---|
+| **Smooth joins** | the login crypto, zlib codec and every packet class warm up at boot, so the first player of the day doesn't pay for JIT and class loading in front of everyone |
+| **Honest numbers** | the WaterdogPE comparison is measured by one harness on one machine, re-measured whenever the harness itself has a bug, adverse panels reported as ties |
+| **Operator surface** | Liquid Glass panel (dark/light, fa/en), editable layout, per-server management, colored console |
+| **Customizable messages** | every player-visible text — kick reasons, transfer errors, the shutdown notice — lives in one `ingame-messages.yml` with § color codes |
 
 ## Features
 
 - **Stable proxy core** — cross-loop visibility fixes locked by contract tests, bounded
-  queues, guarded transfer handoff, and failure containment at every layer.
+  queues, guarded transfer handoff, hot-reload visibility and snapshot races fixed, failure
+  containment at every layer: one malformed packet never kills a peer or IP-blocks a client.
 - **Fast networking** — per-leg zlib compression levels, flush consolidation on both legs,
-  right-sized event loops, adaptive packet-batch drain, and O(1) player lookups.
-- **Web panel** — a token-secured dashboard served by the proxy itself: live charts, players,
-  downstream servers with real pings, and a console that runs proxy commands.
+  right-sized event loops and pooled allocators, adaptive packet-batch drain, O(1) player lookups.
+- **Web panel built in** — token-secured, served by the proxy itself, no external services:
+  live charts, players, per-server management with real pings, a command console with colored
+  output, and a drag-and-drop layout editor. Persian and English, dark and light.
 - **Plugins in Java *and* Python** — the classic jar API is untouched; Python plugins are
   plain folders next to your jars, powered by GraalPy with zero configuration.
-- **Efficient memory use** — release-mode leak detection off, right-sized caches, and no
-  known leaks under connect/disconnect churn.
-- **Actively maintained** — full regression suite (`./gradlew test`), CI on every push, and
-  docker images published for every tagged release.
+- **Messages you own** — `ingame-messages.yml` covers every text a player can see, with §
+  codes and `{%0}` placeholders documented inline.
+- **Quiet logs by design** — STUN/ICE noise filtered without hiding real failures; the
+  console shows `time LEVEL | message` and nothing floods.
+- **Actively maintained** — 59 test suites / 339 tests green on every change, CI on every
+  push, docker images for every tagged release.
 
 ## Screenshots
 
-| Dashboard | Players |
+| Dashboard | Servers |
 |---|---|
-| ![Dashboard](docs/screenshots/panel-dashboard.png) | ![Players](docs/screenshots/panel-players.png) |
-| **Servers** | **Console** |
-| ![Servers](docs/screenshots/panel-servers.png) | ![Console](docs/screenshots/panel-console.png) |
+| ![Dashboard](docs/screenshots/panel-dashboard.png) | ![Servers](docs/screenshots/panel-servers.png) |
+| **Console** | **Players** |
+| ![Console](docs/screenshots/panel-console.png) | ![Players](docs/screenshots/panel-players.png) |
+
+Light theme, Persian (RTL) and four accent colors are one click away in the panel settings.
 
 ## Benchmark
 
-Measured comparison against upstream WaterdogPE — same 2-core VM, identical JVM flags,
-real RakNet pings and handshakes, the same harness driving both proxies (2026-11-23).
+Measured comparison against upstream WaterdogPE — same 2-core VM, identical JVM flags, real
+RakNet pings and handshakes, the same harness driving both proxies (re-measured 2026-11-23).
 Held-session memory/CPU figures are medians of three counted rounds after an uncounted
-calibration round; the handshake figures pool 900 connects after a 120-connect JIT
-warm-up — the same protocol for both proxies.
+calibration round; handshakes pool 900 connects after a 120-connect JIT warm-up — the same
+protocol for both proxies.
 
 <p align="center">
   <picture>
@@ -82,13 +99,12 @@ warm-up — the same protocol for both proxies.
   </picture>
 </p>
 
-Highlights: idle memory −10.5% (216.6 → 193.8 MB), cold startup −39.7%, ping RTT median
-−3.3%, handshake CPU −12.6%, marginal memory per held session −51.6% at 200 sessions and
-−13.4% at 500, CPU during the 500-session hold −3.0%, churn growth −59.5%. All 200 and all
-500 concurrent sessions held on both sides, 898/900 handshakes succeeded on both, zero ping
-loss on both. The remaining panels (idle CPU, ping RTT p95, ping throughput) measured as
-exact ties — shown as-is, nothing hidden; per-session RSS deltas are page-level and are
-reported as medians of repeated rounds for that reason.
+Highlights: idle memory **−10.5%** (216.6 → 193.8 MB), cold startup **−39.7%**, ping RTT
+median **−3.3%**, handshake CPU **−12.6%**, marginal memory per held session **−51.6%** at 200
+sessions and **−13.4%** at 500, CPU during the 500-session hold **−3.0%**, churn growth
+**−59.5%**. All 200 and all 500 concurrent sessions held on both sides, 898/900 handshakes
+succeeded on both, zero ping loss on both. The remaining panels (idle CPU, ping RTT p95, ping
+throughput) measured as exact ties — shown as-is, nothing hidden.
 
 ## Quick start
 
@@ -98,7 +114,7 @@ the latest supported game version.
 ```bash
 # Linux / macOS
 java -jar Waterbucket.jar
-# or the provided script
+# or the provided script (auto-restart, tuned G1 flags)
 ./start.sh
 ```
 
@@ -107,11 +123,12 @@ java -jar Waterbucket.jar
 start.bat
 ```
 
-Download the latest jar from the
-[Releases](https://github.com/AmirShafi6819/WaterbucketPE/releases) page, or build it from
-source (below). The first start writes `configs/config.txt` (servers, priorities,
-compression, panel), prints the web panel token location, and binds RakNet on port `19132`.
-Point your Bedrock clients at the proxy and register downstream servers under `servers:`.
+Download the jar (and the start scripts + plugin examples) from the
+[Releases](https://github.com/AmirShafi6819/WaterbucketPE/releases) page, or build from source
+(below). The first start writes `configs/config.txt` (servers, priorities, compression,
+panel), creates `ingame-messages.yml`, prints the web panel token location, and binds RakNet
+on port `19132`. Point your Bedrock clients at the proxy and register downstream servers
+under `servers:`.
 
 **Docker** — images are published to GitHub Container Registry for every tagged release:
 
@@ -119,6 +136,54 @@ Point your Bedrock clients at the proxy and register downstream servers under `s
 docker run -d -p 19132:19132/udp -p 19132:19132/tcp \
   ghcr.io/amirshafi6819/waterbucketpe:latest
 ```
+
+## Commands
+
+Rebranded `wb*`; the old `wd*` names keep working as hidden aliases.
+
+| Command | Purpose |
+|---|---|
+| `/wbhelp` | all commands |
+| `/wbstatus` | uptime, players, memory, CPU, threads, OS, JVM |
+| `/wbinfo` | version, build, protocol support |
+| `/wblist [server]` | online players |
+| `/wbme [player]` | how you are wired: proxy ↔ server, pings |
+| `/server <name> [player]` | transfer yourself or someone else |
+| `/wbsend <target>` | move everyone at once |
+| `/wbnethernet …` | inspect the NetherNet transport |
+| `/wbplugins`, `/wbreloadpacks`, `/end` | plugins, packs, shutdown |
+
+## The web panel
+
+The proxy serves its own dashboard — open `http://<host>:8080` (default) and paste the token
+from `panel_token.txt`. Everything runs inside the proxy process: no separate service, no
+database, nothing else to secure.
+
+- **Overview** — players, CPU, memory with a live bar, uptime; rolling charts for all three.
+- **Servers** — every downstream server as a live card (online state, players, ping
+  sparkline); click one for its detail dialog: ping/player charts, its players, kick and
+  move-to-server actions, ping-now.
+- **Console** — the proxy console in the browser: level-colored, filterable, with command
+  history.
+- **Settings** — dark/light, four accents, glass intensity, fa/en with RTL, layout editor.
+- **Security** — token required on every API call (headers only, never in URLs), constant-time
+  comparison, per-IP rate limiting, brute-force lockout, CSP + hardened headers, and a
+  warning when the panel is bound beyond loopback. Keep `panel_bind_address` at `127.0.0.1`
+  unless you front it with TLS.
+
+## In-game messages
+
+Every player-visible text is one editable file, created on first start:
+
+```yaml
+# ingame-messages.yml
+waterbucket.server.shutdown: "§cProxy shutdown"
+waterbucket.downstream.transfer.failed: "§cConnection to {%0} failed: {%1}"
+waterbucket.command.server.sent: "§aPlayer {%0} was sent to {%1} server!"
+```
+
+§ codes for colors, `{%0}` placeholders per message, English fallback when a line is deleted.
+Full walkthrough in the file's header comment.
 
 ## Configuration highlights
 
@@ -153,35 +218,44 @@ def on_enable(plugin):
 
 Full documentation for both languages, including a facade reference and troubleshooting,
 is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
-[examples/plugins](examples/plugins).
+[examples/plugins/](examples/plugins/) and in each release's `plugin-examples.zip`.
 
 ## Documentation
 
 - [Plugin API — Java & Python](docs/PLUGINS.md) · [نسخه فارسی](docs/PLUGINS.fa.md)
-- [Changelog](CHANGELOG.md)
-- [Compiling](COMPILING.md)
-- [Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md)
+- [Changelog](CHANGELOG.md) — every release, evidence-backed
+- [Benchmark methodology](https://github.com/AmirShafi6819/WaterbucketPE/tree/v1.4.0/benchmarks/METHODOLOGY.md) — the harness and its caveats
+- [Compiling](COMPILING.md) · [Security policy](SECURITY.md)
+
+## Roadmap
+
+- **Fallback routing** — automatic player failover when a downstream dies, with configurable
+  priorities and a reconnect flow that keeps the player in the world, not on an error screen.
+  *Coming in the next feature release.*
+- Further panel tooling: scheduled restarts and per-server console filters.
 
 ## Building from source
 
 ```bash
-./gradlew build          # tests + shaded jar in build/libs/Waterbucket.jar
-./gradlew test           # full test suite
+git clone https://github.com/AmirShafi6819/WaterbucketPE.git
+cd WaterbucketPE
+./gradlew shadowJar        # build/libs/Waterbucket.jar
+./gradlew test             # 59 suites, 339 tests
 ```
+
+JDK 17+ is required; the jar embeds a Python runtime, so no GraalPy install is needed.
 
 ## Contributing
 
-Issues and PRs are welcome — read [CONTRIBUTING.md](CONTRIBUTING.md) first.
-Bug fixes need a regression test next to them; the transfer, event and player suites in
-`src/test/java/dev/waterbucket/waterbucketpe/` show the patterns to copy.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR: every behavior fix ships with a
+regression test, and backwards compatibility is a contract, not a wish. PR template included.
 
 ## Acknowledgments
 
-Built on [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE) and the
-CloudburstMC protocol stack. Flush-consolidation tuning follows
-[Velocity](https://github.com/PaperMC/Velocity)'s published pipeline approach.
-See [NOTICE](NOTICE) for attribution details.
+Forked from [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE) — the clean base that made
+this fork possible. Built on [CloudburstMC protocol](https://github.com/CloudburstMC/Protocol),
+Netty, and [GraalPy](https://github.com/oracle/graalpython).
 
 ## License
 
-[GNU GPL v2](LICENSE) — inherited from upstream WaterdogPE.
+[GPL v2](LICENSE) — WaterBucketTEAM. Water Bucket is not affiliated with Mojang or Microsoft.

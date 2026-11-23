@@ -3,6 +3,59 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
+## [1.5.0] - 2026-11-24
+
+The operator-experience release: full console/brand rebrand, a rebuilt Liquid Glass web
+panel with Persian localization, every player message in one editable file, and the fixes
+the first real deployment surfaced. 59 suites / 339 tests green.
+
+### Changed
+- **Console rebrand** — new Water Bucket banner, default commands renamed `wd*` → `wb*`
+  (old names stay as hidden aliases), branded interactive prompt (the library hardcoded
+  "> "), `time LEVEL | message` log layout, startup/query/NetherNet software strings say
+  WaterBucketPE. The panel and `/wbinfo` now report the real gradle version instead of a
+  hardcoded 1.3.0.
+- **Web panel rebuilt** — Liquid Glass design with a blue accent (plus cyan/indigo/teal) and
+  adjustable glass intensity, dark **and** light themes, **Persian with full RTL** plus
+  English (Vazirmatn/Inter fonts bundled, no CDN), a bottom hotbar dock with a sliding active
+  pill and live badges, and a layout editor (drag to reorder, hide/restore cards, persisted).
+  Per-server management: live cards with ping sparklines and a detail dialog (ping/player
+  charts, kick, move-to-server, ping-now) backed by the new `/api/servers/<name>` endpoint.
+  Console: level-colored lines, filters, command history. Charts update in place — the
+  servers chart no longer grows taller on every refresh (client fixed heights + server-side
+  120-sample history cap).
+- **Player messages in one file** — `ingame-messages.yml` (created on first start) holds
+  every player-visible text with § colors and {%0} placeholders documented; overrides beat
+  the built-in English defaults, deleted lines fall back to them. Previously hardcoded
+  strings (shutdown notice, kick default, login guards, transfer-queue overflow, command
+  feedback) resolve through the same pipeline.
+
+### Fixed
+- **STUN/ICE log flood** — the transport logged four STUN mapping lines every 15 s (each
+  probe gets a fresh ephemeral port, so the line never deduped) and the native ICE stack
+  printed candidate-churn bursts after NetherNet joins. The repetitive mapping line is
+  filtered at the logger, and the native level now actually reaches the library (the wrapper
+  only forwards it once the native library is initialized) with an ERROR default that keeps
+  real ICE failures visible.
+- **Join-time spike** — the first join after boot paid JCE init, ECDH/AES/ECDSA, zlib and
+  ~275 packet class loads at the moment a player was waiting. `StartupWarmup` moves all of
+  it to a background thread at boot; start scripts reserve the heap up front (-Xms = -Xmx)
+  so G1 stops resizing mid-join.
+- **Panel security hardening** — the token is no longer accepted in URLs (headers only),
+  wrong-token grinding triggers a per-IP lockout (10 fails/10 min → 15 min), failed attempts
+  log the source IP, responses carry Permissions-Policy and COOP on top of the existing CSP,
+  and non-loopback binds / short tokens log warnings. Pre-login polling no longer counts
+  against the brute-force counter.
+- **Version reporting** — the panel, /wbinfo and the startup banner showed a hardcoded
+  1.3.0 on release jars; they now report the built version.
+
+### Notes
+- The Windows `Waterbucket.exe` and the standalone `panel.zip` are gone from the release
+  assets: the panel ships inside the jar, `start.bat` is the Windows launcher, and the plugin
+  examples stay as `plugin-examples.zip`.
+- **Roadmap:** fallback routing (automatic player failover on downstream death) is the
+  headline feature of the next release.
+
 ## [1.4.1] - 2026-11-24
 
 The performance release. A post-1.4.0 audit pass with eight regression-tested
