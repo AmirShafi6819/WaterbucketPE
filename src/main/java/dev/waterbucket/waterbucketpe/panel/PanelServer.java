@@ -95,6 +95,13 @@ public class PanelServer {
     private static final int RATE_LIMIT_REQUESTS = 80;
     private static final long RATE_LIMIT_WINDOW_MS = TimeUnit.SECONDS.toMillis(10);
     /**
+     * Brute-force protection: an IP that fails this many auths inside the window loses access
+     * to the API for the lockout duration, even with a valid token afterwards.
+     */
+    private static final int AUTH_FAILURE_LIMIT = 10;
+    private static final long AUTH_FAILURE_WINDOW_MS = TimeUnit.MINUTES.toMillis(10);
+    private static final long AUTH_LOCKOUT_MS = TimeUnit.MINUTES.toMillis(15);
+    /**
      * Upper bound for the rate-limit bucket map. Scanner fleets hit the panel from many source
      * IPs; without a bound the map grew by one entry per IP and never shrank. When the bound is
      * reached, expired buckets are evicted on the spot.
@@ -108,6 +115,11 @@ public class PanelServer {
     private final ExecutorService commandExecutor;
 
     private final Map<String, long[]> rateBuckets = new ConcurrentHashMap<>();
+    /**
+     * Per-IP auth failure tracking: ip -> {consecutive failures, window start, locked-until}.
+     * Bounded together with the rate buckets; only holds IPs that actually failed.
+     */
+    private final Map<String, long[]> authFailures = new ConcurrentHashMap<>();
     /**
      * Immutable classpath panel assets, decompressed once. Bounded to the four fixed resources
      * the panel serves.
@@ -193,6 +205,15 @@ public class PanelServer {
         InetSocketAddress bound = (InetSocketAddress) this.serverChannel.localAddress();
         this.proxy.getLogger().info("Web panel listening on http://{}:{} (token file: {})", bound.getHostString(),
                 bound.getPort(), this.proxy.getDataPath().resolve("panel_token.txt").getFileName());
+        if (!bound.getAddress().isLoopbackAddress()) {
+            // Exposing the panel beyond loopback is a deliberate choice; make sure it is one
+            this.proxy.getLogger().warning("The web panel is reachable from other machines on {} - keep the panel "
+                    + "token secret and prefer a reverse proxy with TLS in front of it", bound);
+        }
+        if (this.token.length() < 16) {
+            this.proxy.getLogger().warning("The configured panel token is short; set panel_token or panel_token.txt "
+                    + "to a long random value so it cannot be guessed");
+        }
     }
 
     public void shutdown() {
@@ -203,17 +224,61 @@ public class PanelServer {
         this.commandExecutor.shutdownNow();
     }
 
-    private boolean authorized(FullHttpRequest request, QueryStringDecoder query) {
+    /**
+     * Token via Authorization: Bearer or X-Panel-Token headers only. The token is deliberately
+     * never accepted as a URL query parameter: URLs land in browser history, access logs and
+     * bookmarks, which would quietly turn a secret into a shared link.
+     */
+    private boolean authorized(FullHttpRequest request, QueryStringDecoder query, String ip) {
         String header = request.headers().get(HttpHeaderNames.AUTHORIZATION);
+        String provided = null;
         if (header != null && header.startsWith("Bearer ")) {
-            return tokenEquals(this.token, header.substring(7).trim());
+            provided = header.substring(7).trim();
+        } else {
+            String panelToken = request.headers().get("X-Panel-Token");
+            if (panelToken != null) {
+                provided = panelToken.trim();
+            }
         }
-        String panelToken = request.headers().get("X-Panel-Token");
-        if (panelToken != null) {
-            return tokenEquals(this.token, panelToken.trim());
+
+        long[] state = this.authFailures.get(ip);
+        long now = System.currentTimeMillis();
+        if (state != null && state[2] > now) {
+            // Locked out: refuse before any comparison, even a valid token buys nothing
+            return false;
         }
-        List<String> values = query.parameters().get("token");
-        return values != null && !values.isEmpty() && tokenEquals(this.token, values.get(0));
+
+        if (provided != null && tokenEquals(this.token, provided)) {
+            if (state != null && state[0] > 0) {
+                this.authFailures.remove(ip);
+            }
+            return true;
+        }
+
+        // Record the failure and lock the IP out once the streak crosses the limit
+        this.authFailures.compute(ip, (key, streak) -> {
+            if (streak == null || now - streak[1] > AUTH_FAILURE_WINDOW_MS) {
+                return new long[]{1, now, 0};
+            }
+            streak[0]++;
+            if (streak[0] >= AUTH_FAILURE_LIMIT) {
+                streak[2] = now + AUTH_LOCKOUT_MS;
+            }
+            return streak;
+        });
+        log.warn("Panel auth failed for {} ({})", ip,
+                provided == null ? "no token presented" : "wrong token");
+        return false;
+    }
+
+    /**
+     * Keeps the auth-failure map bounded by sweeping expired streaks once the limit is hit.
+     */
+    private void sweepAuthFailures(long now) {
+        if (this.authFailures.size() > RATE_BUCKET_LIMIT) {
+            this.authFailures.values().removeIf(streak -> now - streak[1] > AUTH_FAILURE_WINDOW_MS
+                    && streak[2] <= now);
+        }
     }
 
     private boolean rateLimited(String ip) {
@@ -245,6 +310,8 @@ public class PanelServer {
                 .set("X-Content-Type-Options", "nosniff")
                 .set("X-Frame-Options", "DENY")
                 .set("Referrer-Policy", "no-referrer")
+                .set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+                .set("Cross-Origin-Opener-Policy", "same-origin")
                 // The page only ever loads same-origin assets; the CSP makes any injected
                 // script/style inert on top of the escaping the frontend already applies.
                 .set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; "
@@ -281,7 +348,8 @@ public class PanelServer {
                     PanelServer.this.respondError(ctx, request, HttpResponseStatus.TOO_MANY_REQUESTS, "Rate limit exceeded");
                     return;
                 }
-                if (!PanelServer.this.authorized(request, query)) {
+                if (!PanelServer.this.authorized(request, query, ip)) {
+                    PanelServer.this.sweepAuthFailures(System.currentTimeMillis());
                     PanelServer.this.respondError(ctx, request, HttpResponseStatus.UNAUTHORIZED, "Invalid or missing panel token");
                     return;
                 }
