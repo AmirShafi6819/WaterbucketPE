@@ -17,8 +17,9 @@ the first real deployment surfaced. 59 suites / 339 tests green.
   hardcoded 1.3.0.
 - **Web panel rebuilt** — Liquid Glass design with a blue accent (plus cyan/indigo/teal) and
   adjustable glass intensity, dark **and** light themes, **Persian with full RTL** plus
-  English (Vazirmatn/Inter fonts bundled, no CDN), a bottom hotbar dock with a sliding active
-  pill and live badges, and a layout editor (drag to reorder, hide/restore cards, persisted).
+  English (Vazirmatn/Inter fonts bundled, no CDN), a bottom hotbar dock with an animated
+  active pill and live badges, and a layout editor (drag to reorder, hide/restore cards,
+  persisted).
   Per-server management: live cards with ping sparklines and a detail dialog (ping/player
   charts, kick, move-to-server, ping-now) backed by the new `/api/servers/<name>` endpoint.
   Console: level-colored lines, filters, command history. Charts update in place — the
@@ -31,6 +32,41 @@ the first real deployment surfaced. 59 suites / 339 tests green.
   feedback) resolve through the same pipeline.
 
 ### Fixed
+- **Start scripts refused to boot at all** — `G1NewSizePercent`/`G1MaxNewSizePercent`/
+  `G1ReservePercent` are experimental JVM flags and were passed without
+  `-XX:+UnlockExperimentalVMOptions`, so the JVM exited instantly and the auto-restart loop
+  spammed the error forever (which is why renaming the jar never helped). The hardcoded
+  `Waterbucket.jar` name also ignored release jars like `Waterbucket-1.5.0.jar`. Both scripts
+  now auto-detect the jar (exact name → newest `Waterbucket*.jar` → any single jar), verify
+  Java 17+ properly, and only restart after a real run — an instant exit stops with a clear
+  error instead of looping. `start.bat` ships with CRLF line endings again (LF-only broke
+  `goto` labels on Windows), both scripts honor `WATERBUCKET_MEMORY`, and the heap-tuning
+  flags are behind the unlock flag.
+- **Hotbar pill escaped the dock** — the sliding selection pill was measured by JS while
+  the button labels animated their width, so the measurements went stale and the indicator
+  drifted outside the bar on selection/hover/resize. Replaced with a CSS-only pill that
+  lives on the button itself (it physically cannot leave the dock, works in RTL), and labels
+  no longer collapse/expand under the cursor.
+- **Vazirmatn never applied in Persian mode** — the RTL font stack targeted `body[dir="rtl"]`
+  while the attribute is set on `<html>`, so the selector never matched and Persian fell
+  back to system fonts; global `letter-spacing` also put gaps into joined Arabic glyphs
+  (now zeroed in RTL). Added the missing Vazirmatn SemiBold (600) weight.
+- **Console in Persian mode** — the log inherited the page RTL direction and visually
+  scrambled timestamps, levels and mixed text. The log area now always reads left-to-right
+  like a terminal, each message is bidi-isolated (`unicode-bidi: plaintext`) so Persian
+  text inside a log renders correctly in place, and the command row/input stay LTR. Mixed
+  Latin values ("24 MB / 1.0 GB") no longer flip in RTL cards either.
+- **Minecraft § codes showed raw in the panel console** — log lines carrying §b/§l style
+  codes printed the escapes literally; they now render as real colors and formatting
+  (Minecraft palette, dark-UI tuned).
+- **Panel icons** — every emoji and unicode glyph (stat cards, hotbar, server cards, hidden
+  chips, header buttons) replaced with a bundled stroke-icon SVG sprite; toolbuttons get
+  translated titles.
+- **Players view opened empty** — data only arrived with the next 5 s poll tick; switching
+  to the Players view now fetches immediately.
+- **Persian copy tidy-up** — consistent half-spaces (نیم‌فاصله) and natural phrasing for
+  every panel string, including stat labels that were still hardcoded English
+  ("max 20", "2 cores", "16 threads" now translate).
 - **STUN/ICE log flood** — the transport logged four STUN mapping lines every 15 s (each
   probe gets a fresh ephemeral port, so the line never deduped) and the native ICE stack
   printed candidate-churn bursts after NetherNet joins. The repetitive mapping line is
