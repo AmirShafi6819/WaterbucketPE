@@ -108,6 +108,8 @@ public class PanelServer {
      */
     private static final int RATE_BUCKET_LIMIT = 4096;
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
+    private static final java.util.regex.Pattern WOFF2_PATTERN =
+            java.util.regex.Pattern.compile("/fonts/[a-z0-9._-]+\\.woff2");
 
     private final ProxyServer proxy;
     private final PanelMetrics metrics;
@@ -255,7 +257,11 @@ public class PanelServer {
             return true;
         }
 
-        // Record the failure and lock the IP out once the streak crosses the limit
+        // Only a presented-but-wrong token counts toward the brute-force lockout: tokenless
+        // probes (a browser checking the page before login) must not trigger it.
+        if (provided == null) {
+            return false;
+        }
         this.authFailures.compute(ip, (key, streak) -> {
             if (streak == null || now - streak[1] > AUTH_FAILURE_WINDOW_MS) {
                 return new long[]{1, now, 0};
@@ -266,8 +272,7 @@ public class PanelServer {
             }
             return streak;
         });
-        log.warn("Panel auth failed for {} ({})", ip,
-                provided == null ? "no token presented" : "wrong token");
+        log.warn("Panel auth failed for {} (wrong token)", ip);
         return false;
     }
 
@@ -306,7 +311,8 @@ public class PanelServer {
                 .set(HttpHeaderNames.CONTENT_TYPE, contentType)
                 .set(HttpHeaderNames.CONTENT_LENGTH, body.length)
                 .set(HttpHeaderNames.CACHE_CONTROL, contentType.contains("javascript") || contentType.contains("css")
-                        ? "max-age=3600" : "no-store")
+                        ? "max-age=3600" : contentType.contains("font") || contentType.contains("image")
+                        ? "max-age=86400" : "no-store")
                 .set("X-Content-Type-Options", "nosniff")
                 .set("X-Frame-Options", "DENY")
                 .set("Referrer-Policy", "no-referrer")
@@ -316,7 +322,7 @@ public class PanelServer {
                 // script/style inert on top of the escaping the frontend already applies.
                 .set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; "
                         + "style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; "
-                        + "frame-ancestors 'none'; base-uri 'none'");
+                        + "font-src 'self'; frame-ancestors 'none'; base-uri 'none'");
         if (HttpUtil.isKeepAlive(request)) {
             response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
             ctx.writeAndFlush(response);
@@ -379,7 +385,15 @@ public class PanelServer {
                     PanelServer.this.handleCommand(ctx, request);
                 }
                 default -> {
-                    if (path.startsWith("/api/players/") && path.endsWith("/kick") && request.method() == HttpMethod.POST) {
+                    if (path.startsWith("/api/servers/") && !path.endsWith("/ping") && request.method() == HttpMethod.GET) {
+                        String name = extractMiddle(path, "/api/servers/", "");
+                        Object detail = PanelServer.this.metrics.serverDetail(name);
+                        if (detail == null) {
+                            PanelServer.this.respondError(ctx, request, HttpResponseStatus.NOT_FOUND, "Server not registered");
+                        } else {
+                            PanelServer.this.respondJson(ctx, request, HttpResponseStatus.OK, detail);
+                        }
+                    } else if (path.startsWith("/api/players/") && path.endsWith("/kick") && request.method() == HttpMethod.POST) {
                         PanelServer.this.handleKick(ctx, request, path);
                     } else if (path.startsWith("/api/players/") && path.endsWith("/transfer") && request.method() == HttpMethod.POST) {
                         PanelServer.this.handleTransfer(ctx, request, path);
@@ -393,13 +407,23 @@ public class PanelServer {
         }
 
         private void handleStatic(ChannelHandlerContext ctx, FullHttpRequest request, String path) {
-            String resource = switch (path) {
-                case "/", "/index.html" -> "panel/index.html";
-                case "/app.js" -> "panel/app.js";
-                case "/style.css" -> "panel/style.css";
-                case "/chart.umd.min.js" -> "panel/chart.umd.min.js";
-                default -> null;
-            };
+            String resource;
+            if (path.equals("/") || path.equals("/index.html")) {
+                resource = "panel/index.html";
+            } else if (path.equals("/app.js")) {
+                resource = "panel/app.js";
+            } else if (path.equals("/style.css")) {
+                resource = "panel/style.css";
+            } else if (path.equals("/chart.umd.min.js")) {
+                resource = "panel/chart.umd.min.js";
+            } else if (path.equals("/logo.png")) {
+                resource = "panel/logo.png";
+            } else if (path.startsWith("/fonts/") && WOFF2_PATTERN.matcher(path).matches()) {
+                // Whitelisted font files only; anything else under /fonts/ is a 404
+                resource = "panel" + path;
+            } else {
+                resource = null;
+            }
             if (resource == null) {
                 PanelServer.this.respondError(ctx, request, HttpResponseStatus.NOT_FOUND, "Not found");
                 return;
@@ -414,6 +438,8 @@ public class PanelServer {
             String contentType = resource.endsWith(".html") ? "text/html; charset=utf-8"
                     : resource.endsWith(".css") ? "text/css; charset=utf-8"
                     : resource.endsWith(".js") ? "application/javascript; charset=utf-8"
+                    : resource.endsWith(".png") ? "image/png"
+                    : resource.endsWith(".woff2") ? "font/woff2"
                     : "application/octet-stream";
             PanelServer.this.respond(ctx, request, HttpResponseStatus.OK, contentType, body);
         }

@@ -22,9 +22,14 @@ public class VersionInfo {
 
     public static final boolean DEFAULT_DEBUG = true;
 
+    /**
+     * Fallback only: when the jar carries no git.properties (a bare source build), the panel
+     * and startup log would otherwise keep advertising the last version this constant was
+     * touched. Release jars report the gradle project version instead.
+     */
     private final String baseVersion = "1.3.0";
     private final String buildVersion = "#build";
-    private final String author = "WaterbucketTEAM";
+    private final String author = "WaterBucketTEAM";
     private final int metricsId = 15678;
     private final int latestProtocolVersion;
 
@@ -46,7 +51,9 @@ public class VersionInfo {
     }
 
     public String baseVersion() {
-        return this.baseVersion;
+        // Prefer the gradle project version baked into git.properties over the hardcoded
+        // fallback, so the panel and /wbinfo show the version actually being built.
+        return this.projectVersion != null ? this.projectVersion : this.baseVersion;
     }
 
     public String buildVersion() {

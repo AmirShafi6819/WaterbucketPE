@@ -1,124 +1,246 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WaterbucketPE Panel</title>
-<link rel="stylesheet" href="/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#129381;</text></svg>">
+<meta name="color-scheme" content="dark light">
+<title>WaterBucketPE · Panel</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="login" class="login-overlay hidden">
-  <div class="login-card">
-    <div class="login-logo">&#129381;</div>
-    <h1>WaterbucketPE Panel</h1>
-    <p class="muted">Enter the panel token from <code>panel_token.txt</code></p>
-    <input id="token-input" type="password" placeholder="Panel token" autocomplete="off">
-    <button id="login-btn">Open dashboard</button>
-    <p id="login-error" class="login-error hidden">Invalid token</p>
+
+<div class="orbs" aria-hidden="true">
+  <span class="orb o1"></span><span class="orb o2"></span><span class="orb o3"></span>
+</div>
+
+<!-- ======================= LOGIN ======================= -->
+<div id="login" class="login-screen">
+  <div class="login-card glass">
+    <img class="login-logo" src="logo.png" alt="Water Bucket">
+    <h1 class="login-brand">Water <span>Bucket</span></h1>
+    <p class="login-sub" data-i18n="login.sub">WaterBucketPE proxy panel</p>
+    <p class="muted small" data-i18n="login.hint">Enter the panel token from panel_token.txt</p>
+    <input id="token-input" type="password" autocomplete="off" spellcheck="false"
+           data-i18n-ph="login.placeholder" placeholder="Panel token">
+    <button id="login-btn" class="btn primary" data-i18n="login.enter">Enter</button>
+    <p id="login-error" class="login-error hidden" data-i18n="login.badToken">Invalid token</p>
+    <p class="login-foot muted small"><span data-i18n="login.secure">Every API call requires the token</span>
+      · <span id="bind-info">127.0.0.1</span></p>
   </div>
 </div>
 
-<header class="topbar">
-  <div class="brand">
-    <span class="bucket">&#129381;</span>
+<!-- ======================= APP ======================= -->
+<div id="app" class="app hidden">
+
+  <header class="topbar glass">
+    <div class="brand" id="home-btn" role="button" tabindex="0">
+      <img class="brand-logo" src="logo.png" alt="">
+      <div class="brand-names">
+        <span class="brand-title">Water <span>Bucket</span></span>
+        <span class="brand-tag">WaterBucketPE</span>
+      </div>
+    </div>
+    <div class="top-status">
+      <span class="pill" id="version-pill">—</span>
+      <span class="pill dot-pill"><span class="dot" id="health-dot"></span><span id="uptime-pill">—</span></span>
+    </div>
+    <div class="top-actions">
+      <button id="restore-btn" class="icon-btn hidden" title="Restore hidden cards">+</button>
+      <button id="lang-btn" class="icon-btn" title="Language">ف / EN</button>
+      <button id="theme-btn" class="icon-btn" title="Theme">◐</button>
+    </div>
+  </header>
+
+  <!-- ============ OVERVIEW ============ -->
+  <main id="view-overview" class="view">
+    <section class="stat-grid" data-editor="overview">
+      <div class="card glass stat" data-card="players" data-editor="overview">
+        <div class="stat-head"><span class="stat-icon">👥</span><span class="stat-label" data-i18n="stat.players">Players</span></div>
+        <div class="stat-value" id="stat-players">—</div>
+        <div class="stat-sub muted" id="stat-maxplayers">—</div>
+      </div>
+      <div class="card glass stat" data-card="cpu" data-editor="overview">
+        <div class="stat-head"><span class="stat-icon">⚡</span><span class="stat-label" data-i18n="stat.cpu">CPU</span></div>
+        <div class="stat-value" id="stat-cpu">—</div>
+        <div class="stat-sub muted" id="stat-cores">—</div>
+      </div>
+      <div class="card glass stat" data-card="memory" data-editor="overview">
+        <div class="stat-head"><span class="stat-icon">🧠</span><span class="stat-label" data-i18n="stat.memory">Memory</span></div>
+        <div class="stat-value" id="stat-memory">—</div>
+        <div class="memory-bar"><span id="memory-fill"></span></div>
+      </div>
+      <div class="card glass stat" data-card="uptime" data-editor="overview">
+        <div class="stat-head"><span class="stat-icon">⏱</span><span class="stat-label" data-i18n="stat.uptime">Uptime</span></div>
+        <div class="stat-value" id="stat-uptime">—</div>
+        <div class="stat-sub muted" id="stat-threads">—</div>
+      </div>
+    </section>
+
+    <section class="chart-grid" data-editor="overview">
+      <div class="card glass" data-card="chart-players" data-editor="overview">
+        <h3 data-i18n="chart.players">Players over time</h3>
+        <div class="chart-box"><canvas id="chart-players"></canvas></div>
+      </div>
+      <div class="card glass" data-card="chart-memory" data-editor="overview">
+        <h3 data-i18n="chart.memory">Memory over time</h3>
+        <div class="chart-box"><canvas id="chart-memory"></canvas></div>
+      </div>
+      <div class="card glass" data-card="chart-cpu" data-editor="overview">
+        <h3 data-i18n="chart.cpu">CPU over time</h3>
+        <div class="chart-box"><canvas id="chart-cpu"></canvas></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ SERVERS ============ -->
+  <main id="view-servers" class="view hidden">
+    <h2 class="view-title" data-i18n="servers.title">Servers</h2>
+    <section id="servers-grid" class="servers-grid"></section>
+    <p id="servers-empty" class="muted center hidden" data-i18n="servers.empty">No servers configured yet</p>
+  </main>
+
+  <!-- ============ PLAYERS ============ -->
+  <main id="view-players" class="view hidden">
+    <h2 class="view-title" data-i18n="players.title">Players</h2>
+    <div class="card glass table-card">
+      <table class="table">
+        <thead><tr>
+          <th data-i18n="players.name">Player</th><th data-i18n="players.server">Server</th>
+          <th data-i18n="players.address">Address</th><th data-i18n="players.protocol">Protocol</th>
+          <th data-i18n="players.actions">Actions</th>
+        </tr></thead>
+        <tbody id="players-body"></tbody>
+      </table>
+      <p id="players-empty" class="muted center hidden" data-i18n="players.empty">No players online</p>
+    </div>
+  </main>
+
+  <!-- ============ CONSOLE ============ -->
+  <main id="view-console" class="view hidden">
+    <h2 class="view-title" data-i18n="console.title">Console</h2>
+    <div class="card glass console-card">
+      <div class="console-tools">
+        <select id="console-level" class="select">
+          <option value="all" data-i18n="console.all">All levels</option>
+          <option value="WARN" data-i18n="console.warnPlus">Warnings and errors</option>
+          <option value="ERROR" data-i18n="console.errors">Errors only</option>
+        </select>
+        <button id="console-clear" class="btn ghost" data-i18n="console.clear">Clear view</button>
+      </div>
+      <div id="console-log" class="console-log" tabindex="0"></div>
+      <div class="console-input-row">
+        <span class="console-prompt">&gt;</span>
+        <input id="console-input" type="text" spellcheck="false" autocomplete="off"
+               data-i18n-ph="console.placeholder" placeholder="Type a command…">
+        <button id="console-send" class="btn primary" data-i18n="console.send">Send</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============ SETTINGS ============ -->
+  <main id="view-settings" class="view hidden">
+    <h2 class="view-title" data-i18n="settings.title">Settings</h2>
+    <section class="settings-grid" data-editor="settings">
+      <div class="card glass settings-card" data-card="set-appearance" data-editor="settings">
+        <h3 data-i18n="settings.appearance">Appearance</h3>
+        <div class="setting-row"><span data-i18n="settings.theme">Theme</span>
+          <div class="seg" id="theme-seg">
+            <button data-theme="dark" data-i18n="settings.dark">Dark</button>
+            <button data-theme="light" data-i18n="settings.light">Light</button>
+          </div>
+        </div>
+        <div class="setting-row"><span data-i18n="settings.accent">Accent</span>
+          <div class="swatches" id="accent-swatches">
+            <button class="swatch" data-accent="blue" style="--sw:#4da3ff"></button>
+            <button class="swatch" data-accent="cyan" style="--sw:#39d3d8"></button>
+            <button class="swatch" data-accent="indigo" style="--sw:#7c8cff"></button>
+            <button class="swatch" data-accent="teal" style="--sw:#3ad2a0"></button>
+          </div>
+        </div>
+        <div class="setting-row"><span data-i18n="settings.glass">Glass intensity</span>
+          <input id="glass-range" type="range" min="0" max="100" value="70">
+        </div>
+      </div>
+      <div class="card glass settings-card" data-card="set-layout" data-editor="settings">
+        <h3 data-i18n="settings.layout">Layout</h3>
+        <p class="muted small" data-i18n="settings.layoutHint">Drag cards to reorder them, press × to hide. Hidden cards can be restored from the header.</p>
+        <div class="setting-row">
+          <button id="edit-btn" class="btn primary" data-i18n="settings.editLayout">Edit layout</button>
+          <button id="reset-layout-btn" class="btn ghost" data-i18n="settings.resetLayout">Reset</button>
+        </div>
+        <div id="hidden-chips" class="chip-list hidden" style="margin-top:10px"></div>
+      </div>
+      <div class="card glass settings-card" data-card="set-about" data-editor="settings">
+        <h3 data-i18n="settings.about">About</h3>
+        <div class="about-grid">
+          <span data-i18n="settings.version">Version</span><span id="about-version">—</span>
+          <span data-i18n="settings.java">Java</span><span id="about-java">—</span>
+          <span data-i18n="settings.os">OS</span><span id="about-os">—</span>
+          <span data-i18n="settings.proxyName">Proxy</span><span id="about-proxy">—</span>
+          <span>API</span><span id="bind-info2">—</span>
+        </div>
+        <p class="muted small about-note">Water Bucket · WaterBucketPE — GPL v2</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ HOTBAR ============ -->
+  <nav id="hotbar" class="hotbar glass" role="navigation">
+    <div class="hotbar-pill" id="hotbar-pill"></div>
+    <button class="hotbtn active" data-view="overview">
+      <span class="hoticon">◈</span><span class="hotlabel" data-i18n="nav.overview">Overview</span>
+    </button>
+    <button class="hotbtn" data-view="servers">
+      <span class="hoticon">▥</span><span class="hotlabel" data-i18n="nav.servers">Servers</span>
+      <span class="hotbadge" id="badge-servers">0</span>
+    </button>
+    <button class="hotbtn" data-view="players">
+      <span class="hoticon">◉</span><span class="hotlabel" data-i18n="nav.players">Players</span>
+      <span class="hotbadge" id="badge-players">0</span>
+    </button>
+    <button class="hotbtn" data-view="console">
+      <span class="hoticon">⌘</span><span class="hotlabel" data-i18n="nav.console">Console</span>
+    </button>
+    <button class="hotbtn" data-view="settings">
+      <span class="hoticon">⚙</span><span class="hotlabel" data-i18n="nav.settings">Settings</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ============ SERVER DETAIL DIALOG ============ -->
+<dialog id="server-dialog" class="glass dialog">
+  <div class="dialog-head">
+    <img class="brand-logo" src="logo.png" alt="">
     <div>
-      <div class="brand-title" id="proxy-name">WaterbucketPE</div>
-      <div class="brand-sub muted" id="proxy-version">local web panel</div>
+      <h3 id="sd-name">—</h3>
+      <p class="muted small"><span id="sd-address">—</span> · <span id="sd-type">—</span></p>
     </div>
+    <span class="pill dot-pill"><span class="dot" id="sd-dot"></span><span id="sd-online">—</span></span>
+    <button id="sd-close" class="icon-btn">✕</button>
   </div>
-  <div class="stats">
-    <div class="stat"><span class="stat-label">CPU</span><span class="stat-value" id="stat-cpu">–</span></div>
-    <div class="stat"><span class="stat-label">Memory</span><span class="stat-value" id="stat-mem">–</span></div>
-    <div class="stat"><span class="stat-label">Threads</span><span class="stat-value" id="stat-threads">–</span></div>
-    <div class="stat"><span class="stat-label">Players</span><span class="stat-value accent" id="stat-players">–</span></div>
-    <div class="stat"><span class="stat-label">Servers</span><span class="stat-value" id="stat-servers">–</span></div>
-    <div class="stat"><span class="stat-label">Uptime</span><span class="stat-value" id="stat-uptime">–</span></div>
-    <div class="stat"><span class="stat-label">Updated</span><span class="stat-value" id="stat-updated">–</span></div>
-    <div class="stat clock"><span class="stat-value muted" id="stat-clock">–</span></div>
+  <div class="dialog-stats">
+    <div class="mini-stat"><span data-i18n="servers.players">Players</span><b id="sd-players">—</b></div>
+    <div class="mini-stat"><span data-i18n="servers.ping">Ping</span><b id="sd-ping">—</b></div>
+    <div class="mini-stat"><span data-i18n="servers.upFor">Up for</span><b id="sd-up">—</b></div>
   </div>
-</header>
+  <div class="dialog-charts">
+    <div class="chart-box small"><canvas id="sd-chart-ping"></canvas></div>
+    <div class="chart-box small"><canvas id="sd-chart-players"></canvas></div>
+  </div>
+  <div class="dialog-actions">
+    <button id="sd-ping" class="btn primary" data-i18n="servers.pingNow">Ping now</button>
+    <div id="sd-transfer" class="transfer-box"></div>
+  </div>
+  <div class="dialog-players">
+    <h4 data-i18n="servers.onServer">Players on this server</h4>
+    <div id="sd-players-list" class="chip-list"></div>
+  </div>
+</dialog>
 
-<nav class="tabs">
-  <button class="tab active" data-tab="dashboard">Dashboard</button>
-  <button class="tab" data-tab="players">Players</button>
-  <button class="tab" data-tab="servers">Servers</button>
-  <button class="tab" data-tab="console">Console</button>
-</nav>
+<div id="toast" class="toast glass hidden"></div>
+<div id="edit-banner" class="edit-banner hidden" data-i18n="edit.active">Editing layout — drag cards, × hides, Done when finished</div>
 
-<main>
-  <section id="tab-dashboard" class="tab-page active">
-    <div class="grid">
-      <div class="card chart-card">
-        <h3>Players over time</h3>
-        <canvas id="chart-players"></canvas>
-      </div>
-      <div class="card chart-card">
-        <h3>Memory over time</h3>
-        <canvas id="chart-memory"></canvas>
-      </div>
-      <div class="card chart-card">
-        <h3>CPU % over time</h3>
-        <canvas id="chart-cpu"></canvas>
-      </div>
-      <div class="card chart-card">
-        <h3>Players per server</h3>
-        <canvas id="chart-perserver"></canvas>
-      </div>
-    </div>
-    <div class="card">
-      <h3>Server status</h3>
-      <div class="table-wrap"><table id="server-status-table">
-        <thead><tr><th>Server</th><th>Address</th><th>Type</th><th>Players</th><th>Ping</th><th>Status</th></tr></thead>
-        <tbody></tbody>
-      </table></div>
-    </div>
-  </section>
-
-  <section id="tab-players" class="tab-page">
-    <div class="card">
-      <h3>Online players <span class="badge" id="player-count">0</span></h3>
-      <div class="table-wrap"><table id="players-table">
-        <thead><tr><th>Name</th><th>Server</th><th>IP</th><th>Protocol</th><th>XUID</th><th>Actions</th></tr></thead>
-        <tbody></tbody>
-      </table></div>
-    </div>
-  </section>
-
-  <section id="tab-servers" class="tab-page">
-    <div class="card">
-      <h3>Downstream servers</h3>
-      <div class="table-wrap"><table id="servers-table">
-        <thead><tr><th>Server</th><th>Address</th><th>Type</th><th>Players</th><th>Ping</th><th>Actions</th></tr></thead>
-        <tbody></tbody>
-      </table></div>
-    </div>
-    <div class="card">
-      <h3>Uptime per server</h3>
-      <canvas id="chart-uptime"></canvas>
-    </div>
-  </section>
-
-  <section id="tab-console" class="tab-page">
-    <div class="card console-card">
-      <h3>Console</h3>
-      <div id="console-output" class="console-output"></div>
-      <div class="console-input">
-        <span class="muted">&gt;</span>
-        <input id="console-command" type="text" placeholder="Type a proxy command (e.g. list) and press Enter" autocomplete="off">
-        <button id="console-send">Run</button>
-      </div>
-    </div>
-  </section>
-</main>
-
-<footer class="footer muted">
-  WaterbucketPE local panel &middot; token required for every API call &middot; bound to <span id="bind-info">127.0.0.1</span>
-</footer>
-
-<div id="conn-banner" class="conn-banner hidden">Connection to the proxy lost &mdash; retrying&hellip;</div>
-
-<script src="/chart.umd.min.js"></script>
-<script src="/app.js"></script>
+<script src="chart.umd.min.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

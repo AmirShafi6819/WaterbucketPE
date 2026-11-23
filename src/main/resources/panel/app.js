@@ -1,394 +1,792 @@
-/*
- * WaterbucketPE panel frontend. Vanilla JS + Chart.js (bundled chart.umd.min.js,
- * MIT license - https://www.chartjs.org). No external requests: everything is
- * served by the proxy itself.
- */
+/* ============================================================
+   WaterBucketPE panel frontend
+   - Liquid Glass theme (dark/light), blue accents, bottom hotbar
+   - fa/en localization with RTL, layout editor, per-server detail
+   ============================================================ */
 "use strict";
 
-const API = {
-  headers() {
-    return { "X-Panel-Token": localStorage.getItem("wb_panel_token") || "" };
+/* ---------------- i18n ---------------- */
+const I18N = {
+  en: {
+    "login.sub": "WaterBucketPE proxy panel",
+    "login.hint": "Enter the panel token from panel_token.txt",
+    "login.placeholder": "Panel token",
+    "login.enter": "Enter",
+    "login.badToken": "Invalid token",
+    "login.secure": "Every API call requires the token",
+    "stat.players": "Players", "stat.cpu": "CPU", "stat.memory": "Memory", "stat.uptime": "Uptime",
+    "chart.players": "Players over time", "chart.memory": "Memory over time", "chart.cpu": "CPU over time",
+    "servers.title": "Servers", "servers.empty": "No servers configured yet",
+    "servers.players": "Players", "servers.ping": "Ping", "servers.upFor": "Up for",
+    "servers.pingNow": "Ping now", "servers.onServer": "Players on this server",
+    "servers.online": "Online", "servers.offline": "Offline", "servers.clickForDetail": "Click for detail",
+    "players.title": "Players", "players.name": "Player", "players.server": "Server",
+    "players.address": "Address", "players.protocol": "Protocol", "players.actions": "Actions",
+    "players.empty": "No players online", "players.kick": "Kick", "players.transfer": "Move",
+    "console.title": "Console", "console.all": "All levels", "console.warnPlus": "Warnings and errors",
+    "console.errors": "Errors only", "console.clear": "Clear view", "console.send": "Send",
+    "console.placeholder": "Type a command…",
+    "settings.title": "Settings", "settings.appearance": "Appearance", "settings.theme": "Theme",
+    "settings.dark": "Dark", "settings.light": "Light", "settings.accent": "Accent",
+    "settings.glass": "Glass intensity", "settings.layout": "Layout",
+    "settings.layoutHint": "Drag cards to reorder them, press × to hide. Hidden cards can be restored here.",
+    "settings.editLayout": "Edit layout", "settings.resetLayout": "Reset",
+    "settings.done": "Done", "settings.about": "About", "settings.version": "Version",
+    "settings.java": "Java", "settings.os": "OS", "settings.proxyName": "Proxy",
+    "settings.hiddenCards": "Hidden cards",
+    "nav.overview": "Overview", "nav.servers": "Servers", "nav.players": "Players",
+    "nav.console": "Console", "nav.settings": "Settings",
+    "edit.active": "Editing layout — drag cards, × hides, Done when finished",
+    "common.offline": "offline", "common.never": "—", "common.kicked": "kicked", "common.moved": "moved",
+    "common.pinged": "ping sent", "common.commandSent": "command queued",
+    "common.confirmKick": "Kick {name}?",
   },
+  fa: {
+    "login.sub": "پنل پروکسی واتربکت‌پی‌ای",
+    "login.hint": "توکن پنل را از فایل panel_token.txt وارد کنید",
+    "login.placeholder": "توکن پنل",
+    "login.enter": "ورود",
+    "login.badToken": "توکن نامعتبر است",
+    "login.secure": "هر درخواست API نیازمند توکن است",
+    "stat.players": "بازیکنان", "stat.cpu": "پردازنده", "stat.memory": "حافظه", "stat.uptime": "مدت فعالیت",
+    "chart.players": "بازیکنان در گذر زمان", "chart.memory": "حافظه در گذر زمان", "chart.cpu": "پردازنده در گذر زمان",
+    "servers.title": "سرورها", "servers.empty": "هنوز سروری ثبت نشده است",
+    "servers.players": "بازیکنان", "servers.ping": "پینگ", "servers.upFor": "فعال از",
+    "servers.pingNow": "پینگ فوری", "servers.onServer": "بازیکنان این سرور",
+    "servers.online": "آنلاین", "servers.offline": "خاموش",
+    "servers.clickForDetail": "برای جزئیات کلیک کنید",
+    "players.title": "بازیکنان", "players.name": "بازیکن", "players.server": "سرور",
+    "players.address": "آدرس", "players.protocol": "پروتکل", "players.actions": "عملیات",
+    "players.empty": "بازیکنی آنلاین نیست", "players.kick": "اخراج", "players.transfer": "انتقال",
+    "console.title": "کنسول", "console.all": "همه سطوح", "console.warnPlus": "هشدار و خطا",
+    "console.errors": "فقط خطاها", "console.clear": "پاک‌سازی نما", "console.send": "ارسال",
+    "console.placeholder": "دستور را بنویسید…",
+    "settings.title": "تنظیمات", "settings.appearance": "ظاهر", "settings.theme": "پوسته",
+    "settings.dark": "تیره", "settings.light": "روشن", "settings.accent": "رنگ اصلی",
+    "settings.glass": "شدت شیشه‌ای بودن", "settings.layout": "چیدمان",
+    "settings.layoutHint": "کارت‌ها را بکشید تا جابه‌جا شوند، با × پنهان کنید. کارت‌های پنهان اینجا برمی‌گردند.",
+    "settings.editLayout": "ویرایش چیدمان", "settings.resetLayout": "بازنشانی",
+    "settings.done": "اتمام", "settings.about": "درباره", "settings.version": "نسخه",
+    "settings.java": "جاوا", "settings.os": "سیستم‌عامل", "settings.proxyName": "پروکسی",
+    "settings.hiddenCards": "کارت‌های پنهان",
+    "nav.overview": "خانه", "nav.servers": "سرورها", "nav.players": "بازیکنان",
+    "nav.console": "کنسول", "nav.settings": "تنظیمات",
+    "edit.active": "ویرایش چیدمان — کارت‌ها را بکشید، × پنهان می‌کند، «اتمام» برای پایان",
+    "common.offline": "خاموش", "common.never": "—", "common.kicked": "اخراج شد", "common.moved": "منتقل شد",
+    "common.pinged": "پینگ ارسال شد", "common.commandSent": "دستور در صف اجرا قرار گرفت",
+    "common.confirmKick": "اخراج {name}؟",
+  },
+};
+
+/* ---------------- helpers ---------------- */
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => [...document.querySelectorAll(sel)];
+const el = (tag, cls, text) => {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+const store = {
+  get(key, fallback) {
+    try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); }
+    catch { return fallback; }
+  },
+  set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ } },
+};
+
+let LANG = store.get("wb_lang", navigator.language && navigator.language.startsWith("fa") ? "fa" : "en");
+const t = (key, vars) => {
+  let text = (I18N[LANG] && I18N[LANG][key]) || I18N.en[key] || key;
+  if (vars) for (const [k, v] of Object.entries(vars)) text = text.replace(`{${k}}`, v);
+  return text;
+};
+
+function applyI18n() {
+  document.documentElement.lang = LANG;
+  document.documentElement.dir = LANG === "fa" ? "rtl" : "ltr";
+  $$("[data-i18n]").forEach((node) => { node.textContent = t(node.dataset.i18n); });
+  $$("[data-i18n-ph]").forEach((node) => { node.placeholder = t(node.dataset.i18nPh); });
+  $("#lang-btn").textContent = LANG === "fa" ? "EN" : "ف";
+}
+
+/* format bytes / durations / time */
+const MB = 1024 * 1024;
+const fmtBytes = (b) => (b >= GB ? (b / GB).toFixed(1) + " GB" : Math.round(b / MB) + " MB");
+const GB = 1024 * MB;
+const fmtUptime = (ms) => {
+  const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
+        m = Math.floor(s % 3600 / 60);
+  return (d ? d + "d " : "") + (h ? h + "h " : "") + m + "m";
+};
+const fmtClock = (epochMs) => new Date(epochMs).toLocaleTimeString(LANG === "fa" ? "fa-IR" : "en-GB",
+  { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+/* ---------------- settings (theme / accent / glass) ---------------- */
+function applyTheme(theme) {
+  document.body.dataset.theme = theme;
+  store.set("wb_theme", theme);
+  $$("#theme-seg button").forEach((b) => b.classList.toggle("active", b.dataset.theme === theme));
+  rebuildChartPalette();
+}
+function applyAccent(name) {
+  const palettes = { blue: ["#4da3ff", "#7cc5ff"], cyan: ["#39d3d8", "#7ee7ea"],
+                     indigo: ["#7c8cff", "#a9b3ff"], teal: ["#3ad2a0", "#7fe3c2"] };
+  const [a, b] = palettes[name] || palettes.blue;
+  document.documentElement.style.setProperty("--accent1", a);
+  document.documentElement.style.setProperty("--accent2", b);
+  $$(".swatch").forEach((sw) => sw.classList.toggle("active", sw.dataset.accent === name));
+  store.set("wb_accent", name);
+  rebuildChartPalette();
+}
+function applyGlass(v) {
+  document.documentElement.style.setProperty("--glass-alpha", (0.35 + (v / 100) * 0.5).toFixed(2));
+  store.set("wb_glass", v);
+}
+
+/* ---------------- API ---------------- */
+const API = {
+  headers() { return { "X-Panel-Token": store.get("wb_token", "") }; },
   async get(path) {
     const res = await fetch(path, { headers: this.headers() });
     if (res.status === 401) { showLogin(); throw new Error("unauthorized"); }
-    if (!res.ok) throw new Error(path + " -> " + res.status);
+    if (!res.ok) throw new Error(res.status);
     return res.json();
   },
   async post(path, body) {
-    const res = await fetch(path, {
-      method: "POST",
-      headers: Object.assign({ "Content-Type": "application/json" }, this.headers()),
-      body: JSON.stringify(body || {}),
-    });
+    const res = await fetch(path, { method: "POST", headers: { ...this.headers(), "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}) });
     if (res.status === 401) { showLogin(); throw new Error("unauthorized"); }
-    if (!res.ok) throw new Error(path + " -> " + res.status);
+    if (!res.ok) throw new Error(res.status);
     return res.json();
   },
 };
 
-/* ---------------- login ---------------- */
-const loginOverlay = document.getElementById("login");
-function showLogin() { loginOverlay.classList.remove("hidden"); }
-function hideLogin() { loginOverlay.classList.add("hidden"); }
-
-async function tryLogin(token) {
-  const loginError = document.getElementById("login-error");
-  try {
-    const res = await fetch("/api/status", { headers: { "X-Panel-Token": token } });
-    if (res.ok) {
-      localStorage.setItem("wb_panel_token", token);
-      hideLogin();
-      boot();
-      return true;
-    }
-    if (res.status === 401) {
-      loginError.textContent = "Invalid token";
-    } else {
-      loginError.textContent = "Proxy answered with HTTP " + res.status;
-    }
-    return false;
-  } catch (e) {
-    loginError.textContent = "Proxy unreachable - is it still running?";
-    return false;
-  }
+function toast(message) {
+  const box = $("#toast");
+  box.textContent = message;
+  box.classList.remove("hidden");
+  clearTimeout(box._timer);
+  box._timer = setTimeout(() => box.classList.add("hidden"), 2600);
 }
 
-const loginBtn = document.getElementById("login-btn");
-loginBtn.addEventListener("click", async () => {
-  loginBtn.disabled = true;
-  loginBtn.textContent = "Checking…";
+/* ---------------- login ---------------- */
+function showLogin() {
+  clearInterval(pollTimer);
+  $("#app").classList.add("hidden");
+  $("#login").classList.remove("hidden");
+  setTimeout(() => $("#token-input").focus(), 50);
+}
+function showApp() {
+  $("#login").classList.add("hidden");
+  $("#app").classList.remove("hidden");
+  refreshAll();
+  startPolling();
+}
+async function tryLogin(token) {
+  const res = await fetch("/api/status", { headers: { "X-Panel-Token": token } });
+  if (res.status === 401) return false;
+  if (!res.ok) throw new Error(res.status);
+  store.set("wb_token", token);
+  return true;
+}
+$("#login-btn").addEventListener("click", async () => {
+  $("#login-error").classList.add("hidden");
   try {
-    const ok = await tryLogin(document.getElementById("token-input").value.trim());
-    document.getElementById("login-error").classList.toggle("hidden", ok);
-  } finally {
-    loginBtn.disabled = false;
-    loginBtn.textContent = "Open dashboard";
-  }
+    if (await tryLogin($("#token-input").value.trim())) showApp();
+    else $("#login-error").classList.remove("hidden");
+  } catch { $("#login-error").classList.remove("hidden"); }
 });
-document.getElementById("token-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") document.getElementById("login-btn").click();
-});
+$("#token-input").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#login-btn").click(); });
 
-/* ---------------- tabs ---------------- */
-document.querySelectorAll(".tab").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
-    document.querySelectorAll(".tab-page").forEach((p) => p.classList.remove("active"));
-    btn.classList.add("active");
-    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
-    if (btn.dataset.tab === "console") scrollConsole();
-  });
-});
+/* ---------------- hotbar navigation ---------------- */
+let currentView = "overview";
+function switchView(name) {
+  currentView = name;
+  $$(".view").forEach((v) => v.classList.toggle("hidden", v.id !== "view-" + name));
+  const active = $(`#hotbar .hotbtn[data-view="${name}"]`);
+  $$("#hotbar .hotbtn").forEach((b) => b.classList.toggle("active", b === active));
+  const pill = $("#hotbar-pill");
+  pill.style.left = active.offsetLeft + "px";
+  pill.style.width = active.offsetWidth + "px";
+}
+$$("#hotbar .hotbtn").forEach((btn) =>
+  btn.addEventListener("click", () => switchView(btn.dataset.view)));
+window.addEventListener("resize", () => switchView(currentView));
+$("#home-btn").addEventListener("click", () => switchView("overview"));
 
-/* ---------------- charts ---------------- */
-const gridColor = "rgba(125, 138, 153, 0.18)";
-const chartDefaults = {
-  responsive: true,
-  maintainAspectRatio: false,
-  animation: false,
-  plugins: { legend: { display: false } },
-  scales: {
-    x: { ticks: { color: "#7d8a99", maxTicksLimit: 8 }, grid: { color: gridColor } },
-    y: { ticks: { color: "#7d8a99" }, grid: { color: gridColor }, beginAtZero: true },
-  },
-};
-const PALETTE = ["#4fc3f7", "#ffb74d", "#66bb6a", "#ef5350", "#ba68c8", "#26c6da", "#ffca28", "#ec407a"];
-
-function lineChart(id, color, yFormat) {
-  const ctx = document.getElementById(id).getContext("2d");
+/* ---------------- charts (created once, updated in place) ---------------- */
+const charts = {};
+function chartTheme() {
+  const dark = document.body.dataset.theme !== "light";
+  return {
+    grid: dark ? "rgba(255,255,255,.07)" : "rgba(13,40,80,.09)",
+    ticks: dark ? "#8fa3c4" : "#5a6f8f",
+  };
+}
+function makeChart(id, label, color) {
+  const ctx = document.getElementById(id);
+  if (!ctx || !window.Chart) return null;
+  const theme = chartTheme();
   return new Chart(ctx, {
     type: "line",
-    data: {
-      labels: [],
-      datasets: [{ data: [], borderColor: color, backgroundColor: color + "22", fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 }],
+    data: { labels: [], datasets: [{
+      data: [], label, borderColor: color, borderWidth: 2,
+      backgroundColor: color + '1f', fill: true, tension: .38, pointRadius: 0, pointHitRadius: 8,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: false,
+      plugins: { legend: { display: false }, tooltip: { intersect: false, mode: "index" } },
+      scales: {
+        x: { ticks: { color: theme.ticks, maxTicksLimit: 8, font: { size: 10 } },
+             grid: { color: theme.grid } },
+        y: { beginAtZero: true, ticks: { color: theme.ticks, maxTicksLimit: 5, font: { size: 10 } },
+             grid: { color: theme.grid } },
+      },
     },
-    options: Object.assign({}, chartDefaults, {
-      scales: Object.assign({}, chartDefaults.scales, { y: Object.assign({}, chartDefaults.scales.y, { ticks: { color: "#7d8a99", callback: yFormat } }) }),
-    }),
+  });
+}
+function fillChart(chart, points, valueFn, labelFn, maxLabelCount) {
+  if (!chart) return;
+  // Downsample for the X axis: labels only for the last N points
+  chart.data.labels = points.map((p, i) =>
+    i % Math.ceil(points.length / (maxLabelCount || 8)) === 0 || i === points.length - 1 ? labelFn(p) : "");
+  chart.data.datasets[0].data = points.map(valueFn);
+  chart.update("none");
+}
+function rebuildChartPalette() {
+  const theme = chartTheme();
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent1").trim();
+  Object.values(charts).forEach((chart) => {
+    if (!chart) return;
+    chart.options.scales.x.ticks.color = theme.ticks;
+    chart.options.scales.x.grid.color = theme.grid;
+    chart.options.scales.y.ticks.color = theme.ticks;
+    chart.options.scales.y.grid.color = theme.grid;
+    if (chart.canvas.id === "chart-memory") chart.data.datasets[0].borderColor = accent;
+    chart.update("none");
   });
 }
 
-const playersChart = lineChart("chart-players", "#4fc3f7", (v) => v);
-const memoryChart = lineChart("chart-memory", "#66bb6a", (v) => (v / 1048576).toFixed(0) + " MB");
-const cpuChart = lineChart("chart-cpu", "#ffb74d", (v) => v + "%");
+/* ---------------- overview ---------------- */
+let lastStatus = null;
+function renderStatus(status) {
+  lastStatus = status;
+  $("#stat-players").textContent = status.players;
+  $("#stat-maxplayers").textContent = "max " + (status.maxPlayers ?? "?");
+  $("#stat-cpu").textContent = (status.cpu ?? 0) + "%";
+  $("#stat-cores").textContent = status.cores + " cores";
+  const used = status.memoryUsed, max = status.memoryMax || 1;
+  $("#stat-memory").textContent = fmtBytes(used) + " / " + fmtBytes(max);
+  $("#memory-fill").style.width = Math.min(100, used / max * 100).toFixed(1) + "%";
+  $("#stat-uptime").textContent = fmtUptime(status.uptimeMs);
+  $("#stat-threads").textContent = status.threads + " threads";
+  $("#version-pill").textContent = "v" + status.proxyVersion;
+  $("#uptime-pill").textContent = fmtUptime(status.uptimeMs);
+  $("#health-dot").classList.toggle("bad", false);
+  $("#badge-players").textContent = status.players;
+  $("#badge-servers").textContent = (status.servers || []).length;
 
-const perServerChart = new Chart(document.getElementById("chart-perserver").getContext("2d"), {
-  type: "bar",
-  data: { labels: [], datasets: [{ data: [], backgroundColor: PALETTE, borderRadius: 6 }] },
-  options: Object.assign({}, chartDefaults, { plugins: { legend: { display: false } } }),
-});
+  $("#about-version").textContent = status.proxyVersion;
+  $("#about-java").textContent = status.javaVersion;
+  $("#about-os").textContent = status.osName + " " + (status.osArch || "");
+  $("#about-proxy").textContent = status.proxyName;
 
-const uptimeChart = new Chart(document.getElementById("chart-uptime").getContext("2d"), {
-  type: "bar",
-  data: { labels: [], datasets: [{ data: [], backgroundColor: "#4fc3f7", borderRadius: 6 }] },
-  options: Object.assign({}, chartDefaults, {
-    indexAxis: "y",
-    scales: Object.assign({}, chartDefaults.scales, {
-      y: Object.assign({}, chartDefaults.scales.y, { beginAtZero: false }),
-      x: Object.assign({}, chartDefaults.scales.x, { ticks: { color: "#7d8a99", callback: (v) => (v / 60000).toFixed(0) + " min" } }),
-    }),
-  }),
-});
-
-/* ---------------- helpers ---------------- */
-function fmtBytes(bytes) {
-  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + " GB";
-  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + " MB";
-  return (bytes / 1024).toFixed(0) + " KB";
+  renderServers(status.servers || []);
+  renderPlayersIfVisible();
 }
-function fmtUptime(ms) {
-  const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-  return h > 0 ? h + "h " + m + "m" : m + "m " + (s % 60) + "s";
-}
-function fmtTime(ts) {
-  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-function pill(text, good) {
-  return `<span class="pill ${good ? "good" : "bad"}">${text}</span>`;
+function renderPlayersIfVisible() {
+  if (currentView === "players") refreshPlayers();
 }
 
-/* ---------------- connection state ---------------- */
-const connBanner = document.getElementById("conn-banner");
-function setConnectionLost(lost) {
-  connBanner.classList.toggle("hidden", !lost);
+/* ---------------- servers ---------------- */
+const sparkCache = new Map();
+function sparkline(canvas, series, color) {
+  const width = canvas.width = canvas.clientWidth * (window.devicePixelRatio || 1);
+  const height = canvas.height = canvas.clientHeight * (window.devicePixelRatio || 1);
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, width, height);
+  const data = series.filter((v) => v >= 0);
+  if (data.length < 2) return;
+  const max = Math.max(...data), min = Math.min(...data), span = (max - min) || 1;
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i / (data.length - 1) * width;
+    const y = height - 3 - ((v - min) / span) * (height - 6);
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.strokeStyle = color; ctx.lineWidth = 2 * (window.devicePixelRatio || 1);
+  ctx.lineJoin = "round"; ctx.stroke();
+  ctx.lineTo(width, height); ctx.lineTo(0, height); ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, height);
+  grad.addColorStop(0, color + "55"); grad.addColorStop(1, color + "00");
+  ctx.fillStyle = grad; ctx.fill();
+}
+function renderServers(servers) {
+  const grid = $("#servers-grid");
+  $("#servers-empty").classList.toggle("hidden", servers.length > 0);
+  const existing = new Map(sparkCache);
+  const names = new Set();
+  servers.forEach((server) => {
+    names.add(server.name);
+    let card = existing.get(server.name);
+    if (!card) {
+      card = buildServerCard(server);
+      grid.appendChild(card);
+    }
+    updateServerCard(card, server);
+  });
+  for (const [name, card] of existing) {
+    if (!names.has(name)) { card.remove(); sparkCache.delete(name); }
+  }
+  if (dialogServer) refreshServerDialog();
+}
+function buildServerCard(server) {
+  const card = el("div", "card glass server-card");
+  card.dataset.card = "server-" + server.name;
+  card.dataset.editor = "servers";
+  card.dataset.serverName = server.name;
+
+  const head = el("div", "server-head");
+  const dot = el("span", "dot");
+  dot.classList.add("server-dot");
+  const name = el("span", "server-name", server.name);
+  const type = el("span", "server-type", server.type);
+  head.append(dot, name, type);
+  card.appendChild(head);
+
+  const meta = el("div", "server-meta");
+  meta.innerHTML = `<span>👥 <b class="m-players">0</b></span>
+                    <span>📶 <b class="m-ping">—</b></span>
+                    <span>⏱ <b class="m-up">—</b></span>`;
+  card.appendChild(meta);
+
+  const addr = el("div", "muted small", server.address);
+  addr.style.marginTop = "8px";
+  card.appendChild(addr);
+
+  const spark = el("div", "server-spark");
+  const canvas = document.createElement("canvas");
+  spark.appendChild(canvas);
+  card.appendChild(spark);
+
+  const hint = el("div", "server-open-hint", t("servers.clickForDetail"));
+  card.appendChild(hint);
+
+  card.addEventListener("click", (event) => {
+    if (event.target.classList.contains("card-hide") || document.body.classList.contains("editing")) return;
+    openServerDialog(server.name);
+  });
+  attachEditorTools(card);
+  sparkCache.set(server.name, card);
+  return card;
+}
+function updateServerCard(card, server) {
+  card.querySelector(".server-dot").classList.toggle("bad", !server.online);
+  card.querySelector(".m-players").textContent = server.players;
+  card.querySelector(".m-ping").textContent = server.pingMs >= 0 ? server.pingMs + " ms" : t("common.offline");
+  card.querySelector(".m-up").textContent = server.upMs > 0 ? fmtUptime(server.upMs) : "—";
+  card.querySelector(".server-type").textContent = server.type;
+  card.querySelector(".muted.small").textContent = server.address;
+  sparkline(card.querySelector("canvas"), server.pingHistory || pingSparkFallback(server.name),
+            getComputedStyle(document.documentElement).getPropertyValue("--accent1").trim());
+}
+// The status payload has no history; the detail endpoint fills the sparkline when opened.
+// For the grid, keep a light rolling ping series per server from status polls.
+const gridPingHistory = new Map();
+function pingSparkFallback(name) {
+  const series = gridPingHistory.get(name) || [];
+  return series;
 }
 
-/* ---------------- polling ---------------- */
-async function refreshStatus() {
-  try {
-    const s = await API.get("/api/status");
-    setConnectionLost(false);
-    document.getElementById("proxy-name").textContent = s.proxyName;
-    document.getElementById("proxy-version").textContent = "v" + s.proxyVersion + " · java " + s.javaVersion;
-    document.getElementById("stat-cpu").textContent = s.cpu + "%";
-    document.getElementById("stat-mem").textContent = fmtBytes(s.memoryUsed) + " / " + fmtBytes(s.memoryMax);
-    document.getElementById("stat-threads").textContent = s.threads;
-    document.getElementById("stat-players").textContent = s.players;
-    document.getElementById("stat-servers").textContent = s.servers.length;
-    document.getElementById("stat-uptime").textContent = fmtUptime(s.uptimeMs);
-    document.getElementById("stat-updated").textContent = fmtTime(Date.now());
-    document.getElementById("bind-info").textContent = location.host;
+/* ---------------- server detail dialog ---------------- */
+let dialogServer = null;
+let dialogTimer = null;
+function openServerDialog(name) {
+  dialogServer = name;
+  $("#server-dialog").showModal();
+  refreshServerDialog();
+  dialogTimer = setInterval(refreshServerDialog, 5000);
+}
+$("#sd-close").addEventListener("click", () => { $("#server-dialog").close(); });
+$("#server-dialog").addEventListener("close", () => { clearInterval(dialogTimer); dialogServer = null; });
 
-    const rows = s.servers.map((srv) => {
-      const online = srv.online;
-      return `<tr>
-        <td><strong>${escapeHtml(srv.name)}</strong></td><td class="muted">${escapeHtml(srv.address)}</td>
-        <td class="muted">${escapeHtml(srv.type)}</td>
-        <td>${srv.players}</td>
-        <td>${srv.pingMs >= 0 ? srv.pingMs + " ms" : "–"}</td>
-        <td>${pill(online ? "online" : "down", online)}</td>
-      </tr>`;
+async function refreshServerDialog() {
+  if (!dialogServer || !$("#server-dialog").open) return;
+  let detail;
+  try { detail = await API.get("/api/servers/" + encodeURIComponent(dialogServer)); }
+  catch { return; }
+  $("#sd-name").textContent = detail.name;
+  $("#sd-address").textContent = detail.address;
+  $("#sd-type").textContent = detail.type;
+  $("#sd-dot").classList.toggle("bad", !detail.online);
+  $("#sd-online").textContent = detail.online ? t("servers.online") : t("servers.offline");
+  $("#sd-players").textContent = detail.players;
+  $("#sd-ping").textContent = detail.pingMs >= 0 ? detail.pingMs + " ms" : t("common.offline");
+  $("#sd-up").textContent = detail.upMs > 0 ? fmtUptime(detail.upMs) : "—";
+
+  if (!charts.sdPing) {
+    charts.sdPing = makeChart("sd-chart-ping", "ping", "#39d3d8");
+    charts.sdPlayers = makeChart("sd-chart-players", "players", "#7c8cff");
+  }
+  // Each chart labels from its own series length (the ping and player histories grow
+  // independently, so a shared label array produced "undefined" ticks)
+  const secLabels = (series) => series.map((_, i) => (i - series.length + 1) + "s");
+  fillChart(charts.sdPing, detail.pingHistory, (v) => (v >= 0 ? v : null),
+    (_, i) => secLabels(detail.pingHistory)[i], 8);
+  fillChart(charts.sdPlayers, detail.playersHistory, (v) => v,
+    (_, i) => secLabels(detail.playersHistory)[i], 8);
+
+  const list = $("#sd-players-list");
+  list.innerHTML = "";
+  (detail.playerNames || []).forEach((playerName) => {
+    const chip = el("span", "chip", playerName);
+    const kick = el("button", "btn mini danger", "✕");
+    kick.title = t("players.kick");
+    kick.addEventListener("click", async () => {
+      if (!confirm(t("common.confirmKick", { name: playerName }))) return;
+      await API.post("/api/players/" + encodeURIComponent(playerName) + "/kick");
+      toast(playerName + " " + t("common.kicked"));
+      refreshServerDialog();
     });
-    document.querySelector("#server-status-table tbody").innerHTML =
-      rows.length ? rows.join("") : emptyRow(6, "No servers registered in the config");
+    chip.appendChild(kick);
+    list.appendChild(chip);
+  });
+  if (!(detail.playerNames || []).length) {
+    list.appendChild(el("span", "muted small", t("players.empty")));
+  }
 
-    const upLabels = [], upData = [];
-    s.servers.forEach((srv) => {
-      upLabels.push(srv.name);
-      upData.push(srv.upMs > 0 ? srv.upMs : 0);
+  // Move a player to this server
+  const box = $("#sd-transfer");
+  box.innerHTML = "";
+  try {
+    const data = await API.get("/api/players");
+    const select = el("select", "select");
+    select.appendChild(el("option", "", t("players.transfer") + " →"));
+    (data.players || []).forEach((p) => {
+      const option = el("option", "", p.name);
+      option.value = p.name;
+      select.appendChild(option);
     });
-    uptimeChart.data.labels = upLabels;
-    uptimeChart.data.datasets[0].data = upData;
-    uptimeChart.update();
-
-    renderPlayers(await API.get("/api/players"));
-    renderServersTable(s.servers);
-  } catch (e) {
-    if (e.message !== "unauthorized") {
-      setConnectionLost(true);
-      console.warn(e);
-    }
-  }
+    const move = el("button", "btn mini primary", "→ " + dialogServer);
+    move.addEventListener("click", async () => {
+      if (!select.value) return;
+      await API.post("/api/players/" + encodeURIComponent(select.value) + "/transfer",
+        { server: dialogServer });
+      toast(select.value + " " + t("common.moved"));
+    });
+    box.append(select, move);
+  } catch { /* players fetch failed; box stays empty */ }
 }
-
-async function refreshHistory() {
-  try {
-    const history = await API.get("/api/history");
-    const labels = history.map((p) => fmtTime(p.time));
-    playersChart.data.labels = labels;
-    playersChart.data.datasets[0].data = history.map((p) => p.players);
-    playersChart.update();
-    memoryChart.data.labels = labels;
-    memoryChart.data.datasets[0].data = history.map((p) => p.memoryUsed);
-    memoryChart.update();
-    cpuChart.data.labels = labels;
-    cpuChart.data.datasets[0].data = history.map((p) => p.cpu);
-    cpuChart.update();
-
-    const perServer = history.length ? history[history.length - 1].perServer : {};
-    perServerChart.data.labels = Object.keys(perServer);
-    perServerChart.data.datasets[0].data = Object.values(perServer);
-    perServerChart.update();
-  } catch (e) {
-    if (e.message !== "unauthorized") console.warn(e);
-  }
-}
-
-function emptyRow(columns, text) {
-  return `<tr><td colspan="${columns}" class="muted empty-row">${escapeHtml(text)}</td></tr>`;
-}
-
-function renderPlayers(payload) {
-  const players = payload.players || [];
-  document.getElementById("player-count").textContent = players.length;
-  const rows = players.map((p) => `<tr>
-    <td><strong>${escapeHtml(p.name)}</strong></td>
-    <td>${p.server == null ? "…" : escapeHtml(p.server)}</td>
-    <td class="muted">${escapeHtml(p.address)}</td>
-    <td class="muted">${p.protocol}</td>
-    <td class="muted">${escapeHtml(p.xuid || "")}</td>
-    <td><div class="row-actions">
-      <button class="btn-warn" data-kick="${escapeHtml(p.name)}">Kick</button>
-      <button data-transfer="${escapeHtml(p.name)}">Transfer</button>
-    </div></td>
-  </tr>`);
-  document.querySelector("#players-table tbody").innerHTML =
-    rows.length ? rows.join("") : emptyRow(6, "No players online");
-}
-
-function renderServersTable(servers) {
-  const rows = servers.map((srv) => `<tr>
-    <td><strong>${escapeHtml(srv.name)}</strong></td>
-    <td class="muted">${escapeHtml(srv.address)}</td>
-    <td class="muted">${escapeHtml(srv.type)}</td>
-    <td>${srv.players}</td>
-    <td>${srv.pingMs >= 0 ? srv.pingMs + " ms" : "–"}</td>
-    <td><div class="row-actions"><button data-ping="${escapeHtml(srv.name)}">Ping</button></div></td>
-  </tr>`);
-  document.querySelector("#servers-table tbody").innerHTML =
-    rows.length ? rows.join("") : emptyRow(6, "No servers registered in the config");
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
-document.addEventListener("click", async (event) => {
-  const target = event.target;
-  const kick = target.getAttribute && target.getAttribute("data-kick");
-  const transfer = target.getAttribute && target.getAttribute("data-transfer");
-  const ping = target.getAttribute && target.getAttribute("data-ping");
-  try {
-    if (kick) {
-      if (confirm("Kick " + kick + "?")) {
-        target.disabled = true;
-        try {
-          await API.post("/api/players/" + encodeURIComponent(kick) + "/kick", { reason: "Kicked from the panel" });
-        } finally {
-          target.disabled = false;
-        }
-      }
-      refreshStatus();
-    } else if (transfer) {
-      const server = prompt("Transfer " + transfer + " to which server?");
-      if (server) {
-        target.disabled = true;
-        try {
-          await API.post("/api/players/" + encodeURIComponent(transfer) + "/transfer", { server });
-        } finally {
-          target.disabled = false;
-        }
-      }
-      refreshStatus();
-    } else if (ping) {
-      target.disabled = true;
-      target.textContent = "Pinging…";
-      try {
-        await API.post("/api/servers/ping/" + encodeURIComponent(ping));
-        setTimeout(refreshStatus, 1500);
-      } finally {
-        target.disabled = false;
-        target.textContent = "Ping";
-      }
-    }
-  } catch (e) {
-    if (e.message !== "unauthorized") {
-      setConnectionLost(true);
-      console.warn(e);
-    }
-  }
+$("#sd-ping").addEventListener("click", async () => {
+  if (!dialogServer) return;
+  await API.post("/api/servers/ping/" + encodeURIComponent(dialogServer));
+  toast(t("common.pinged"));
 });
+
+/* ---------------- players ---------------- */
+async function refreshPlayers() {
+  let data;
+  try { data = await API.get("/api/players"); } catch { return; }
+  const body = $("#players-body");
+  body.innerHTML = "";
+  const players = data.players || [];
+  $("#players-empty").classList.toggle("hidden", players.length > 0);
+  players.forEach((player) => {
+    const row = el("tr");
+    const nameCell = el("td", "", player.name);
+    nameCell.style.fontWeight = "600";
+    row.appendChild(nameCell);
+    row.appendChild(el("td", "", player.server || "—"));
+    row.appendChild(el("td", "muted", player.address || ""));
+    row.appendChild(el("td", "muted", String(player.protocol || "")));
+
+    const actions = el("td");
+    const kick = el("button", "btn mini danger", t("players.kick"));
+    kick.addEventListener("click", async () => {
+      if (!confirm(t("common.confirmKick", { name: player.name }))) return;
+      await API.post("/api/players/" + encodeURIComponent(player.name) + "/kick");
+      toast(player.name + " " + t("common.kicked"));
+      refreshPlayers();
+    });
+    actions.appendChild(kick);
+
+    const move = el("button", "btn mini", t("players.transfer"));
+    move.style.marginInlineStart = "6px";
+    move.addEventListener("click", () => {
+      const target = prompt(t("players.transfer") + " →", (player.server || "") && "");
+      if (!target) return;
+      API.post("/api/players/" + encodeURIComponent(player.name) + "/transfer", { server: target })
+        .then(() => { toast(player.name + " " + t("common.moved")); refreshPlayers(); })
+        .catch(() => toast("✕"));
+    });
+    actions.appendChild(move);
+    row.appendChild(actions);
+    body.appendChild(row);
+  });
+}
 
 /* ---------------- console ---------------- */
-const consoleOutput = document.getElementById("console-output");
-let renderedLogLines = 0;
-let lastLogPayload = [];
-
-function appendLog(line) {
-  const div = document.createElement("div");
-  const level = line.includes("[ERROR]") ? "log-error" : line.includes("[WARN]") ? "log-warn" : "log-info";
-  div.className = level;
-  div.textContent = line;
-  consoleOutput.appendChild(div);
-  while (consoleOutput.childElementCount > 400) consoleOutput.removeChild(consoleOutput.firstChild);
+const consoleBox = $("#console-log");
+let consoleTail = [];
+function renderConsole() {
+  const filter = $("#console-level").value;
+  const atBottom = consoleBox.scrollTop + consoleBox.clientHeight >= consoleBox.scrollHeight - 30;
+  consoleBox.innerHTML = "";
+  consoleTail.forEach((line) => {
+    if (filter === "WARN" && / WARN /.test(line) === false && / ERROR /.test(line) === false) return;
+    if (filter === "ERROR" && / ERROR /.test(line) === false) return;
+    const span = renderLogLine(line);
+    consoleBox.appendChild(span);
+  });
+  if (atBottom) consoleBox.scrollTop = consoleBox.scrollHeight;
 }
-function scrollConsole() { consoleOutput.scrollTop = consoleOutput.scrollHeight; }
-
-async function refreshLogs() {
-  try {
-    const payload = await API.get("/api/logs");
-    const lines = payload.lines || [];
-    // Append only the new tail when the already rendered prefix still matches: re-rendering
-    // the whole 400-line tail three times a second caused visible console churn and wasted
-    // DOM work. A mismatch (rotation, server restart) falls back to a full rebuild.
-    if (renderedLogLines > 0 && renderedLogLines <= lastLogPayload.length && lines.length >= renderedLogLines
-        && lastLogPayload[renderedLogLines - 1] === lines[renderedLogLines - 1]) {
-      const fresh = lines.slice(renderedLogLines);
-      fresh.forEach(appendLog);
-      renderedLogLines = lines.length;
-    } else {
-      consoleOutput.replaceChildren();
-      if (!lines.length) appendLog("(no log lines yet)");
-      lines.forEach(appendLog);
-      renderedLogLines = lines.length;
-    }
-    lastLogPayload = lines;
-    scrollConsole();
-  } catch (e) {
-    if (e.message !== "unauthorized") console.warn(e);
+function renderLogLine(line) {
+  const match = line.match(/^(\d{2}:\d{2}:\d{2}) \[([A-Z]+)\] ?(.*)$/);
+  const span = el("span", "log-line");
+  if (match) {
+    const time = el("span", "log-time", match[1] + "  ");
+    const level = el("span", "log-" + match[2], "[" + match[2] + "] ");
+    span.append(time, level, document.createTextNode(match[3]));
+  } else {
+    span.textContent = line;
   }
+  return span;
 }
+async function refreshLogs() {
+  let data;
+  try { data = await API.get("/api/logs"); } catch { return; }
+  const lines = data.lines || [];
+  if (JSON.stringify(lines.slice(-3)) === JSON.stringify(consoleTail.slice(-3)) && lines.length === consoleTail.length) {
+    renderConsole();
+    return;
+  }
+  consoleTail = lines;
+  renderConsole();
+}
+$("#console-clear").addEventListener("click", () => { consoleBox.innerHTML = ""; });
+$("#console-level").addEventListener("change", renderConsole);
 
-async function sendCommand() {
-  const input = document.getElementById("console-command");
+const cmdHistory = store.get("wb_cmd_hist", []);
+let cmdIndex = cmdHistory.length;
+function sendConsoleCommand() {
+  const input = $("#console-input");
   const command = input.value.trim();
   if (!command) return;
   input.value = "";
-  appendLog("> " + command);
-  try {
-    await API.post("/api/command", { command });
-  } catch (e) {
-    if (e.message !== "unauthorized") appendLog("[panel] command failed: " + e.message);
-  }
-  setTimeout(refreshLogs, 350);
+  cmdHistory.push(command);
+  while (cmdHistory.length > 50) cmdHistory.shift();
+  cmdIndex = cmdHistory.length;
+  store.set("wb_cmd_hist", cmdHistory);
+  API.post("/api/command", { command })
+    .then(() => toast(t("common.commandSent")))
+    .catch(() => toast("✕"));
 }
-document.getElementById("console-send").addEventListener("click", sendCommand);
-document.getElementById("console-command").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") sendCommand();
+$("#console-send").addEventListener("click", sendConsoleCommand);
+$("#console-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendConsoleCommand();
+  if (e.key === "ArrowUp" && cmdIndex > 0) { cmdIndex--; $("#console-input").value = cmdHistory[cmdIndex] || ""; }
+  if (e.key === "ArrowDown") {
+    if (cmdIndex < cmdHistory.length - 1) { cmdIndex++; $("#console-input").value = cmdHistory[cmdIndex] || ""; }
+    else { cmdIndex = cmdHistory.length; $("#console-input").value = ""; }
+  }
 });
 
-/* ---------------- boot ---------------- */
-let booted = false;
-function boot() {
-  if (booted) return;
-  booted = true;
-  refreshStatus();
-  refreshHistory();
-  refreshLogs();
-  setInterval(refreshStatus, 3000);
-  setInterval(refreshHistory, 5000);
-  setInterval(refreshLogs, 3000);
+/* ---------------- layout editor ---------------- */
+let editing = false;
+const LAYOUT_KEY = "wb_layout_v1";
+function savedLayout() { return store.get(LAYOUT_KEY, { hidden: [] }); }
+function saveLayout() {
+  const layout = { order: {}, hidden: [...currentHidden] };
+  $$("[data-editor]").forEach((group) => {
+    const ids = [...group.children].filter((c) => c.dataset && c.dataset.card)
+      .map((c) => c.dataset.card);
+    if (ids.length) layout.order[group.dataset.editor] = ids;
+  });
+  store.set(LAYOUT_KEY, layout);
+}
+let currentHidden = savedLayout().hidden || [];
+function applySavedLayout() {
+  const layout = savedLayout();
+  currentHidden = layout.hidden || [];
+  // order
+  Object.entries(layout.order || {}).forEach(([group, ids]) => {
+    const container = document.querySelector(`[data-editor="${group}"]`);
+    if (!container) return;
+    ids.forEach((id) => {
+      const card = container.querySelector(`[data-card="${CSS.escape(id)}"]`);
+      if (card) container.appendChild(card);
+    });
+  });
+  // hidden
+  $$("[data-card]").forEach((card) => {
+    card.classList.toggle("ghosted", false);
+    card.classList.toggle("hidden", currentHidden.includes(card.dataset.card));
+  });
+  renderHiddenChips();
+  $("#restore-btn").classList.toggle("hidden", currentHidden.length === 0);
+}
+let dragCard = null;
+function attachEditorTools(card) {
+  card.draggable = editing;
+  if (!card.querySelector(".card-hide")) {
+    const hide = el("button", "card-hide", "×");
+    hide.type = "button";
+    card.appendChild(hide);
+  }
+  card.addEventListener("dragstart", editorDragStart);
+  card.addEventListener("dragover", editorDragOver);
+  card.addEventListener("drop", editorDrop);
+}
+function editorDragStart(event) {
+  if (!editing) return;
+  dragCard = event.currentTarget;
+  event.dataTransfer.effectAllowed = "move";
+}
+function editorDragOver(event) {
+  if (!editing || !dragCard || event.currentTarget === dragCard) return;
+  event.preventDefault();
+  event.currentTarget.classList.add("drag-over");
+}
+function editorDrop(event) {
+  if (!editing || !dragCard) return;
+  event.preventDefault();
+  const target = event.currentTarget;
+  target.classList.remove("drag-over");
+  if (target.dataset.editor !== dragCard.dataset.editor) return;
+  const parent = target.parentElement;
+  const rect = target.getBoundingClientRect();
+  const after = (event.clientX - rect.left) / rect.width > 0.5;
+  parent.insertBefore(dragCard, after ? target.nextSibling : target);
+  dragCard = null;
+  saveLayout();
+}
+function toggleEditor(force) {
+  editing = force !== undefined ? force : !editing;
+  document.body.classList.toggle("editing", editing);
+  $$("[data-card]").forEach((card) => { card.draggable = editing; });
+  const btn = $("#edit-btn");
+  if (btn) btn.textContent = editing ? t("settings.done") : t("settings.editLayout");
+  $("#edit-banner").classList.toggle("hidden", !editing);
+  if (!editing) saveLayout();
+}
+document.addEventListener("click", (event) => {
+  if (!event.target.classList || !event.target.classList.contains("card-hide")) return;
+  const card = event.target.closest("[data-card]");
+  if (!card) return;
+  card.classList.add("hidden");
+  if (!currentHidden.includes(card.dataset.card)) currentHidden.push(card.dataset.card);
+  saveLayout();
+  $("#restore-btn").classList.toggle("hidden", currentHidden.length === 0);
+  renderHiddenChips();
+});
+$("#restore-btn").addEventListener("click", () => { switchView("settings"); renderHiddenChips(); });
+function restoreCard(name) {
+  currentHidden = currentHidden.filter((id) => id !== name);
+  const card = document.querySelector(`[data-card="${CSS.escape(name)}"]`);
+  if (card) card.classList.remove("hidden");
+  saveLayout();
+  renderHiddenChips();
+  $("#restore-btn").classList.toggle("hidden", currentHidden.length === 0);
+}
+function renderHiddenChips() {
+  const box = $("#hidden-chips");
+  if (!box) return;
+  box.innerHTML = "";
+  currentHidden.forEach((name) => {
+    const chip = el("button", "chip", "👁 " + name);
+    chip.addEventListener("click", () => restoreCard(name));
+    box.appendChild(chip);
+  });
+  box.classList.toggle("hidden", currentHidden.length === 0);
 }
 
-(function init() {
-  const token = localStorage.getItem("wb_panel_token");
-  if (token) {
-    tryLogin(token).then((ok) => { if (!ok) showLogin(); });
-  } else {
-    showLogin();
+/* ---------------- header buttons ---------------- */
+$("#theme-btn").addEventListener("click", () => {
+  applyTheme(document.body.dataset.theme === "dark" ? "light" : "dark");
+});
+$("#lang-btn").addEventListener("click", () => {
+  LANG = LANG === "fa" ? "en" : "fa";
+  store.set("wb_lang", LANG);
+  applyI18n();
+  if (lastStatus) renderStatus(lastStatus);
+  if (currentView === "players") refreshPlayers();
+  if (editing) toggleEditor(true);
+});
+$$("#theme-seg button").forEach((b) => b.addEventListener("click", () => applyTheme(b.dataset.theme)));
+$$(".swatch").forEach((sw) => sw.addEventListener("click", () => applyAccent(sw.dataset.accent)));
+$("#glass-range").addEventListener("input", (e) => applyGlass(Number(e.target.value)));
+$("#edit-btn").addEventListener("click", () => toggleEditor());
+$("#reset-layout-btn").addEventListener("click", () => {
+  store.set(LAYOUT_KEY, { hidden: [] });
+  currentHidden = [];
+  $$("[data-card]").forEach((card) => card.classList.remove("hidden"));
+  renderHiddenChips();
+  $("#restore-btn").classList.add("hidden");
+  toast("↺");
+});
+
+/* ---------------- polling ---------------- */
+let pollTimer = null;
+function refreshAll() {
+  pollStatus();
+  pollHistory();
+  refreshLogs();
+}
+function startPolling() {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(() => {
+    if (document.hidden) return;
+    refreshAll();
+    if (currentView === "players") refreshPlayers();
+  }, 5000);
+}
+async function pollStatus() {
+  try {
+    renderStatus(await API.get("/api/status"));
+  } catch {
+    $("#health-dot").classList.toggle("bad", true);
   }
-  document.getElementById("stat-clock").textContent = fmtTime(Date.now());
-  setInterval(() => document.getElementById("stat-clock").textContent = fmtTime(Date.now()), 1000);
+}
+async function pollHistory() {
+  let points;
+  try { points = await API.get("/api/history"); } catch { return; }
+  if (!points.length) return;
+  if (!charts.players) {
+    charts.players = makeChart("chart-players", "players", "#4da3ff");
+    charts.memory = makeChart("chart-memory", "memory", "#39d3d8");
+    charts.cpu = makeChart("chart-cpu", "cpu", "#7c8cff");
+  }
+  const isFa = LANG === "fa";
+  fillChart(charts.players, points, (p) => p.players, (p) => fmtClock(p.time));
+  fillChart(charts.memory, points, (p) => Math.round(p.memoryUsed / MB),
+    (p) => fmtClock(p.time));
+  fillChart(charts.cpu, points, (p) => p.cpu, (p) => fmtClock(p.time));
+}
+
+/* ---------------- boot ---------------- */
+(async function boot() {
+  document.body.dataset.theme = store.get("wb_theme", "dark");
+  applyAccent(store.get("wb_accent", "blue"));
+  applyGlass(store.get("wb_glass", 70));
+  applyI18n();
+  applySavedLayout();
+  $$("#theme-seg button").forEach((b) => b.classList.toggle("active", b.dataset.theme === document.body.dataset.theme));
+  $("#glass-range").value = String(store.get("wb_glass", 70));
+
+  // editor: every card gets drag handlers and a hide button
+  $$("[data-card]").forEach((card) => attachEditorTools(card));
+
+  // auto-login with a stored token; the login screen stays until a token verifies.
+  // Polling only starts after a successful login - pre-auth polls would spam the
+  // server's brute-force counter with tokenless requests.
+  const stored = store.get("wb_token", "");
+  if (stored) tryLogin(stored).then((ok) => ok && showApp()).catch(() => {});
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && editing) toggleEditor(false);
+  });
+
+  startPolling();
 })();

@@ -49,6 +49,11 @@ public class PanelMetrics {
     static final int SAMPLE_PERIOD_TICKS = 20 * 5;
     private static final int HISTORY_CAP = 432;
     private static final int LOG_CAP = 400;
+    /**
+     * Per-server detail samples; one per ping probe and one per sampler tick, capped so a
+     * server card never grows unbounded (the panel chart-growth bug came from unbounded data).
+     */
+    static final int SERVER_HISTORY_CAP = 120;
     private static final java.time.format.DateTimeFormatter TIME_FORMAT =
             java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss");
 
@@ -109,7 +114,7 @@ public class PanelMetrics {
             for (ServerInfo server : this.proxy.getServerInfoMap().values()) {
                 perServer.put(server.getServerName(), server.getPlayers().size());
                 this.serverStates.computeIfAbsent(server.getServerName(), name -> new ServerState())
-                        .players = server.getPlayers().size();
+                        .recordPlayers(server.getPlayers().size());
             }
             // Drop states of servers that disappeared from the config so the map cannot retain
             // stale entries forever.
@@ -160,6 +165,7 @@ public class PanelMetrics {
         status.put("time", System.currentTimeMillis());
         status.put("uptimeMs", System.currentTimeMillis() - this.startedAt);
         status.put("players", this.proxy.getPlayerManager().getPlayerCount());
+        status.put("maxPlayers", this.proxy.getConfiguration().getMaxPlayerCount());
         status.put("proxyName", this.proxy.getConfiguration().getName());
         status.put("proxyVersion", dev.waterbucket.waterbucketpe.WaterbucketPE.version().baseVersion());
         status.put("javaVersion", System.getProperty("java.version"));
@@ -187,10 +193,22 @@ public class PanelMetrics {
             entry.put("online", state == null || state.lastPingMs >= 0);
             long upSince = state == null ? this.startedAt : Math.max(state.lastSuccessAt, this.startedAt);
             entry.put("upMs", state == null || state.lastPingMs >= 0 ? System.currentTimeMillis() - upSince : 0);
+            // Tail of the ping history for the grid sparkline (last 30 samples)
+            entry.put("pingHistory", state == null ? List.of() : tail(state.pingHistory, 30));
             servers.add(entry);
         }
         status.put("servers", servers);
         return status;
+    }
+
+    private static <T> List<T> tail(ArrayDeque<T> deque, int n) {
+        List<T> out = new ArrayList<>(Math.min(n, deque.size()));
+        int skip = Math.max(0, deque.size() - n);
+        int i = 0;
+        for (T item : deque) {
+            if (i++ >= skip) out.add(item);
+        }
+        return out;
     }
 
     public List<Map<String, Object>> history() {
@@ -211,6 +229,7 @@ public class PanelMetrics {
 
     public void recordPing(String server, boolean success, long latencyMs) {
         ServerState state = this.serverStates.computeIfAbsent(server, name -> new ServerState());
+        state.recordPing(success, latencyMs);
         if (success) {
             state.lastPingMs = latencyMs;
             state.lastSuccessAt = System.currentTimeMillis();
@@ -219,10 +238,57 @@ public class PanelMetrics {
         }
     }
 
+    /**
+     * The management view of one server: identity, live state and the rolling ping/player
+     * histories for its detail card. Null when the server is not registered.
+     */
+    public Map<String, Object> serverDetail(String name) {
+        ServerInfo server = this.proxy.getServerInfoMap().get(name);
+        if (server == null) {
+            return null;
+        }
+        ServerState state = this.serverStates.get(name);
+        Map<String, Object> detail = new LinkedHashMap<>();
+        detail.put("name", server.getServerName());
+        detail.put("type", server.getServerType().toString());
+        detail.put("address", server.getPublicAddress().getHostString() + ":" + server.getPublicAddress().getPort());
+        detail.put("players", server.getPlayers().size());
+        detail.put("pingMs", state == null ? -1 : state.lastPingMs);
+        detail.put("online", state == null || state.lastPingMs >= 0);
+        long upSince = state == null ? this.startedAt : Math.max(state.lastSuccessAt, this.startedAt);
+        detail.put("upMs", state == null || state.lastPingMs >= 0 ? System.currentTimeMillis() - upSince : 0);
+        List<String> players = new ArrayList<>();
+        server.getPlayers().forEach(player -> players.add(player.getName()));
+        detail.put("playerNames", players);
+        detail.put("pingHistory", state == null ? List.of() : new ArrayList<>(state.pingHistory));
+        detail.put("playersHistory", state == null ? List.of() : new ArrayList<>(state.playersHistory));
+        return detail;
+    }
+
+    /**
+     * Rolling per-server detail: the last N ping and player samples feed the per-server charts
+     * in the panel without re-pinging anything on the HTTP path.
+     */
     private static class ServerState {
         volatile long lastPingMs = -1;
         volatile long lastSuccessAt = System.currentTimeMillis();
         volatile int players;
+        final ArrayDeque<Long> pingHistory = new ArrayDeque<>(SERVER_HISTORY_CAP);
+        final ArrayDeque<Integer> playersHistory = new ArrayDeque<>(SERVER_HISTORY_CAP);
+
+        void recordPing(boolean success, long latencyMs) {
+            this.pingHistory.addLast(success ? latencyMs : -1);
+            while (this.pingHistory.size() > SERVER_HISTORY_CAP) {
+                this.pingHistory.pollFirst();
+            }
+        }
+
+        void recordPlayers(int count) {
+            this.playersHistory.addLast(count);
+            while (this.playersHistory.size() > SERVER_HISTORY_CAP) {
+                this.playersHistory.pollFirst();
+            }
+        }
     }
 
     private class LogTailAppender extends AbstractAppender {
