@@ -310,15 +310,24 @@ public class NetherNetInterface implements NetworkInterface, SignalingService {
             return;
         }
 
-        // The native ICE and DTLS stack logs through slf4j once a threshold is set
+        // The native ICE and DTLS stack must be loaded before its log level can reach it: the
+        // Java wrapper only forwards the level to the native library once initialized, so a
+        // level set before load() was silently dropped and the native stack stayed at its own
+        // default - which printed a burst of probe noise (send failures, reflexive-candidate
+        // churn) straight to stdout on every STUN refresh.
+        tel.schich.libdatachannel.LibDataChannel.initialize();
         String level = NetherNetProperties.LOG_LEVEL;
         if (level == null) {
-            NetherNetLogging.setNativeLogLevel("WARN");
+            // Quiet by default: ERROR keeps real ICE/DTLS failures visible without the noise;
+            // set waterbucket.nethernetLog=WARN/INFO/DEBUG when debugging ICE connectivity.
+            NetherNetLogging.setNativeLogLevel("ERROR");
         } else if (NetherNetLogging.setLogLevel(level)) {
+            // The property drives both layers: the Java transport loggers and the native stack
+            NetherNetLogging.setNativeLogLevel(level);
             log.info("NetherNet log level set from system property: {}", level.trim());
         } else {
             log.warn("Invalid waterbucket.nethernetLog \"{}\", expected OFF, ERROR, WARN, INFO, DEBUG or TRACE", level);
-            NetherNetLogging.setNativeLogLevel("WARN");
+            NetherNetLogging.setNativeLogLevel("ERROR");
         }
 
         this.identity = ProxyIdentity.identity(this.proxy);

@@ -34,6 +34,12 @@
         </RollingRandomAccessFile>
     </Appenders>
     <Loggers>
+        <!-- STUN discovery repeats every probe interval, and each probe gets a fresh ephemeral
+             source port, so the mapping line is never "unchanged" and would flood the console at
+             four lines per interval. Everything else from the same logger still passes. -->
+        <Logger name="org.cloudburstmc.netty.util.nethernet.StunObserver" level="info">
+            <RegexFilter regex=".*a different port than.*" onMatch="DENY" onMismatch="NEUTRAL"/>
+        </Logger>
         <Root level="info">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="File"/>
