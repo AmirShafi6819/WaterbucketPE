@@ -18,6 +18,7 @@ package dev.waterbucket.waterbucketpe.panel;
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
 import dev.waterbucket.waterbucketpe.scheduler.TaskHandler;
+import io.netty.util.concurrent.Future;
 import lombok.extern.log4j.Log4j2;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -25,6 +26,7 @@ import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.Property;
+import org.cloudburstmc.protocol.bedrock.BedrockPong;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -34,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Samples proxy health for the web panel: a fixed-size ring of status snapshots (players,
@@ -47,6 +50,11 @@ public class PanelMetrics {
      * One sample every 5 seconds, so the buffer spans roughly 36 minutes.
      */
     static final int SAMPLE_PERIOD_TICKS = 20 * 5;
+    /**
+     * Downstream servers are probed once every 10 seconds, so the panel shows live
+     * online/ping state without anybody clicking "Ping now".
+     */
+    static final int PING_PERIOD_TICKS = 20 * 10;
     private static final int HISTORY_CAP = 432;
     private static final int LOG_CAP = 400;
     /**
@@ -71,6 +79,7 @@ public class PanelMetrics {
     private LogTailAppender appender;
     private volatile boolean running;
     private volatile TaskHandler<?> sampleTask;
+    private volatile TaskHandler<?> pingTask;
     private final long startedAt = System.currentTimeMillis();
 
     public PanelMetrics(ProxyServer proxy) {
@@ -81,6 +90,7 @@ public class PanelMetrics {
         this.running = true;
         this.attachLogAppender();
         this.sampleTask = this.proxy.getScheduler().scheduleRepeating(this::sample, SAMPLE_PERIOD_TICKS, true);
+        this.pingTask = this.proxy.getScheduler().scheduleRepeating(this::pingServers, PING_PERIOD_TICKS, true);
         // Initial snapshot so the panel has data before the first period elapses
         this.sample();
     }
@@ -92,7 +102,49 @@ public class PanelMetrics {
             task.cancel();
             this.sampleTask = null;
         }
+        TaskHandler<?> ping = this.pingTask;
+        if (ping != null) {
+            ping.cancel();
+            this.pingTask = null;
+        }
         this.detachLogAppender();
+    }
+
+    /**
+     * Probes every registered downstream server (any transport) so "online", "ping" and
+     * "up for" on the panel reflect reality on their own. Each ServerInfo subclass knows
+     * how to probe itself; a probe must never throw into the scheduler thread.
+     */
+    private void pingServers() {
+        if (!this.running) {
+            return;
+        }
+        for (ServerInfo server : this.proxy.getServerInfoMap().values()) {
+            this.probeServer(server.getServerName(), server);
+        }
+    }
+
+    /**
+     * One bounded reachability probe; the result lands in the per-server state via
+     * recordPing. Loopback pings can complete in under a millisecond, so the recorded
+     * latency never goes below 1ms and 0 stays reserved for "not probed yet".
+     */
+    private void probeServer(String name, ServerInfo server) {
+        long start = System.currentTimeMillis();
+        try {
+            Future<BedrockPong> pong = server.ping(3, TimeUnit.SECONDS);
+            pong.addListener(future -> {
+                if (future.cause() != null) {
+                    log.debug("[ping-probe] {} failed: {}", name, String.valueOf(future.cause()));
+                    this.recordPing(name, false, -1);
+                } else {
+                    this.recordPing(name, true, Math.max(1, System.currentTimeMillis() - start));
+                }
+            });
+        } catch (Throwable t) {
+            this.recordPing(name, false, -1);
+            log.debug("[ping-probe] {} could not be scheduled: {}", name, t.toString());
+        }
     }
 
     private void sample() {
@@ -270,7 +322,8 @@ public class PanelMetrics {
      * in the panel without re-pinging anything on the HTTP path.
      */
     private static class ServerState {
-        volatile long lastPingMs = -1;
+        /** 0 = no probe result yet (assumed reachable), -1 = last probe failed, else ms. */
+        volatile long lastPingMs = 0;
         volatile long lastSuccessAt = System.currentTimeMillis();
         volatile int players;
         final ArrayDeque<Long> pingHistory = new ArrayDeque<>(SERVER_HISTORY_CAP);

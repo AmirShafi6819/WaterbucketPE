@@ -17,8 +17,10 @@ package dev.waterbucket.waterbucketpe.network.serverinfo;
 
 import org.cloudburstmc.netty.channel.nethernet.NetherNetChannelFactory;
 import org.cloudburstmc.netty.channel.nethernet.config.NetherChannelOption;
+import org.cloudburstmc.netty.channel.nethernet.signaling.HttpSignalingSettings;
 import org.cloudburstmc.netty.channel.nethernet.signaling.NetherNetHTTPClientSignaling;
 import org.cloudburstmc.netty.util.nethernet.OperatorIdentity;
+import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.network.connection.client.ClientConnection;
 import dev.waterbucket.waterbucketpe.network.connection.codec.initializer.NetherNetClientSessionInitializer;
 import dev.waterbucket.waterbucketpe.network.nethernet.ProxyIdentity;
@@ -28,8 +30,10 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoop;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.Promise;
+import org.cloudburstmc.protocol.bedrock.BedrockPong;
 
 import java.net.InetSocketAddress;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A downstream server reached over NetherNet.
@@ -51,6 +55,26 @@ public class NetherNetServerInfo extends ServerInfo {
     @Override
     public Future<ClientConnection> createConnection(ProxiedPlayer player) {
         return connect(player, this);
+    }
+
+    /**
+     * Health probe for the panel: asks the signaling HTTP endpoint whether this server is
+     * reachable. There is no RakNet endpoint on a NetherNet-only server, so the success
+     * value is a synthesized pong; the panel reads only completion and round-trip time.
+     */
+    @Override
+    public Future<BedrockPong> ping(long timeout, TimeUnit unit) {
+        EventLoop eventLoop = ProxyServer.getInstance().getWorkerEventLoopGroup().next();
+        Promise<BedrockPong> promise = eventLoop.newPromise();
+        NetherNetHTTPClientSignaling.probe(this.getResolvedAddress(), HttpSignalingSettings.DEFAULT)
+                .whenComplete((probe, error) -> {
+                    if (error == null) {
+                        promise.trySuccess(new BedrockPong().edition("MCPE").motd(this.getServerName()));
+                    } else {
+                        promise.tryFailure(error);
+                    }
+                });
+        return promise;
     }
 
     static Future<ClientConnection> connect(ProxiedPlayer player, ServerInfo serverInfo) {

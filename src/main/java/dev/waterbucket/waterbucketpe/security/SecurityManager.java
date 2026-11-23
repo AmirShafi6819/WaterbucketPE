@@ -246,6 +246,21 @@ public class SecurityManager {
     }
 
     private void onConnectionError(SocketAddress address, Throwable cause, ConnectionError kind) {
+        if (kind == ConnectionError.IO) {
+            // Transport noise: the client's own network dropped the session (Windows surfaces
+            // this as "connection was aborted by the software in your host machine"). Closing
+            // is enough; a full log and an IP block would punish ordinary disconnects and,
+            // with reconnect retries, could lock the player out of the proxy entirely.
+            if (cause != null) {
+                log.debug("{} Transport error on bedrock connection: {}", address, cause.toString());
+            }
+            NetworkMetrics ioMetrics = this.proxy.getNetworkMetrics();
+            if (ioMetrics != null) {
+                ioMetrics.connectionError(kind);
+            }
+            return;
+        }
+
         if (cause != null) {
             log.error("{} Exception caught in bedrock connection", address, cause);
         }

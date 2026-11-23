@@ -9,6 +9,34 @@ The operator-experience release: full console/brand rebrand, a rebuilt Liquid Gl
 panel with Persian localization, every player message in one editable file, and the fixes
 the first real deployment surfaced. 59 suites / 339 tests green.
 
+### Fixed — follow-up patch (2026-11-24, shipped in the same release)
+
+- **Panel showed giant broken icons** — the HTTP server cached `style.css`/`app.js` for one
+  hour (`max-age=3600`) while `index.html` was never cached, so after an update the browser
+  rendered fresh HTML against the previous stylesheet and every sprite icon became a huge
+  black filled shape (and the theme/language buttons looked swapped, which read as "clicking
+  Persian turns light into dark"). HTML/CSS/JS are now served `Cache-Control: no-store`, and
+  the icon rules ship inline in `index.html` as a fallback so icons render correctly even
+  against a stale stylesheet.
+- **Downstream servers always showed offline** — the panel's health probe only existed as
+  the manual "Ping now" button, and that button only recognized servers pinned to RakNet;
+  config servers (`server_type: bedrock`) are `AutoServerInfo` instances, so every probe
+  answered "RakNet server not registered" and the 5s sampler's default state marked them
+  offline forever. Servers are now probed automatically every 10 seconds through a
+  polymorphic `ServerInfo.ping` (RakNet ping for RakNet, RakNet → NetherNet signaling
+  fallback for `bedrock`/auto, signaling probe for `nethernet`), and unprobed servers start
+  as "online (ping unknown)" instead of offline.
+- **`IOException: An established connection was aborted by the software in your host
+  machine` spam** — closing/refreshing the browser tab aborted an in-flight panel poll and
+  the exception ran to the tail of the Netty pipeline, printing a full stack trace per
+  abort. The panel handler now swallows benign transport errors and closes the connection
+  quietly; unexpected failures still log.
+- **Players could lock themselves out of localhost** — any `IOException` on a Bedrock peer
+  connection (the client's own network dropping the session) triggered the security
+  manager's error-timeout IP block; with reconnect retries that could repeatedly block the
+  player (and localhost testing) for 15s stretches. Transport-level IO errors no longer
+  block IPs and log at debug instead of error with a stack trace.
+
 ### Changed
 - **Console rebrand** — new Water Bucket banner, default commands renamed `wd*` → `wb*`
   (old names stay as hidden aliases), branded interactive prompt (the library hardcoded

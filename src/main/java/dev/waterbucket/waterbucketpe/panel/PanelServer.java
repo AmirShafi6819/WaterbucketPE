@@ -307,12 +307,16 @@ public class PanelServer {
                          String contentType, byte[] body) {
         FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status,
                 Unpooled.wrappedBuffer(body));
+        // HTML/CSS/JS must never be cached across restarts: the panel code ships inside the
+        // proxy jar, so a cached stylesheet from the previous build renders the new HTML
+        // against old rules and visually breaks the page (the "giant black icon" report).
+        // Only long-lived immutable assets (fonts, logo) keep a TTL.
         response.headers()
                 .set(HttpHeaderNames.CONTENT_TYPE, contentType)
                 .set(HttpHeaderNames.CONTENT_LENGTH, body.length)
-                .set(HttpHeaderNames.CACHE_CONTROL, contentType.contains("javascript") || contentType.contains("css")
-                        ? "max-age=3600" : contentType.contains("font") || contentType.contains("image")
-                        ? "max-age=86400" : "no-store")
+                .set(HttpHeaderNames.CACHE_CONTROL, contentType.contains("font")
+                        ? "max-age=86400" : contentType.contains("image")
+                        ? "max-age=3600" : "no-store")
                 .set("X-Content-Type-Options", "nosniff")
                 .set("X-Frame-Options", "DENY")
                 .set("Referrer-Policy", "no-referrer")
@@ -363,6 +367,23 @@ public class PanelServer {
                 return;
             }
             this.handleStatic(ctx, request, path);
+        }
+
+        /**
+         * Browsers abort keep-alive requests when a panel tab closes or refreshes mid-poll;
+         * on Windows that surfaces as "connection was aborted by the software in your host
+         * machine". Without this handler the exception ran to the tail of the pipeline and
+         * logged a full stack trace per aborted poll. Benign transport noise is swallowed,
+         * everything unexpected still gets logged.
+         */
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+            if (cause instanceof IOException || cause instanceof io.netty.handler.timeout.ReadTimeoutException) {
+                ctx.close();
+                return;
+            }
+            PanelServer.this.proxy.getLogger().warning("Panel request failed from " + ctx.channel().remoteAddress(), cause);
+            ctx.close();
         }
 
         private void handleApi(ChannelHandlerContext ctx, FullHttpRequest request, String path) {
@@ -536,11 +557,11 @@ public class PanelServer {
     private void handleServerPing(ChannelHandlerContext ctx, FullHttpRequest request, String path) {
         String name = extractMiddle(path, "/api/servers/ping/", "");
         ServerInfo server = this.proxy.getServerInfo(name);
-        if (!(server instanceof BedrockServerInfo bedrock)) {
-            this.respondError(ctx, request, HttpResponseStatus.NOT_FOUND, "RakNet server not registered");
+        if (server == null) {
+            this.respondError(ctx, request, HttpResponseStatus.NOT_FOUND, "Server not registered");
             return;
         }
-        Future<BedrockPong> pong = bedrock.ping(3, TimeUnit.SECONDS);
+        Future<BedrockPong> pong = server.ping(3, TimeUnit.SECONDS);
         long start = System.currentTimeMillis();
         pong.addListener(future -> {
             if (future.cause() != null) {

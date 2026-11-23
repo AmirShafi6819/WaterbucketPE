@@ -15,6 +15,7 @@
 
 package dev.waterbucket.waterbucketpe.network.serverinfo;
 
+import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.network.connection.client.ClientConnection;
 import dev.waterbucket.waterbucketpe.network.nethernet.NetherNetProperties;
 import org.cloudburstmc.netty.channel.nethernet.signaling.HttpSignalingSettings;
@@ -24,6 +25,7 @@ import io.netty.channel.EventLoop;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.log4j.Log4j2;
+import org.cloudburstmc.protocol.bedrock.BedrockPong;
 
 import java.net.InetSocketAddress;
 import java.util.concurrent.TimeUnit;
@@ -116,6 +118,34 @@ public class AutoServerInfo extends ServerInfo {
         }
         long age = System.currentTimeMillis() - this.rememberedAt;
         return age < TimeUnit.SECONDS.toMillis(memorySeconds) ? known : null;
+    }
+
+    /**
+     * Health probe for the panel: a RakNet ping first (most configured downstreams answer
+     * in a millisecond), and when RakNet stays silent, the NetherNet signaling probe that
+     * join discovery also uses. This keeps "online" truthful for a server whose transport
+     * is discovered rather than pinned. The success value for the NetherNet path is a
+     * synthesized pong; the panel only reads the completion and the round-trip time.
+     */
+    @Override
+    public Future<BedrockPong> ping(long timeout, TimeUnit unit) {
+        EventLoop eventLoop = ProxyServer.getInstance().getWorkerEventLoopGroup().next();
+        Promise<BedrockPong> promise = eventLoop.newPromise();
+        BedrockServerInfo.pingAddress(this.getResolvedAddress(), timeout, unit).addListener(rakNet -> {
+            if (rakNet.isSuccess()) {
+                promise.trySuccess((BedrockPong) rakNet.getNow());
+                return;
+            }
+            NetherNetHTTPClientSignaling.probe(this.getResolvedAddress(), HttpSignalingSettings.DEFAULT)
+                    .whenComplete((probe, error) -> {
+                        if (error == null) {
+                            promise.trySuccess(new BedrockPong().edition("MCPE").motd(this.getServerName()));
+                        } else {
+                            promise.tryFailure(rakNet.cause());
+                        }
+                    });
+        });
+        return promise;
     }
 
     private void remember(Transport transport) {

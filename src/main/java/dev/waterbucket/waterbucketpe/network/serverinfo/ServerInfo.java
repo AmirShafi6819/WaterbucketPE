@@ -19,8 +19,10 @@ import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.network.connection.client.ClientConnection;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.Promise;
 import lombok.Getter;
 import lombok.ToString;
+import org.cloudburstmc.protocol.bedrock.BedrockPong;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -130,6 +132,20 @@ public abstract class ServerInfo {
 
     public abstract ServerInfoType getServerType();
     public abstract Future<ClientConnection> createConnection(ProxiedPlayer player);
+
+    /**
+     * Reachability probe used by the panel health tracker ("online", "ping", "up for").
+     * The future completes with the pong when the server answered inside the timeout and
+     * fails otherwise. The default implementation is a failed future: a custom ServerInfo
+     * type without a transport-level probe stays flagged as offline rather than being
+     * guessed at.
+     */
+    public Future<BedrockPong> ping(long timeout, TimeUnit unit) {
+        Promise<BedrockPong> promise = io.netty.util.concurrent.GlobalEventExecutor.INSTANCE.newPromise();
+        promise.setFailure(new UnsupportedOperationException(
+                "Server type " + this.getServerType() + " cannot be probed"));
+        return promise;
+    }
 
     /**
      * Matches a host name/address and port against this server's public address.

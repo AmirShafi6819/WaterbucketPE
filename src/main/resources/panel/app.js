@@ -404,7 +404,8 @@ function buildServerCard(server) {
 function updateServerCard(card, server) {
   card.querySelector(".server-dot").classList.toggle("bad", !server.online);
   card.querySelector(".m-players").textContent = server.players;
-  card.querySelector(".m-ping").textContent = server.pingMs >= 0 ? server.pingMs + " ms" : t("common.offline");
+  card.querySelector(".m-ping").textContent = server.pingMs > 0 ? server.pingMs + " ms"
+    : server.pingMs === 0 ? "—" : t("common.offline");
   card.querySelector(".m-up").textContent = server.upMs > 0 ? fmtUptime(server.upMs) : "—";
   card.querySelector(".server-type").textContent = server.type;
   card.querySelector(".muted.small").textContent = server.address;
@@ -442,7 +443,8 @@ async function refreshServerDialog() {
   $("#sd-dot").classList.toggle("bad", !detail.online);
   $("#sd-online").textContent = detail.online ? t("servers.online") : t("servers.offline");
   $("#sd-players").textContent = detail.players;
-  $("#sd-ping").textContent = detail.pingMs >= 0 ? detail.pingMs + " ms" : t("common.offline");
+  $("#sd-ping").textContent = detail.pingMs > 0 ? detail.pingMs + " ms"
+    : detail.pingMs === 0 ? "—" : t("common.offline");
   $("#sd-up").textContent = detail.upMs > 0 ? fmtUptime(detail.upMs) : "—";
 
   if (!charts.sdPing) {

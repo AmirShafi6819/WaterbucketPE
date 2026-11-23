@@ -122,7 +122,16 @@ public class BedrockServerInfo extends ServerInfo {
         return supported;
     }
 
+    @Override
     public Future<BedrockPong> ping(long timeout, TimeUnit timeUnit) {
+        return pingAddress(this.getResolvedAddress(), timeout, timeUnit);
+    }
+
+    /**
+     * Sends one RakNet unconnected ping to the given address. Static so other server types
+     * (AutoServerInfo's RakNet fallback) reuse the exact same probe.
+     */
+    static Future<BedrockPong> pingAddress(InetSocketAddress address, long timeout, TimeUnit timeUnit) {
         EventLoop eventLoop = ProxyServer.getInstance().getWorkerEventLoopGroup().next();
         Promise<BedrockPong> promise = eventLoop.newPromise();
 
@@ -137,7 +146,7 @@ public class BedrockServerInfo extends ServerInfo {
                         promise.tryFailure(future.cause());
                         future.channel().close();
                     } else {
-                        RakPing ping = new RakPing(System.currentTimeMillis(), this.getResolvedAddress());
+                        RakPing ping = new RakPing(System.currentTimeMillis(), address);
                         future.channel().writeAndFlush(ping).addListener(future1 -> {
                             if (future1.cause() != null) {
                                 promise.tryFailure(future1.cause());
