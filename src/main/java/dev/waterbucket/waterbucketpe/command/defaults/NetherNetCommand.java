@@ -58,11 +58,11 @@ public class NetherNetCommand extends Command {
     private static final int MAX_STATUS_LENGTH = 4096;
 
     public NetherNetCommand() {
-        super("wdnethernet", CommandSettings.builder()
+        super("wbnethernet", CommandSettings.builder()
                 .setDescription("waterbucket.command.nethernet.description")
                 .setUsageMessage("waterbucket.command.nethernet.usage")
                 .setPermission("waterbucket.command.nethernet.permission")
-                .build());
+                .setAliases("wdnethernet").build());
     }
 
     @Override

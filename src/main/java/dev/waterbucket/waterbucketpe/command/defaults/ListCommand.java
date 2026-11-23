@@ -30,11 +30,11 @@ import java.util.StringJoiner;
 public class ListCommand extends Command {
 
     public ListCommand() {
-        super("wdlist", CommandSettings.builder()
+        super("wblist", CommandSettings.builder()
                 .setDescription("waterbucket.command.list.description")
                 .setUsageMessage("waterbucket.command.list.usage")
                 .setPermission("waterbucket.command.list.permission")
-                .build());
+                .setAliases("wdlist").build());
     }
 
     @Override

@@ -23,10 +23,10 @@ import dev.waterbucket.waterbucketpe.command.CommandSettings;
 public class ReloadPacksCommand extends Command {
 
     public ReloadPacksCommand() {
-        super("wdreloadpacks", CommandSettings.builder()
+        super("wbreloadpacks", CommandSettings.builder()
                 .setDescription("waterbucket.command.reloadpacks.description")
                 .setPermission("waterbucket.command.reloadpacks.permission")
-                .setUsageMessage("waterbucket.command.reloadpacks.usage").build());
+                .setUsageMessage("waterbucket.command.reloadpacks.usage").setAliases("wdreloadpacks").build());
     }
 
     @Override

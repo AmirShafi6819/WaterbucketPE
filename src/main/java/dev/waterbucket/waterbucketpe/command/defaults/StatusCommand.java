@@ -12,11 +12,11 @@ import java.lang.management.ThreadMXBean;
 public class StatusCommand extends Command {
 
     public StatusCommand() {
-        super("wdstatus", CommandSettings.builder()
+        super("wbstatus", CommandSettings.builder()
                 .setDescription("waterbucket.command.status.description")
                 .setUsageMessage("waterbucket.command.status.usage")
                 .setPermission("waterbucket.command.status.permission")
-                .build());
+                .setAliases("wdstatus").build());
     }
 
     @Override
@@ -24,7 +24,7 @@ public class StatusCommand extends Command {
         ProxyServer proxy = sender.getProxy();
         StringBuilder sb = new StringBuilder();
 
-        sb.append("§b--- §3WaterbucketPE Status §b---\n");
+        sb.append("§b--- §3WaterBucketPE Status §b---\n");
 
         long uptimeMs = ManagementFactory.getRuntimeMXBean().getUptime();
         sb.append("§3Uptime: §b").append(formatUptime(uptimeMs)).append("\n");

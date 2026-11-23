@@ -34,11 +34,11 @@ import java.util.List;
 public class MeCommand extends Command {
 
     public MeCommand() {
-        super("wdme", CommandSettings.builder()
+        super("wbme", CommandSettings.builder()
                 .setDescription("waterbucket.command.me.description")
                 .setUsageMessage("waterbucket.command.me.usage")
                 .setPermission("waterbucket.command.me.permission")
-                .build());
+                .setAliases("wdme").build());
     }
 
     @Override

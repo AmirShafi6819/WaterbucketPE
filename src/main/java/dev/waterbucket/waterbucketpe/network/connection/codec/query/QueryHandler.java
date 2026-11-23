@@ -154,7 +154,7 @@ public class QueryHandler extends SimpleChannelInboundHandler<DatagramPacket> {
                 "",
                 this.proxy.getPlayerManager().getPlayers().values(),
                 config.getMaxPlayerCount(),
-                "WaterbucketPE",
+                "WaterBucketPE",
                 address
         );
         this.proxy.getEventManager().callEvent(event);

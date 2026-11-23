@@ -59,7 +59,7 @@ public class TerminalConsole extends SimpleTerminalConsole {
     @Override
     protected LineReader buildReader(LineReaderBuilder builder) {
         builder.completer(new CommandCompleter(this.proxy));
-        builder.appName("WaterbucketPE");
+        builder.appName("WaterBucketPE");
         // Persist typed commands across restarts, so operators keep their history
         builder.variable(LineReader.HISTORY_FILE, java.nio.file.Paths.get(dev.waterbucket.waterbucketpe.WaterbucketPE.DATA_PATH + ".console_history"));
         builder.option(LineReader.Option.HISTORY_BEEP, false);
@@ -67,7 +67,34 @@ public class TerminalConsole extends SimpleTerminalConsole {
         builder.option(LineReader.Option.HISTORY_IGNORE_SPACE, true);
         LineReader reader = super.buildReader(builder);
         this.lineReader = reader;
-        return reader;
+        // SimpleTerminalConsole hardcodes the "> " prompt inside its read loop, so the brand
+        // is applied by wrapping the reader and swapping the prompt at read time. Everything
+        // else (history, completer, appender integration) delegates unchanged.
+        return this.brandedReader(reader);
+    }
+
+    /**
+     * ANSI prompt: bold blue "WaterBucket" + light-blue "PE", a dim » and a trailing space.
+     * JLine strips these escapes when measuring the prompt width, so wrapping and redraw stay correct.
+     */
+    private static final String PROMPT = "\u001b[1;38;5;39mWaterBucket\u001b[0m\u001b[1;38;5;117mPE\u001b[0m \u001b[38;5;245m»\u001b[0m ";
+
+    private LineReader brandedReader(LineReader reader) {
+        final LineReader real = reader;
+        return (LineReader) java.lang.reflect.Proxy.newProxyInstance(
+                LineReader.class.getClassLoader(),
+                new Class<?>[]{LineReader.class},
+                (Object proxy, java.lang.reflect.Method method, Object[] args) -> {
+                    if ("readLine".equals(method.getName()) && args != null && args.length >= 1
+                            && args[0] instanceof String && !((String) args[0]).isEmpty()) {
+                        args[0] = PROMPT;
+                    }
+                    try {
+                        return method.invoke(real, args);
+                    } catch (java.lang.reflect.InvocationTargetException e) {
+                        throw e.getCause();
+                    }
+                });
     }
 
     @Override

@@ -28,11 +28,11 @@ import org.cloudburstmc.protocol.bedrock.data.command.CommandParamData;
 public class SendCommand extends Command {
 
     public SendCommand() {
-        super("wdsend", CommandSettings.builder()
+        super("wbsend", CommandSettings.builder()
                 .setDescription("waterbucket.command.send.description")
                 .setUsageMessage("waterbucket.command.send.usage")
                 .setPermission("waterbucket.command.send.permission")
-                .build());
+                .setAliases("wdsend").build());
     }
 
     @Override

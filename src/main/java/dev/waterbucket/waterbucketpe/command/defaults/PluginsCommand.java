@@ -25,11 +25,11 @@ import java.util.Map;
 
 public class PluginsCommand extends Command {
     public PluginsCommand() {
-        super("wdplugins", CommandSettings.builder().
+        super("wbplugins", CommandSettings.builder().
                 setDescription("waterbucket.command.plugins.description")
                 .setUsageMessage("waterbucket.command.plugins.usage")
                 .setPermission("waterbucket.command.plugins.permission")
-                .setAliases("wdpl").build());
+                .setAliases("wdpl", "wdplugins").build());
     }
 
     @Override

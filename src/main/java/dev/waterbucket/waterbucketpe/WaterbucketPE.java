@@ -38,12 +38,16 @@ public class WaterbucketPE {
      * redirected output and Windows consoles.
      */
     private static final String[] BANNER = {
-            "  _      __     __          __            __       __  ___  ____",
-            " | | /| / /__ _/ /____ ____/ /  __ ______/ /_____ / /_/ _ \\/ __/",
-            " | |/ |/ / _ `/ __/ -_) __/ _ \\/ // / __/  '_/ -_) __/ ___/ _/  ",
-            " |__/|__/\\_,_/\\__/\\__/_/ /_.__/\\_,_/\\__/_/\\_\\\\__/\\__/_/  /___/",
             "",
-            "  A fast Minecraft: Bedrock Edition proxy, forked from WaterdogPE"
+            " _       __      __               ____             __        __ ",
+            "| |     / /___ _/ /____  _____   / __ )__  _______/ /_____  / /_ ",
+            "| | /| / / __ `/ __/ _ \\/ ___/  / __  / / / / ___/ //_/ _ \\/ __/",
+            "| |/ |/ / /_/ / /_/  __/ /     / /_/ / /_/ / /__/ ,< /  __/ /_  ",
+            "|__/|__/\\__,_/\\__/\\___/_/     /_____/\\__,_/\\___/_/|_|\\___/\\__/  ",
+            "",
+            "  WaterBucketPE - a fast Minecraft: Bedrock Edition proxy",
+            "  Forked from WaterdogPE. Commands: /wbhelp - Web panel: see panel_token.txt",
+            ""
     };
 
     public static String DATA_PATH = System.getProperty("user.dir") + "/";
@@ -51,13 +55,13 @@ public class WaterbucketPE {
     private static final VersionInfo versionInfo = loadVersion();
 
     public static void main(String[] args) {
-        Thread.currentThread().setName("WaterbucketPE-main");
+        Thread.currentThread().setName("WaterBucketPE-main");
         printBanner();
         System.setProperty("log4j.skipJansi", "false");
         applyAllocatorTuning();
 
         MainLogger logger = MainLogger.getLogger();
-        logger.info("§bStarting WaterbucketPE proxy software!");
+        logger.info("§bStarting WaterBucketPE proxy software!");
         logger.info("§3Software Version: {}", versionInfo.baseVersion());
         logger.info("§3Build Version: {}", versionInfo.buildVersion());
         logger.info("§3Development Build: {}", versionInfo.debug());

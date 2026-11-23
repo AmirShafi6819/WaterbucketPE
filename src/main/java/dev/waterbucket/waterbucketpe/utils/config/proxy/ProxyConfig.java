@@ -66,7 +66,7 @@ public class ProxyConfig extends YamlConfig {
 
     @Path("listener.name")
     @Comment("The name that is shown up in the player list (pause menu)")
-    private String name = "WaterbucketPE";
+    private String name = "WaterBucketPE";
 
     @Path("listener.priorities")
     @Comment("The server priority list. If not changed by plugins, the proxy will connect the player to the first of those servers")

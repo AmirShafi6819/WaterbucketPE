@@ -24,11 +24,11 @@ import dev.waterbucket.waterbucketpe.command.CommandSettings;
 public class InfoCommand extends Command {
 
     public InfoCommand() {
-        super("wdinfo", CommandSettings.builder()
+        super("wbinfo", CommandSettings.builder()
                 .setDescription("waterbucket.command.info.description")
                 .setUsageMessage("waterbucket.command.info.usage")
                 .setPermission("waterbucket.command.info.permission")
-                .build());
+                .setAliases("wdinfo").build());
     }
 
     @Override

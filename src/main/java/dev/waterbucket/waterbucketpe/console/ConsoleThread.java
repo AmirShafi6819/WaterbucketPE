@@ -20,7 +20,7 @@ public class ConsoleThread extends Thread {
     private final TerminalConsole console;
 
     public ConsoleThread(TerminalConsole console) {
-        super("WaterbucketPE Console");
+        super("WaterBucketPE Console");
         this.console = console;
     }
 

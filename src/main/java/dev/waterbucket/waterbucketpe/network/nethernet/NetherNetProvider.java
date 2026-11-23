@@ -272,7 +272,7 @@ public class NetherNetProvider implements AutoCloseable {
             version = info.baseVersion();
         }
         return health(this.proxy.callPingEvent(null), this.proxy.getNetherNetInterface().isFull(),
-                new ProviderClient.Software("WaterbucketPE", version));
+                new ProviderClient.Software("WaterBucketPE", version));
     }
 
     /**

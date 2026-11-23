@@ -27,11 +27,11 @@ import java.util.TreeMap;
 public class HelpCommand extends Command {
 
     public HelpCommand() {
-        super("wdhelp", CommandSettings.builder()
+        super("wbhelp", CommandSettings.builder()
                 .setDescription("waterbucket.command.help.description")
                 .setUsageMessage("waterbucket.command.help.usage")
                 .setPermission("waterbucket.command.help.permission")
-                .build());
+                .setAliases("wdhelp").build());
     }
 
     @Override
