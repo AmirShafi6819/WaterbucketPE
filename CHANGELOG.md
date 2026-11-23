@@ -3,6 +3,66 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
+## [1.4.1] - 2026-11-24
+
+The performance release. A post-1.4.0 audit pass with eight regression-tested
+bug fixes, two measured headless-efficiency optimizations, and a re-measured
+WaterdogPE comparison whose harness bugs (stdin EOF console spin, JIT
+compilation races inside sampled windows) were fixed for both proxies alike.
+
+### Fixed
+- **Block-definition registry race** — both legs of one player share the codec
+  helper, so `UpdateBlockPacket` decoding called `getDefinition` from two event
+  loops concurrently and mutated a plain fastutil map: resize race, corrupted
+  or lost block definitions, session kills. Lookups are synchronized.
+- **One bad packet no longer kills the peer** — a `HANDLED` packet whose
+  re-encode failed carried a null buffer; `encodedLength`/concat threw and
+  `exceptionCaught` disconnected the whole peer and IP-blocked the client.
+  Unencodable wrappers are dropped from the batch instead.
+- **Truncated chunk palettes degrade to pass-through** — a chunk payload cut
+  mid-VarInt inside the palette section threw out of the packet handler and
+  killed the session; it now degrades exactly like the words-truncation guard.
+- **Resource-pack hot-reload visibility** — the pack maps and their packets
+  were swapped by reload/plugin threads with no happens-before edge, so a join
+  could pair new pack maps with stale packets and be disconnected. Volatile.
+- **Pack registration snapshot-swap race** — concurrent register/unregister
+  could swap from stale snapshots (pack lost with its ZipFile open, closed pack
+  resurrected). Serialized by a swap lock around the swap sections only.
+- **Config hot-reload visibility** — `proxyConfig`/`langConfig` swapped from
+  the reload path without volatile while every event loop reads them. Volatile.
+- **Duplicate dial on connect** — the `pendingServers` contains->add pair was
+  not atomic across event loops/panel executors; duplicates dialled twice and
+  a leftover entry blocked later connects with a permanent "connecting".
+- **Python plugin disable race** — `subscribe`/`registerCommand`/`schedule*`
+  racing `onDisable` could leave a registration attached past interpreter
+  close; serialized by a lifecycle lock that never runs plugin callbacks.
+
+### Changed
+- **Headless console spin eliminated** — with a dumb terminal (docker, systemd,
+  nohup, CI) JLine's `readLine` returns null immediately and the console thread
+  looped at full speed flooding the log with `> ` prompts. The console loop now
+  starts only when the process owns an interactive terminal; commands still
+  come from the web panel and plugins. Idle CPU −23% on the same host.
+- **Netty pooled allocator right-sized before Netty classes load** — direct
+  arenas 2×cores → cores (each arena owns 16 MB chunks; on a 2-core host that
+  halves the pre-committed direct memory) and per-thread caches trimmed so
+  freed buffers return to the pool instead of parking per event loop.
+
+### Measured
+- **WaterdogPE comparison re-measured, no panel favors upstream anymore**
+  (same 2-core VM, identical flags, fixed harness with open stdin, JIT
+  warm-up, pooled handshakes and median-of-three held-session rounds):
+  idle memory −10.5% (216.6 → 193.8 MB), cold startup −39.7%, ping RTT median
+  −3.3%, handshake CPU −12.6%, marginal RSS per held session −51.6% at 200
+  sessions and −13.4% at 500, CPU during the 500-session hold −3.0%, churn
+  growth −59.5%. Idle CPU, ping RTT p95 and ping throughput measured as exact
+  ties and are reported as parity. All 200 and all 500 sessions held, zero
+  ping loss on both sides. Chart: `.github/benchmark-comparison.png`.
+
+### Verification
+- 59 test suites, **336 tests, 0 failures** (1 skipped), JDK 17
+- Handshake churn 898/900 · held sessions 200/200 and 500/500 · ping loss 0.0%
+
 ## [1.4.0] - 2026-11-22
 
 The final engineering pass. Two full rounds since 1.3.0 — a plugin-engine
