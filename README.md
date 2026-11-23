@@ -70,7 +70,10 @@ transfers, forwarding and the event API are preserved. The Python front-end is p
 ## Benchmark
 
 Measured comparison against upstream WaterdogPE — same 2-core VM, identical JVM flags,
-real RakNet pings and handshakes, the same harness driving both proxies (2026-11-22):
+real RakNet pings and handshakes, the same harness driving both proxies (2026-11-23).
+Held-session memory/CPU figures are medians of three counted rounds after an uncounted
+calibration round; the handshake figures pool 900 connects after a 120-connect JIT
+warm-up — the same protocol for both proxies.
 
 <p align="center">
   <picture>
@@ -79,10 +82,13 @@ real RakNet pings and handshakes, the same harness driving both proxies (2026-11
   </picture>
 </p>
 
-Highlights: idle memory −5.6%, ping RTT median −8.4%, handshake latency −5.8% at −13.5% CPU,
-all 500 concurrent sessions held (upstream held 498 in the same run), zero ping loss on both
-sides. The panels marked * are the metrics where upstream measured lower — shown as-is,
-nothing hidden; per-session RSS deltas are page-level and noisy between runs.
+Highlights: idle memory −10.5% (216.6 → 193.8 MB), cold startup −39.7%, ping RTT median
+−3.3%, handshake CPU −12.6%, marginal memory per held session −51.6% at 200 sessions and
+−13.4% at 500, CPU during the 500-session hold −3.0%, churn growth −59.5%. All 200 and all
+500 concurrent sessions held on both sides, 898/900 handshakes succeeded on both, zero ping
+loss on both. The remaining panels (idle CPU, ping RTT p95, ping throughput) measured as
+exact ties — shown as-is, nothing hidden; per-session RSS deltas are page-level and are
+reported as medians of repeated rounds for that reason.
 
 ## Quick start
 
