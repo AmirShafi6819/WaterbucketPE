@@ -11,6 +11,8 @@ import lombok.extern.log4j.Log4j2;
 import org.cloudburstmc.protocol.bedrock.netty.BedrockBatchWrapper;
 
 import java.util.Queue;
+import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
+
 
 @Log4j2
 public class PacketQueueHandler extends ChannelDuplexHandler {
@@ -112,7 +114,7 @@ public class PacketQueueHandler extends ChannelDuplexHandler {
         } // else: the batch is in the queue and finish(false) below releases it
         promise.tryFailure(new IllegalStateException("Transfer queue got too large"));
         this.finish(ctx, false);
-        this.session.disconnect("Transfer queue got too large");
+        this.session.disconnect(new TranslationContainer("waterbucket.transfer.queue_full").getTranslated());
 
         NetworkMetrics metrics = ctx.channel().attr(NetworkMetrics.ATTRIBUTE).get();
         if (metrics != null) {

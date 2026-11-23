@@ -1,0 +1,119 @@
+# ============================================================
+#  WaterBucketPE - in-game messages
+# ------------------------------------------------------------
+#  Every message the proxy shows players, in one clean place.
+#
+#  Colors use the Minecraft formatting codes, for example:
+#    §0 black      §1 dark blue   §2 dark green   §3 dark aqua
+#    §4 dark red   §5 purple      §6 gold         §7 gray
+#    §8 dark gray  §9 blue        §a green        §b aqua
+#    §c red        §d pink        §e yellow       §f white
+#    §l bold       §o italic      §n underline    §r reset
+#
+#  Placeholders: {%0}, {%1}, {%2} ... are replaced at runtime.
+#  Each message lists what its placeholders mean.
+#
+#  Delete a line to fall back to the built-in English default.
+#  Changes apply after a proxy restart.
+# ============================================================
+
+# ---------- Proxy lifecycle ----------
+
+# Shown when the proxy shuts down while players are online
+waterbucket.server.shutdown: "§cProxy shutdown"
+
+# Confirmations of the /end command
+waterbucket.command.end.confirm: "§aShutting down the proxy instance.."
+
+# ---------- Login guards ----------
+
+# The player took too long to finish the login sequence
+waterbucket.login.timeout: "§cLogin timeout"
+
+# The login was refused (banned, full, blocked, denied by a plugin)
+waterbucket.login.denied: "§cLogin denied"
+
+# A packet arrived that the login state does not accept
+waterbucket.login.illegal_packet: "§cIllegal packet"
+
+# The login handshake ran out of order
+waterbucket.login.wrong_flow: "§cWrong login flow"
+
+# The transfer queue to a downstream server overflowed
+waterbucket.transfer.queue_full: "§cTransfer queue got too large"
+
+# Default reason when a player is kicked without one
+waterbucket.player.kick.default: "§cKicked from the proxy"
+
+# ---------- Connecting and transferring ----------
+
+# {%0} = server name
+waterbucket.downstream.initial.connect: "§cLogin failed!"
+waterbucket.downstream.connected: "§cYou are already connected to {%0}!"
+waterbucket.downstream.connecting: "§cYou are connecting to {%0}!"
+waterbucket.downstream.transfer.failed: "§cConnection to {%0} failed: {%1}"
+waterbucket.downstream.transfer.cancelled: "§cConnection to {%0} was cancelled!"
+waterbucket.downstream.kicked: "§cYou were kicked: {%0}"
+waterbucket.downstream.down: "§cThe server {%0} went down, reason: {%1}"
+
+# No default server is configured to receive the player
+waterbucket.no.initial.server: "§cThere was no default server to transfer to."
+
+# {%0} = the server that failed, the player was moved to a fallback
+waterbucket.connected.fallback: "§6Unable to connect to {%0}! You were connected to a fallback server."
+
+# ---------- Commands ----------
+
+waterbucket.command.permission.failed: "§cYou do not have the permission to execute this command!"
+waterbucket.command.unknown: "§cUnknown command! Use §4/wbhelp§c to see all commands!"
+
+waterbucket.command.server.description: "Transfer yourself or a player to another server"
+waterbucket.command.server.usage: "server <server> <player:optional>"
+waterbucket.command.server.not_found: "§cServer not found!"
+waterbucket.command.server.other.denied: "§cYou don't have the permission to move other players."
+waterbucket.command.server.player_not_found: "§cPlayer not found!"
+# {%0} = player name, {%1} = server name
+waterbucket.command.server.sent: "§aPlayer {%0} was sent to {%1} server!"
+
+waterbucket.command.send.description: "Transfer every player on the server at once"
+waterbucket.command.send.usage: "wbsend <destination> <target:optional>"
+# {%0} = server name
+waterbucket.command.send.not_found: "§cServer {%0} was not found!"
+waterbucket.command.send.no_server: "§cYou are not connected to a server yet; usage: {%0}"
+waterbucket.command.send.target_not_found: "§cCould not find target server {%0}!"
+
+waterbucket.command.list.description: "Show a list of players"
+waterbucket.command.list.usage: "wblist <server:optional>"
+# {%0} = server name, {%1} = player count, {%2} = player list
+waterbucket.command.list.format: "§a[{%0}] §e({%1}): §r{%2}"
+waterbucket.command.list.not_found: "§cServer not found!"
+
+waterbucket.command.help.description: "Show all commands"
+waterbucket.command.help.usage: "wbhelp <page:optional>"
+# {%0} = page, {%1} = total pages
+waterbucket.command.help.format: "§aHelp page {%0}/{%1}:"
+
+waterbucket.command.info.description: "Show proxy information"
+waterbucket.command.info.usage: "wbinfo"
+
+waterbucket.command.end.description: "Shut down the proxy instance"
+waterbucket.command.end.usage: "end"
+
+waterbucket.command.status.description: "Show proxy server status"
+waterbucket.command.status.usage: "wbstatus"
+
+waterbucket.command.plugins.description: "Show proxy server plugins list"
+waterbucket.command.plugins.usage: "wbplugins"
+# {%0} = count, {%1} = plugin list
+waterbucket.command.plugins.format: "Plugins ({%0}): {%1}"
+
+waterbucket.command.reloadpacks.description: "Reload resource packs from disk or the configured CDN URLs"
+waterbucket.command.reloadpacks.usage: "wbreloadpacks"
+
+waterbucket.command.nethernet.description: "Inspect the NetherNet transport and its signaling provider"
+waterbucket.command.nethernet.usage: "wbnethernet <status | action | diagnostics | advertised>"
+
+waterbucket.command.me.description: "Show how you are connected to the proxy and to your server"
+waterbucket.command.me.usage: "wbme <player:optional>"
+waterbucket.command.me.other.denied: "§cYou don't have the permission to inspect other players."
+waterbucket.command.me.player_not_found: "§cPlayer not found!"

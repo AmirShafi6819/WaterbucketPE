@@ -24,6 +24,8 @@ import dev.waterbucket.waterbucketpe.utils.types.TextContainer;
 import org.cloudburstmc.protocol.bedrock.data.command.CommandOverloadData;
 import org.cloudburstmc.protocol.bedrock.data.command.CommandParam;
 import org.cloudburstmc.protocol.bedrock.data.command.CommandParamData;
+import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
+
 
 public class SendCommand extends Command {
 
@@ -43,7 +45,7 @@ public class SendCommand extends Command {
 
         ServerInfo server = sender.getProxy().getServerInfo(args[0]);
         if (server == null) {
-            sender.sendMessage(new TextContainer("§cServer {%0} was not found!", args[0]));
+            sender.sendMessage(new TranslationContainer("waterbucket.command.send.not_found", args[0]));
             return true;
         }
 
@@ -54,13 +56,13 @@ public class SendCommand extends Command {
             // fell through to args[1] and crashed with ArrayIndexOutOfBounds on a one-argument
             // call. Answer with the usage instead.
             if (targetServer == null) {
-                sender.sendMessage(new TextContainer("§cYou are not connected to a server yet; usage: {%0}", this.getUsageMessage()));
+                sender.sendMessage(new TranslationContainer("waterbucket.command.send.no_server", this.getUsageMessage()));
                 return true;
             }
         } else {
             targetServer = sender.getProxy().getServerInfo(args[1]);
             if (targetServer == null) {
-                sender.sendMessage(new TextContainer("§cCould not find target server {%0}!", args[1]));
+                sender.sendMessage(new TranslationContainer("waterbucket.command.send.target_not_found", args[1]));
                 return true;
             }
         }

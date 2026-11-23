@@ -39,6 +39,8 @@ import io.netty.util.concurrent.ScheduledFuture;
 import java.net.InetSocketAddress;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
+
 
 /**
  * The Pipeline Handler handling the login handshake part of the initial connect. Will be replaced after success.
@@ -81,7 +83,7 @@ public class LoginUpstreamHandler implements BedrockPacketHandler {
                 return;
             }
             this.proxy.getLogger().warning("[{}] <-> Disconnecting: login handshake not completed within {}s", this.session.getSocketAddress(), timeout);
-            this.session.disconnect("Login timeout");
+            this.session.disconnect(new TranslationContainer("waterbucket.login.timeout").getTranslated());
             // Treat a stalled handshake like any other protocol violation so the source IP is throttled/blocked
             this.proxy.getSecurityManager().onLoginTimeout(this.session.getSocketAddress());
         }, timeout, TimeUnit.SECONDS);
@@ -114,7 +116,7 @@ public class LoginUpstreamHandler implements BedrockPacketHandler {
         SecurityManager securityManager = this.proxy.getSecurityManager();
         if (!securityManager.onLoginAttempt(this.session.getSocketAddress())) {
             this.proxy.getLogger().debug("[{}] <-> Login denied", this.session.getSocketAddress());
-            this.session.disconnect("Login denied");
+            this.session.disconnect(new TranslationContainer("waterbucket.login.denied").getTranslated());
             return false;
         }
         return true;
@@ -150,7 +152,7 @@ public class LoginUpstreamHandler implements BedrockPacketHandler {
         this.session.setCodec(protocol.getCodec());
 
         if (protocol.isBefore(ProtocolVersion.MINECRAFT_PE_1_19_30)) {
-            this.session.disconnect("Illegal packet");
+            this.session.disconnect(new TranslationContainer("waterbucket.login.illegal_packet").getTranslated());
             this.proxy.getLogger().warning("[{}] <-> Upstream has requested network settings, but its version doesn't support it (protocol={})", this.session.getSocketAddress(), protocol.getProtocol());
             return PacketSignal.HANDLED;
         }
@@ -191,7 +193,7 @@ public class LoginUpstreamHandler implements BedrockPacketHandler {
 
         if (protocol.isAfterOrEqual(ProtocolVersion.MINECRAFT_PE_1_19_30) && this.compression == null) {
             this.proxy.getLogger().warning("[{}] <-> Upstream has not requested network settings (protocol={})", this.session.getSocketAddress(), protocol.getProtocol());
-            this.session.disconnect("Wrong login flow");
+            this.session.disconnect(new TranslationContainer("waterbucket.login.wrong_flow").getTranslated());
             return PacketSignal.HANDLED;
         } else if (this.compression == null) {
             this.compression = CompressionType.ZLIB;
@@ -282,7 +284,7 @@ public class LoginUpstreamHandler implements BedrockPacketHandler {
     private void finishConnection() {
         if (this.player == null) {
             this.proxy.getLogger().warning("[{}] <-> Upstream has not sent LoginPacket", this.session.getSocketAddress());
-            this.session.disconnect("Wrong login flow");
+            this.session.disconnect(new TranslationContainer("waterbucket.login.wrong_flow").getTranslated());
             this.proxy.getSecurityManager().onConnectionError(this.session.getSocketAddress(), null);
             return;
         }

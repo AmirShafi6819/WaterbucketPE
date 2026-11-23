@@ -51,12 +51,12 @@ public class MeCommand extends Command {
                 return false;
             }
             if (!sender.hasPermission(new TranslationContainer("waterbucket.command.me.permission.other").getTranslated())) {
-                sender.sendMessage("§cYou don't have the permission to inspect other players.");
+                sender.sendMessage(new TranslationContainer("waterbucket.command.me.other.denied"));
                 return true;
             }
             player = sender.getProxy().getPlayer(args[0]);
             if (player == null) {
-                sender.sendMessage("§cPlayer not found!");
+                sender.sendMessage(new TranslationContainer("waterbucket.command.me.player_not_found"));
                 return true;
             }
         }

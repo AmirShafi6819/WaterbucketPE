@@ -41,7 +41,7 @@ public class ListCommand extends Command {
     public boolean onExecute(CommandSender sender, String alias, String[] args) {
         if (args.length >= 1) {
             ServerInfo serverInfo = sender.getProxy().getServerInfo(args[0]);
-            sender.sendMessage(serverInfo == null ? "§cServer not found!" : this.buildServerList(serverInfo));
+            sender.sendMessage(serverInfo == null ? new TranslationContainer("waterbucket.command.list.not_found").getTranslated() : this.buildServerList(serverInfo));
             return true;
         }
 

@@ -93,6 +93,16 @@ public class ConfigurationManager {
         this.langConfig = new LangConfig(langFile);
     }
 
+    /**
+     * Loads the operator message overrides (ingame-messages.yml) and plugs them into the
+     * language lookup: keys defined there win over the built-in lang.ini defaults.
+     */
+    public void loadIngameMessages() {
+        File messagesFile = new File(this.proxy.getDataPath().toString() + "/ingame-messages.yml");
+        IngameMessages messages = new IngameMessages(messagesFile);
+        this.langConfig.setOverrides(messages);
+    }
+
     public <T> T loadServiceProvider(String providerName, Class<T> clazz) {
         return this.loadServiceProvider(providerName, clazz, null);
     }

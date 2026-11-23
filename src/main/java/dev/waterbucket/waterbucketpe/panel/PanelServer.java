@@ -67,6 +67,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
+
 
 /**
  * The local web panel: a small HTTP API plus a static dashboard served straight from the proxy
@@ -411,7 +413,7 @@ public class PanelServer {
         String body = request.content().toString(StandardCharsets.UTF_8);
         Map<?, ?> payload = parseBody(body);
         String reason = payload != null && payload.get("reason") instanceof String text && !text.isBlank()
-                ? text : "Kicked from the proxy";
+                ? text : new TranslationContainer("waterbucket.player.kick.default").getTranslated();
         this.commandExecutor.execute(() -> player.disconnect(reason));
         this.respondJson(ctx, request, HttpResponseStatus.OK, Map.of("kicked", player.getName()));
     }

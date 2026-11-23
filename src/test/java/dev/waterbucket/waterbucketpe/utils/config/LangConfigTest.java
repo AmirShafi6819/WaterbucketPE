@@ -68,4 +68,40 @@ public class LangConfigTest {
         Files.writeString(file.toPath(), content);
         return file;
     }
+
+    @Test
+    void ingameMessageOverridesWinOverBuiltinDefaults() throws Exception {
+        File lang = this.write("waterbucket.server.shutdown=Proxy shutdown\n");
+        LangConfig config = new LangConfig(lang);
+        IngameMessages overrides = new IngameMessages(this.writeYaml(
+                "waterbucket.server.shutdown: \"\u00a74Server closed by operator\"\n"));
+        config.setOverrides(overrides);
+        assertEquals("\u00a74Server closed by operator", config.translateString("waterbucket.server.shutdown"));
+    }
+
+    @Test
+    void ingameMessageOverridesKeepPlaceholderSubstitution() throws Exception {
+        File lang = this.write("waterbucket.command.server.sent=\u00a7aPlayer {%0} was sent to {%1} server!\n");
+        LangConfig config = new LangConfig(lang);
+        config.setOverrides(new IngameMessages(this.writeYaml(
+                "waterbucket.command.server.sent: \"\u00a7aMoved {%0} to {%1}\"\n")));
+        assertEquals("\u00a7aMoved Steve to lobby1", config.translateString(
+                "waterbucket.command.server.sent", "Steve", "lobby1"));
+    }
+
+    @Test
+    void missingOverrideFallsBackToBuiltinDefault() throws Exception {
+        File lang = this.write("waterbucket.server.shutdown=Proxy shutdown\n");
+        LangConfig config = new LangConfig(lang);
+        config.setOverrides(new IngameMessages(this.writeYaml(
+                "waterbucket.command.unknown: \"Not a command\"\n")));
+        assertEquals("Proxy shutdown", config.translateString("waterbucket.server.shutdown"));
+        assertEquals("Not a command", config.translateString("waterbucket.command.unknown"));
+    }
+
+    private File writeYaml(String content) throws Exception {
+        File file = new File(this.folder.toFile(), "ingame-messages-" + System.nanoTime() + ".yml");
+        Files.writeString(file.toPath(), content);
+        return file;
+    }
 }

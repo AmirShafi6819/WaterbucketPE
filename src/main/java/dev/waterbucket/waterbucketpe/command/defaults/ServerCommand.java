@@ -45,7 +45,7 @@ public class ServerCommand extends Command {
 
         ServerInfo server = sender.getProxy().getServerInfo(args[0]);
         if (server == null) {
-            sender.sendMessage("§cServer not found!");
+            sender.sendMessage(new TranslationContainer("waterbucket.command.server.not_found"));
             return true;
         }
 
@@ -54,16 +54,16 @@ public class ServerCommand extends Command {
             player = (ProxiedPlayer) sender;
         } else {
             if (!sender.hasPermission(new TranslationContainer("waterbucket.command.server.permission.other").getTranslated())) {
-                sender.sendMessage(new TextContainer("§cYou don't have the permission to move other players."));
+                sender.sendMessage(new TranslationContainer("waterbucket.command.server.other.denied"));
                 return false;
             }
 
             player = sender.getProxy().getPlayer(args[1]);
             if (player == null) {
-                sender.sendMessage("§cPlayer not found!");
+                sender.sendMessage(new TranslationContainer("waterbucket.command.server.player_not_found"));
                 return true;
             }
-            sender.sendMessage(new TextContainer("§aPlayer {%0} was sent to {%1} server!", player.getName(), server.getServerName()));
+            sender.sendMessage(new TranslationContainer("waterbucket.command.server.sent", player.getName(), server.getServerName()));
         }
 
         player.connect(server);

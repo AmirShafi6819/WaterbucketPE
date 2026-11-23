@@ -19,6 +19,8 @@ import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.command.Command;
 import dev.waterbucket.waterbucketpe.command.CommandSender;
 import dev.waterbucket.waterbucketpe.command.CommandSettings;
+import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
+
 
 public class EndCommand extends Command {
 
@@ -31,7 +33,7 @@ public class EndCommand extends Command {
 
     @Override
     public boolean onExecute(CommandSender sender, String alias, String[] args) {
-        sender.sendMessage("§aShutting down the proxy instance..");
+        sender.sendMessage(new TranslationContainer("waterbucket.command.end.confirm"));
         ProxyServer.getInstance().shutdown();
         return true;
     }

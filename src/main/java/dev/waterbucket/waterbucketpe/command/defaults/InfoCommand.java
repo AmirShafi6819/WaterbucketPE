@@ -34,7 +34,7 @@ public class InfoCommand extends Command {
     @Override
     public boolean onExecute(CommandSender sender, String alias, String[] args) {
         VersionInfo versionInfo = WaterbucketPE.version();
-        sender.sendMessage("§bRunning WaterbucketPE version §3" + versionInfo.baseVersion() + "§b!\n" +
+        sender.sendMessage("§bRunning WaterBucketPE version §3" + versionInfo.baseVersion() + "§b!\n" +
                 "§3Build Version: §b" + versionInfo.buildVersion() + "\n" +
                 "§3Latest Protocol: §b" + versionInfo.latestProtocolVersion() + "\n" +
                 "§3Branch: §b" + versionInfo.branchName() + "§3 CommitId:§b " + versionInfo.commitId() + "\n" +

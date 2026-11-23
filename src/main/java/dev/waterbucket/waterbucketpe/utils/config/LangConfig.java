@@ -29,10 +29,23 @@ public class LangConfig {
 
     protected final Object2ObjectMap<String, String> transactionMap = new Object2ObjectOpenHashMap<>();
     private final File file;
+    /**
+     * Operator overrides from ingame-messages.yml, consulted before the built-in defaults.
+     * Volatile: reloaded from the config/panel threads while event loops resolve messages.
+     */
+    private volatile IngameMessages overrides;
 
     public LangConfig(File file) {
         this.file = file;
         this.load();
+    }
+
+    public void setOverrides(IngameMessages overrides) {
+        this.overrides = overrides;
+    }
+
+    public IngameMessages getOverrides() {
+        return this.overrides;
     }
 
     public void load() {
@@ -69,7 +82,11 @@ public class LangConfig {
     }
 
     public String translateString(String key, String... args) {
-        String string = this.getTransaction(key);
+        IngameMessages overrideSource = this.overrides;
+        String string = overrideSource != null ? overrideSource.get(key) : null;
+        if (string == null) {
+            string = this.getTransaction(key);
+        }
         if (string == null) {
             // Language files written for WaterdogPE use the legacy "waterdog." key prefix;
             // fall back to it so existing language files keep working on this fork.

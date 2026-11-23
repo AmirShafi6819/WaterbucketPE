@@ -190,6 +190,7 @@ public class ProxyServer {
         this.configurationManager = new ConfigurationManager(this);
         this.configurationManager.loadProxyConfig();
         this.configurationManager.loadLanguage();
+        this.configurationManager.loadIngameMessages();
         this.errorReporting = new ErrorReporting(this);
 
         if (!this.getNetworkSettings().enableIpv6()) {
