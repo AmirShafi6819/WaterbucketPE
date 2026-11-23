@@ -15,6 +15,7 @@ const I18N = {
     "login.badToken": "Invalid token",
     "login.secure": "Every API call requires the token",
     "stat.players": "Players", "stat.cpu": "CPU", "stat.memory": "Memory", "stat.uptime": "Uptime",
+    "stat.maxPlayers": "max {n}", "stat.cores": "{n} cores", "stat.threads": "{n} threads",
     "chart.players": "Players over time", "chart.memory": "Memory over time", "chart.cpu": "CPU over time",
     "servers.title": "Servers", "servers.empty": "No servers configured yet",
     "servers.players": "Players", "servers.ping": "Ping", "servers.upFor": "Up for",
@@ -38,43 +39,48 @@ const I18N = {
     "nav.console": "Console", "nav.settings": "Settings",
     "edit.active": "Editing layout — drag cards, × hides, Done when finished",
     "common.offline": "offline", "common.never": "—", "common.kicked": "kicked", "common.moved": "moved",
-    "common.pinged": "ping sent", "common.commandSent": "command queued",
-    "common.confirmKick": "Kick {name}?",
+    "common.pinged": "ping sent", "common.commandSent": "command sent",
+    "common.confirmKick": "Kick {name}?", "common.failed": "Action failed", "common.close": "Close",
+    "settings.language": "Language", "settings.restoreCards": "Restore hidden cards",
+    "settings.layoutReset": "Layout reset",
   },
   fa: {
-    "login.sub": "پنل پروکسی واتربکت‌پی‌ای",
+    "login.sub": "پنل مدیریت WaterBucketPE",
     "login.hint": "توکن پنل را از فایل panel_token.txt وارد کنید",
     "login.placeholder": "توکن پنل",
     "login.enter": "ورود",
     "login.badToken": "توکن نامعتبر است",
-    "login.secure": "هر درخواست API نیازمند توکن است",
+    "login.secure": "هر درخواست نیازمند توکن است",
     "stat.players": "بازیکنان", "stat.cpu": "پردازنده", "stat.memory": "حافظه", "stat.uptime": "مدت فعالیت",
-    "chart.players": "بازیکنان در گذر زمان", "chart.memory": "حافظه در گذر زمان", "chart.cpu": "پردازنده در گذر زمان",
-    "servers.title": "سرورها", "servers.empty": "هنوز سروری ثبت نشده است",
-    "servers.players": "بازیکنان", "servers.ping": "پینگ", "servers.upFor": "فعال از",
+    "stat.maxPlayers": "حداکثر {n}", "stat.cores": "{n} هسته", "stat.threads": "{n} نخ",
+    "chart.players": "بازیکنان در طول زمان", "chart.memory": "مصرف حافظه در طول زمان", "chart.cpu": "مصرف پردازنده در طول زمان",
+    "servers.title": "سرورها", "servers.empty": "هنوز سروری تعریف نشده است",
+    "servers.players": "بازیکنان", "servers.ping": "پینگ", "servers.upFor": "مدت فعالیت",
     "servers.pingNow": "پینگ فوری", "servers.onServer": "بازیکنان این سرور",
-    "servers.online": "آنلاین", "servers.offline": "خاموش",
+    "servers.online": "آنلاین", "servers.offline": "آفلاین",
     "servers.clickForDetail": "برای جزئیات کلیک کنید",
     "players.title": "بازیکنان", "players.name": "بازیکن", "players.server": "سرور",
     "players.address": "آدرس", "players.protocol": "پروتکل", "players.actions": "عملیات",
     "players.empty": "بازیکنی آنلاین نیست", "players.kick": "اخراج", "players.transfer": "انتقال",
     "console.title": "کنسول", "console.all": "همه سطوح", "console.warnPlus": "هشدار و خطا",
-    "console.errors": "فقط خطاها", "console.clear": "پاک‌سازی نما", "console.send": "ارسال",
+    "console.errors": "فقط خطاها", "console.clear": "پاک کردن", "console.send": "ارسال",
     "console.placeholder": "دستور را بنویسید…",
     "settings.title": "تنظیمات", "settings.appearance": "ظاهر", "settings.theme": "پوسته",
     "settings.dark": "تیره", "settings.light": "روشن", "settings.accent": "رنگ اصلی",
-    "settings.glass": "شدت شیشه‌ای بودن", "settings.layout": "چیدمان",
-    "settings.layoutHint": "کارت‌ها را بکشید تا جابه‌جا شوند، با × پنهان کنید. کارت‌های پنهان اینجا برمی‌گردند.",
+    "settings.glass": "شدت افکت شیشه‌ای", "settings.layout": "چیدمان",
+    "settings.layoutHint": "کارت‌ها را بکشید تا جابه‌جا شوند؛ با × مخفی می‌شوند. کارت‌های مخفی از همین‌جا بازمی‌گردند.",
     "settings.editLayout": "ویرایش چیدمان", "settings.resetLayout": "بازنشانی",
     "settings.done": "اتمام", "settings.about": "درباره", "settings.version": "نسخه",
     "settings.java": "جاوا", "settings.os": "سیستم‌عامل", "settings.proxyName": "پروکسی",
-    "settings.hiddenCards": "کارت‌های پنهان",
+    "settings.hiddenCards": "کارت‌های مخفی",
     "nav.overview": "خانه", "nav.servers": "سرورها", "nav.players": "بازیکنان",
     "nav.console": "کنسول", "nav.settings": "تنظیمات",
-    "edit.active": "ویرایش چیدمان — کارت‌ها را بکشید، × پنهان می‌کند، «اتمام» برای پایان",
-    "common.offline": "خاموش", "common.never": "—", "common.kicked": "اخراج شد", "common.moved": "منتقل شد",
-    "common.pinged": "پینگ ارسال شد", "common.commandSent": "دستور در صف اجرا قرار گرفت",
-    "common.confirmKick": "اخراج {name}؟",
+    "edit.active": "ویرایش چیدمان — کارت‌ها را بکشید، × مخفی می‌کند، «اتمام» برای پایان",
+    "common.offline": "آفلاین", "common.never": "—", "common.kicked": "اخراج شد", "common.moved": "منتقل شد",
+    "common.pinged": "پینگ ارسال شد", "common.commandSent": "دستور ارسال شد",
+    "common.confirmKick": "اخراج {name}؟", "common.failed": "عملیات ناموفق بود", "common.close": "بستن",
+    "settings.language": "زبان", "settings.restoreCards": "بازگرداندن کارت‌های مخفی",
+    "settings.layoutReset": "چیدمان بازنشانی شد",
   },
 };
 
@@ -86,6 +92,16 @@ const el = (tag, cls, text) => {
   if (cls) node.className = cls;
   if (text !== undefined) node.textContent = text;
   return node;
+};
+// <use>-based SVG icon from the sprite in index.html
+const SVG_NS = "http://www.w3.org/2000/svg";
+const icon = (name) => {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "icon");
+  const use = document.createElementNS(SVG_NS, "use");
+  use.setAttribute("href", "#i-" + name);
+  svg.appendChild(use);
+  return svg;
 };
 const store = {
   get(key, fallback) {
@@ -107,7 +123,8 @@ function applyI18n() {
   document.documentElement.dir = LANG === "fa" ? "rtl" : "ltr";
   $$("[data-i18n]").forEach((node) => { node.textContent = t(node.dataset.i18n); });
   $$("[data-i18n-ph]").forEach((node) => { node.placeholder = t(node.dataset.i18nPh); });
-  $("#lang-btn").textContent = LANG === "fa" ? "EN" : "ف";
+  $$("[data-i18n-title]").forEach((node) => { node.title = t(node.dataset.i18nTitle); });
+  $("#lang-next").textContent = LANG === "fa" ? "EN" : "ف";
 }
 
 /* format bytes / durations / time */
@@ -127,6 +144,8 @@ function applyTheme(theme) {
   document.body.dataset.theme = theme;
   store.set("wb_theme", theme);
   $$("#theme-seg button").forEach((b) => b.classList.toggle("active", b.dataset.theme === theme));
+  const themeIcon = $("#theme-icon");
+  if (themeIcon) themeIcon.setAttribute("href", theme === "dark" ? "#i-sun" : "#i-moon");
   rebuildChartPalette();
 }
 function applyAccent(name) {
@@ -204,15 +223,12 @@ let currentView = "overview";
 function switchView(name) {
   currentView = name;
   $$(".view").forEach((v) => v.classList.toggle("hidden", v.id !== "view-" + name));
-  const active = $(`#hotbar .hotbtn[data-view="${name}"]`);
-  $$("#hotbar .hotbtn").forEach((b) => b.classList.toggle("active", b === active));
-  const pill = $("#hotbar-pill");
-  pill.style.left = active.offsetLeft + "px";
-  pill.style.width = active.offsetWidth + "px";
+  $$("#hotbar .hotbtn").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  // fetch immediately instead of waiting for the next poll tick
+  if (name === "players") refreshPlayers();
 }
 $$("#hotbar .hotbtn").forEach((btn) =>
   btn.addEventListener("click", () => switchView(btn.dataset.view)));
-window.addEventListener("resize", () => switchView(currentView));
 $("#home-btn").addEventListener("click", () => switchView("overview"));
 
 /* ---------------- charts (created once, updated in place) ---------------- */
@@ -274,14 +290,14 @@ let lastStatus = null;
 function renderStatus(status) {
   lastStatus = status;
   $("#stat-players").textContent = status.players;
-  $("#stat-maxplayers").textContent = "max " + (status.maxPlayers ?? "?");
+  $("#stat-maxplayers").textContent = t("stat.maxPlayers", { n: status.maxPlayers ?? "?" });
   $("#stat-cpu").textContent = (status.cpu ?? 0) + "%";
-  $("#stat-cores").textContent = status.cores + " cores";
+  $("#stat-cores").textContent = t("stat.cores", { n: status.cores });
   const used = status.memoryUsed, max = status.memoryMax || 1;
   $("#stat-memory").textContent = fmtBytes(used) + " / " + fmtBytes(max);
   $("#memory-fill").style.width = Math.min(100, used / max * 100).toFixed(1) + "%";
   $("#stat-uptime").textContent = fmtUptime(status.uptimeMs);
-  $("#stat-threads").textContent = status.threads + " threads";
+  $("#stat-threads").textContent = t("stat.threads", { n: status.threads });
   $("#version-pill").textContent = "v" + status.proxyVersion;
   $("#uptime-pill").textContent = fmtUptime(status.uptimeMs);
   $("#health-dot").classList.toggle("bad", false);
@@ -357,9 +373,12 @@ function buildServerCard(server) {
   card.appendChild(head);
 
   const meta = el("div", "server-meta");
-  meta.innerHTML = `<span>👥 <b class="m-players">0</b></span>
-                    <span>📶 <b class="m-ping">—</b></span>
-                    <span>⏱ <b class="m-up">—</b></span>`;
+  [["users", "m-players", "0"], ["wifi", "m-ping", "—"], ["clock", "m-up", "—"]].forEach(([ic, cls, val]) => {
+    const item = el("span");
+    item.appendChild(icon(ic));
+    item.appendChild(el("b", cls, val));
+    meta.appendChild(item);
+  });
   card.appendChild(meta);
 
   const addr = el("div", "muted small", server.address);
@@ -442,7 +461,8 @@ async function refreshServerDialog() {
   list.innerHTML = "";
   (detail.playerNames || []).forEach((playerName) => {
     const chip = el("span", "chip", playerName);
-    const kick = el("button", "btn mini danger", "✕");
+    const kick = el("button", "btn mini danger");
+    kick.appendChild(icon("logout"));
     kick.title = t("players.kick");
     kick.addEventListener("click", async () => {
       if (!confirm(t("common.confirmKick", { name: playerName }))) return;
@@ -469,7 +489,7 @@ async function refreshServerDialog() {
       option.value = p.name;
       select.appendChild(option);
     });
-    const move = el("button", "btn mini primary", "→ " + dialogServer);
+    const move = el("button", "btn mini primary", dialogServer);
     move.addEventListener("click", async () => {
       if (!select.value) return;
       await API.post("/api/players/" + encodeURIComponent(select.value) + "/transfer",
@@ -519,7 +539,7 @@ async function refreshPlayers() {
       if (!target) return;
       API.post("/api/players/" + encodeURIComponent(player.name) + "/transfer", { server: target })
         .then(() => { toast(player.name + " " + t("common.moved")); refreshPlayers(); })
-        .catch(() => toast("✕"));
+        .catch(() => toast(t("common.failed")));
     });
     actions.appendChild(move);
     row.appendChild(actions);
@@ -542,15 +562,51 @@ function renderConsole() {
   });
   if (atBottom) consoleBox.scrollTop = consoleBox.scrollHeight;
 }
+/* Minecraft § color codes -> colored spans, so proxy messages keep their
+   colors in the panel console instead of showing raw "§b" sequences */
+const MC_COLORS = {
+  0: "#8b8b8b", 1: "#5c7cff", 2: "#4bd06b", 3: "#3ecfcf", 4: "#ff6b6b",
+  5: "#b07cd8", 6: "#ffb347", 7: "#c9c9c9", 8: "#7a7a7a", 9: "#6c9eff",
+  a: "#6ee787", b: "#56d4dd", c: "#ff7b72", d: "#dba0ec", e: "#f2cc60", f: "#e6edf3",
+};
+function appendMcText(parent, text) {
+  let color = null, bold = false, italic = false, underline = false, strike = false;
+  const push = (part) => {
+    if (!part) return;
+    const node = el("span", "log-part", part);
+    if (color) node.style.color = color;
+    if (bold) node.classList.add("mc-bold");
+    if (italic) node.classList.add("mc-italic");
+    if (underline) node.classList.add("mc-underline");
+    if (strike) node.classList.add("mc-strike");
+    parent.appendChild(node);
+  };
+  text.split("§").forEach((part, i) => {
+    if (i === 0) { push(part); return; }
+    const code = part.slice(0, 1).toLowerCase();
+    const rest = part.slice(1);
+    if (code in MC_COLORS) color = MC_COLORS[code];
+    else if (code === "l") bold = true;
+    else if (code === "o") italic = true;
+    else if (code === "n") underline = true;
+    else if (code === "m") strike = true;
+    else if (code === "r") { color = null; bold = italic = underline = strike = false; }
+    else push("§"); // not a real code: keep the character visible
+    push(rest);
+  });
+}
 function renderLogLine(line) {
   const match = line.match(/^(\d{2}:\d{2}:\d{2}) \[([A-Z]+)\] ?(.*)$/);
   const span = el("span", "log-line");
   if (match) {
     const time = el("span", "log-time", match[1] + "  ");
     const level = el("span", "log-" + match[2], "[" + match[2] + "] ");
-    span.append(time, level, document.createTextNode(match[3]));
+    const msg = el("span", "log-msg");
+    appendMcText(msg, match[3]);
+    span.append(time, level, msg);
   } else {
-    span.textContent = line;
+    span.classList.add("log-msg");
+    appendMcText(span, line);
   }
   return span;
 }
@@ -581,7 +637,7 @@ function sendConsoleCommand() {
   store.set("wb_cmd_hist", cmdHistory);
   API.post("/api/command", { command })
     .then(() => toast(t("common.commandSent")))
-    .catch(() => toast("✕"));
+    .catch(() => toast(t("common.failed")));
 }
 $("#console-send").addEventListener("click", sendConsoleCommand);
 $("#console-input").addEventListener("keydown", (e) => {
@@ -695,7 +751,9 @@ function renderHiddenChips() {
   if (!box) return;
   box.innerHTML = "";
   currentHidden.forEach((name) => {
-    const chip = el("button", "chip", "👁 " + name);
+    const chip = el("button", "chip");
+    chip.appendChild(icon("eye"));
+    chip.appendChild(el("span", "", name));
     chip.addEventListener("click", () => restoreCard(name));
     box.appendChild(chip);
   });
@@ -724,7 +782,7 @@ $("#reset-layout-btn").addEventListener("click", () => {
   $$("[data-card]").forEach((card) => card.classList.remove("hidden"));
   renderHiddenChips();
   $("#restore-btn").classList.add("hidden");
-  toast("↺");
+  toast(t("settings.layoutReset"));
 });
 
 /* ---------------- polling ---------------- */
@@ -758,7 +816,6 @@ async function pollHistory() {
     charts.memory = makeChart("chart-memory", "memory", "#39d3d8");
     charts.cpu = makeChart("chart-cpu", "cpu", "#7c8cff");
   }
-  const isFa = LANG === "fa";
   fillChart(charts.players, points, (p) => p.players, (p) => fmtClock(p.time));
   fillChart(charts.memory, points, (p) => Math.round(p.memoryUsed / MB),
     (p) => fmtClock(p.time));
@@ -772,6 +829,7 @@ async function pollHistory() {
   applyGlass(store.get("wb_glass", 70));
   applyI18n();
   applySavedLayout();
+  switchView("overview");
   $$("#theme-seg button").forEach((b) => b.classList.toggle("active", b.dataset.theme === document.body.dataset.theme));
   $("#glass-range").value = String(store.get("wb_glass", 70));
 
