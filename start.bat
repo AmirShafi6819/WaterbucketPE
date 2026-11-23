@@ -14,7 +14,7 @@ if errorlevel 1 (
 )
 
 :loop
-java -Xms512M -Xmx1G ^
+java -Xms1G -Xmx1G ^
      -XX:+UseG1GC ^
      -XX:MaxGCPauseMillis=200 ^
      -XX:G1NewSizePercent=30 ^

@@ -22,7 +22,7 @@ fi
 
 while true; do
     "$JAVA_BIN" \
-        -Xms512M -Xmx1G \
+        -Xms1G -Xmx1G \
         -XX:+UseG1GC \
         -XX:MaxGCPauseMillis=200 \
         -XX:G1NewSizePercent=30 \

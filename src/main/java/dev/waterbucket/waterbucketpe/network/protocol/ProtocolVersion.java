@@ -173,6 +173,7 @@ public enum ProtocolVersion {
     private final int protocolInternal;
     @Getter
     private final BedrockCodec defaultCodec;
+    @Getter
     @Setter
     private BedrockCodec bedrockCodec;
     @Getter

@@ -375,6 +375,11 @@ public class ProxyServer {
         this.scheduler.scheduleRepeating(this.playerManager::sweepDisconnectedPlayers, GHOST_SWEEP_PERIOD_TICKS, true);
 
         this.startPanel();
+
+        // Move the first join's one-time cost (JCE crypto init, zlib, packet class loads) to a
+        // background thread right now, so the first real player does not pay for it with a
+        // visible CPU/RAM spike on the dashboard.
+        StartupWarmup.kickOff();
     }
 
     private void startPanel() {
