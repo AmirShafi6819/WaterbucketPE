@@ -113,6 +113,9 @@ tasks.jar {
 }
 
 tasks.shadowJar {
+    // Quercus (the embedded PHP runtime) plus GraalPy push the entry count past the classic
+    // zip limit of 65535, so the archive must opt into zip64
+    isZip64 = true
     // shadow 9 defaults to EXCLUDE, dropping duplicates before the transformers merge them
     filesMatching(listOf("META-INF/services/**", "META-INF/**/Log4j2Plugins.dat")) {
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
