@@ -53,6 +53,7 @@ import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfoMap;
 import dev.waterbucket.waterbucketpe.packs.PackManager;
 import dev.waterbucket.waterbucketpe.panel.PanelServer;
 import dev.waterbucket.waterbucketpe.player.PlayerManager;
+import dev.waterbucket.waterbucketpe.onlyproxy.OnlyProxyJoinManager;
 import dev.waterbucket.waterbucketpe.restart.RestartManager;
 import dev.waterbucket.waterbucketpe.sleep.SleepModeManager;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
@@ -99,6 +100,8 @@ public class ProxyServer {
      * How often the ghost-player sweep runs (15 seconds in ticks).
      */
     private static final int GHOST_SWEEP_PERIOD_TICKS = 20 * 15;
+    /** Only Proxy Join firewall re-check period: once a minute. */
+    private static final int ONLY_PROXY_JOIN_REFRESH_PERIOD_TICKS = 20 * 60;
 
     @Getter
     private static ProxyServer instance;
@@ -147,6 +150,8 @@ public class ProxyServer {
     private final RestartManager restartManager;
     @Getter
     private final SleepModeManager sleepModeManager;
+    @Getter
+    private final OnlyProxyJoinManager onlyProxyJoinManager;
     @Getter
     private final ErrorReporting errorReporting;
     private PanelServer panelServer;
@@ -269,6 +274,7 @@ public class ProxyServer {
         this.securityManager = new SecurityManager(this);
         this.restartManager = new RestartManager(this);
         this.sleepModeManager = new SleepModeManager(this);
+        this.onlyProxyJoinManager = new OnlyProxyJoinManager(this);
         this.commandSender = new ConsoleCommandSender(this);
         this.commandMap = new DefaultCommandMap(this, SimpleCommandMap.DEFAULT_PREFIX);
         this.console = new TerminalConsole(this);
@@ -397,6 +403,15 @@ public class ProxyServer {
         // Sleep mode heartbeat: once a second, decides when an empty proxy falls asleep
         this.scheduler.scheduleRepeating(this.sleepModeManager::tick, SleepModeManager.HEARTBEAT_TICKS, true);
 
+        // Only Proxy Join: apply the firewall rules once (idempotent) and re-check them every
+        // minute so a firewall flush on the host heals itself without operator action.
+        if (this.getConfiguration().getOnlyProxyJoinSettings().enable()) {
+            if (this.onlyProxyJoinManager.apply()) {
+                this.scheduler.scheduleRepeating(this.onlyProxyJoinManager::refresh,
+                        ONLY_PROXY_JOIN_REFRESH_PERIOD_TICKS, true);
+            }
+        }
+
         this.startPanel();
 
         // Move the first join's one-time cost (JCE crypto init, zlib, packet class loads) to a
@@ -501,6 +516,11 @@ public class ProxyServer {
     }
 
     private void shutdown0() throws Exception {
+        // Restore the operator's firewall first: even a hard shutdown path must leave no
+        // managed rules behind (a restart relaunches with only_proxy_join re-applying them).
+        if (this.onlyProxyJoinManager.isApplied()) {
+            this.onlyProxyJoinManager.remove();
+        }
         if (this.panelServer != null) {
             this.panelServer.shutdown();
         }

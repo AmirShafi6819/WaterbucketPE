@@ -113,6 +113,15 @@ public class ProxyConfig extends YamlConfig {
     @Comment("NetherNet settings, used when listener.transport is nethernet or both")
     private NetherNetSettings netherNetSettings = new NetherNetSettings();
 
+    @Path("only_proxy_join")
+    @Comments({
+            "Only Proxy Join: when enabled, the proxy keeps host firewall rules that block direct",
+            "public access to every downstream server's UDP port (loopback stays allowed), so players",
+            "can only join through the proxy port below. Applying needs admin/root once; disable or",
+            "shut the proxy down to remove the rules automatically."
+    })
+    private OnlyProxyJoinSettings onlyProxyJoinSettings = new OnlyProxyJoinSettings();
+
     @Path("sleep_mode")
     @Comments({
             "Idle resource saver: with zero players the proxy trims its heap and pauses periodic",

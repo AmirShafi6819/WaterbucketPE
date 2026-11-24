@@ -5,6 +5,28 @@ versioning follows [semantic versioning](https://semver.org/).
 
 ## [1.5.5] - 2026-11-24
 
+### Added — Only Proxy Join
+
+- **`only_proxy_join` config section** (`enable`, `proxy_port`, `manage_firewall`): when
+  enabled, the proxy maintains host firewall rules that block direct public access to every
+  configured downstream server's UDP port, so players can only enter through the proxy on
+  its own port - exactly the requested workflow: pick the port, flip the switch, and joining
+  any server directly (bypassing the proxy) stops working while joining via the proxy port
+  keeps working.
+- **Host firewall automation, safe by design** - Linux: per-port iptables rules with a
+  `waterbucket-opj` comment marker, loopback traffic explicitly allowed before a global
+  UDP drop, so the proxy itself keeps dialing its downstreams; Windows: one named block
+  rule per port (Defender Firewall exempts loopback by default). All commands run through
+  ProcessBuilder without a shell; apply is idempotent (`-C` before `-I`), a minute-cycle
+  refresh heals rules after a firewall flush, and removal runs on disable, shutdown and
+  restart so the operator's firewall is never left dirty.
+- **Failure isolation**: without admin/root the manager logs precise manual instructions and
+  the proxy runs unprotected, never broken; `manage_firewall: false` turns the feature into
+  pure verification for operators who manage rules with their own tooling.
+- **`/wbonlyproxy [status|apply|remove]`** (alias `/wdonlyproxy`) reports per-port protection
+  state and applies/removes rules on demand.
+  72 suites / 427 tests green (5 new rule-plan tests; no host firewall is touched in tests).
+
 ### Added — sleep mode for empty proxies
 
 - **`sleep_mode` config section** (`enable`, `after_minutes`, default on / 5 minutes): when
