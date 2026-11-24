@@ -268,6 +268,26 @@ public class ProxyConfig extends YamlConfig {
     @Comment("Enables anonymous error reporting using bugsnag. This allows the WaterbucketPE team to automatically collect issues occurring on WaterbucketPE instances.")
     private boolean enableAnonymousErrorReporting = true;
 
+    @Path("restart.use_script")
+    @Accessors(fluent = true)
+    @Comments({
+            "When /restart runs, generate (if missing) and execute a relaunch script that waits",
+            "for the proxy process to exit and then starts a new instance with the same JVM options,",
+            "so new plugin jars, packs and config values are picked up. When disabled, /restart",
+            "behaves like a plain graceful shutdown and your wrapper/service manager must relaunch."
+    })
+    private boolean restartUseScript = true;
+
+    @Path("restart.generate_script")
+    @Accessors(fluent = true)
+    @Comment("Whether a missing restart script may be auto-generated next to the config at restart time")
+    private boolean restartGenerateScript = true;
+
+    @Path("restart.script_path")
+    @Accessors(fluent = true)
+    @Comment("Custom restart script path (relative paths resolve against the proxy folder). Empty = restart.sh / restart.bat")
+    private String restartScriptPath = "";
+
     @Path("config_version")
     @Comment("The layout of this file, used to upgrade it. Do not change it")
     @Setter(AccessLevel.NONE)

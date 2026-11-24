@@ -53,6 +53,7 @@ import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfoMap;
 import dev.waterbucket.waterbucketpe.packs.PackManager;
 import dev.waterbucket.waterbucketpe.panel.PanelServer;
 import dev.waterbucket.waterbucketpe.player.PlayerManager;
+import dev.waterbucket.waterbucketpe.restart.RestartManager;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.plugin.PluginManager;
 import dev.waterbucket.waterbucketpe.scheduler.WaterbucketScheduler;
@@ -141,6 +142,8 @@ public class ProxyServer {
 
     @Getter
     private final SecurityManager securityManager;
+    @Getter
+    private final RestartManager restartManager;
     @Getter
     private final ErrorReporting errorReporting;
     private PanelServer panelServer;
@@ -261,6 +264,7 @@ public class ProxyServer {
         this.eventManager = new EventManager(this);
         this.packManager = new PackManager(this);
         this.securityManager = new SecurityManager(this);
+        this.restartManager = new RestartManager(this);
         this.commandSender = new ConsoleCommandSender(this);
         this.commandMap = new DefaultCommandMap(this, SimpleCommandMap.DEFAULT_PREFIX);
         this.console = new TerminalConsole(this);

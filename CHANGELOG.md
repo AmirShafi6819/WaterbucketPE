@@ -5,6 +5,29 @@ versioning follows [semantic versioning](https://semver.org/).
 
 ## [1.5.5] - 2026-11-24
 
+### Added — professional `/restart`
+
+- **`/restart` command** (alias `/wdrestart`, permission `waterbucket.command.restart`, also
+  runnable from the panel console): a managed, one-shot restart sequence instead of a bare
+  process kill.
+- **Sequence contract** — `ProxyRestartEvent` (new, synchronous, cancellable: plugins can veto
+  or defer a restart) → broadcast + graceful player kick with the new
+  `waterbucket.restart.broadcast` / `waterbucket.restart.kick` messages → plugins disabled
+  through the normal shutdown path → relaunch script → clean `shutdown(0)`. Every step is
+  failure-isolated; the sequence always ends in a clean shutdown, never a half-dead proxy.
+- **Relaunch script** — `restart.sh` / `restart.bat` is auto-generated next to the config
+  (executable, editable), waits for the old process to exit (`kill -0` polling / `tasklist`),
+  then relaunches `java <same JVM options> -jar <same jar>` from the same directory - so
+  **newly added plugins, packs and config values are picked up**, which no in-process reload
+  can guarantee, and the listener ports are free (no bind race). Configure a custom script
+  via `restart.script_path`; disable the mechanism with `restart.use_script: false` (wrapper
+  managers such as systemd/Docker restart policies keep working).
+- **Safety** - concurrent restart requests (console spam, panel + console at once, SIGTERM
+  racing in) collapse into the first one; a plugin veto releases the guard so a later request
+  is not stuck; environments that cannot exec scripts (sandboxed hosts, dev runs) log a clear
+  reason and fall back to a plain graceful shutdown.
+  69 suites / 412 tests green (6 new RestartManager sequence tests).
+
 ### Added — PHP plugin language
 
 - **PHP is now a first-class plugin language** alongside Java and Python. Plugins are
