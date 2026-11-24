@@ -17,6 +17,7 @@ package dev.waterbucket.waterbucketpe;
 
 import dev.waterbucket.waterbucketpe.command.Command;
 import dev.waterbucket.waterbucketpe.command.CommandMap;
+import dev.waterbucket.waterbucketpe.command.CommandRateLimiter;
 import dev.waterbucket.waterbucketpe.command.CommandSender;
 import dev.waterbucket.waterbucketpe.command.ConsoleCommandSender;
 import dev.waterbucket.waterbucketpe.command.DefaultCommandMap;
@@ -52,6 +53,7 @@ import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
 import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfoMap;
 import dev.waterbucket.waterbucketpe.packs.PackManager;
 import dev.waterbucket.waterbucketpe.panel.PanelServer;
+import dev.waterbucket.waterbucketpe.ping.PingPassthroughManager;
 import dev.waterbucket.waterbucketpe.player.PlayerManager;
 import dev.waterbucket.waterbucketpe.onlyproxy.OnlyProxyJoinManager;
 import dev.waterbucket.waterbucketpe.restart.RestartManager;
@@ -152,6 +154,10 @@ public class ProxyServer {
     private final SleepModeManager sleepModeManager;
     @Getter
     private final OnlyProxyJoinManager onlyProxyJoinManager;
+    @Getter
+    private final PingPassthroughManager pingPassthroughManager;
+    @Getter
+    private final CommandRateLimiter commandRateLimiter;
     @Getter
     private final ErrorReporting errorReporting;
     private PanelServer panelServer;
@@ -275,6 +281,8 @@ public class ProxyServer {
         this.restartManager = new RestartManager(this);
         this.sleepModeManager = new SleepModeManager(this);
         this.onlyProxyJoinManager = new OnlyProxyJoinManager(this);
+        this.pingPassthroughManager = new PingPassthroughManager(this);
+        this.commandRateLimiter = new CommandRateLimiter(this);
         this.commandSender = new ConsoleCommandSender(this);
         this.commandMap = new DefaultCommandMap(this, SimpleCommandMap.DEFAULT_PREFIX);
         this.console = new TerminalConsole(this);
@@ -411,6 +419,12 @@ public class ProxyServer {
                         ONLY_PROXY_JOIN_REFRESH_PERIOD_TICKS, true);
             }
         }
+
+        // Velocity-style ping passthrough and command rate limiting: both start their own
+        // background tasks only when enabled in config, keeping a default-configured proxy
+        // exactly as quiet as before.
+        this.pingPassthroughManager.start();
+        this.commandRateLimiter.start();
 
         this.startPanel();
 
@@ -589,6 +603,13 @@ public class ProxyServer {
     }
 
     public boolean handlePlayerCommand(ProxiedPlayer player, String message) {
+        // Velocity-style flood protection: drop commands past listener.command_rate_limit with
+        // a warning instead of executing (or forwarding) them. Consumed either way so the
+        // downstream server never sees the spam.
+        if (!this.commandRateLimiter.tryAcquire(player.getUniqueId())) {
+            player.sendMessage(this.translate(new TranslationContainer("waterbucket.command.ratelimit")));
+            return true;
+        }
         // Give plugins a hook on every command a player types, before the proxy decides
         // whether the command belongs to it or to the downstream server. Canceling consumes
         // the command; rewriting applies to both proxy and downstream commands alike.
@@ -682,6 +703,11 @@ public class ProxyServer {
         // A server-list ping is contact: an asleep proxy must wake before answering
         this.sleepModeManager.onActivity();
         ProxyConfig config = this.getConfiguration();
+        // show_max_players=false shows the live player count as the maximum, so the proxy
+        // never looks full; plugins can still override either number below.
+        int shownMaxPlayers = config.showMaxPlayers()
+                ? this.getMaxPlayers()
+                : Math.max(this.getPlayerManager().getPlayers().size(), 0);
         ProxyPingEvent event = new ProxyPingEvent(
                 config.getMotd(),
                 config.getSubMotd(),
@@ -689,8 +715,11 @@ public class ProxyServer {
                 "MCPE",
                 ProtocolVersion.latest().getMinecraftVersion(),
                 this.getPlayerManager().getPlayers().values(),
-                this.getMaxPlayers(),
+                shownMaxPlayers,
                 address);
+        // Velocity-style ping passthrough feeds the priority server's real pong into the
+        // event before plugins see it, so plugins always get the final say.
+        this.pingPassthroughManager.apply(event);
         this.getEventManager().callEvent(event);
         return event;
     }

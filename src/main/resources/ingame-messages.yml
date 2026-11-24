@@ -70,6 +70,9 @@ waterbucket.connected.fallback: "§6Unable to connect to {%0}! You were connecte
 waterbucket.command.permission.failed: "§cYou do not have the permission to execute this command!"
 waterbucket.command.unknown: "§cUnknown command! Use §4/wbhelp§c to see all commands!"
 
+# Shown when a player sends commands faster than listener.command_rate_limit allows
+waterbucket.command.ratelimit: "§cYou are sending commands too fast! Slow down."
+
 waterbucket.command.server.description: "Transfer yourself or a player to another server"
 waterbucket.command.server.usage: "server <server> <player:optional>"
 waterbucket.command.server.not_found: "§cServer not found!"

@@ -77,8 +77,10 @@ class PlayerCommandEventTest {
     }
 
     /**
-     * handlePlayerCommand reads the private eventManager/commandMap fields directly, so a
-     * partial mock needs them injected instead of just stubbing the getters.
+     * handlePlayerCommand reads the private eventManager/commandMap/commandRateLimiter fields
+     * directly, so a partial mock needs them injected instead of just stubbing the getters.
+     * The injected rate limiter sees the mocked config's {@code getCommandRateLimit()} (0 =
+     * disabled), so these tests exercise the event path, not flood protection.
      */
     private ProxyServer proxyWithRealCommandPath(CommandMap commandMap) throws Exception {
         ProxyServer proxy = mock(ProxyServer.class);
@@ -88,6 +90,14 @@ class PlayerCommandEventTest {
         Field commandMapField = ProxyServer.class.getDeclaredField("commandMap");
         commandMapField.setAccessible(true);
         commandMapField.set(proxy, commandMap);
+        // The rate limiter reads the config; a plain mock returns commandRateLimit()=0, which
+        // disables flood protection for these event-path tests.
+        dev.waterbucket.waterbucketpe.utils.config.proxy.ProxyConfig config =
+                mock(dev.waterbucket.waterbucketpe.utils.config.proxy.ProxyConfig.class);
+        when(proxy.getConfiguration()).thenReturn(config);
+        Field rateLimiterField = ProxyServer.class.getDeclaredField("commandRateLimiter");
+        rateLimiterField.setAccessible(true);
+        rateLimiterField.set(proxy, new dev.waterbucket.waterbucketpe.command.CommandRateLimiter(proxy));
         doCallRealMethod().when(proxy).handlePlayerCommand(any(), anyString());
         return proxy;
     }

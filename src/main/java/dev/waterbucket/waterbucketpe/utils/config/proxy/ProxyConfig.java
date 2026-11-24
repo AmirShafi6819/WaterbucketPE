@@ -40,6 +40,15 @@ import java.util.*;
 public class ProxyConfig extends YamlConfig {
 
     /**
+     * Server-list ping passthrough modes, named like Velocity's ping-passthrough.
+     */
+    public enum PingPassthrough {
+        DISABLED,
+        DESCRIPTION,
+        ALL
+    }
+
+    /**
      * How players connect. Named like Geyser's bedrock.transport.
      */
     public enum Transport {
@@ -88,6 +97,28 @@ public class ProxyConfig extends YamlConfig {
     @Path("listener.max_players")
     @Comment("The maximum amount of players that can connect to this proxy instance")
     private int maxPlayerCount = 20;
+
+    @Path("listener.show_max_players")
+    @Accessors(fluent = true)
+    @Comment("If disabled, the server list shows the current player count as the maximum, so the proxy never looks full")
+    private boolean showMaxPlayers = true;
+
+    @Path("listener.ping_passthrough")
+    @Comments({
+            "Pass the priority server's real server-list ping through to clients (Velocity-style).",
+            "disabled: the proxy answers with its own motd/sub_motd (default).",
+            "description: the backend's motd/sub_motd replace the proxy's, player counts stay live.",
+            "all: description plus the backend's player counts and game type.",
+            "The backend pong is refreshed in the background; while it is unavailable the proxy falls back to its own motd."
+    })
+    private PingPassthrough pingPassthrough = PingPassthrough.DISABLED;
+
+    @Path("listener.command_rate_limit")
+    @Comments({
+            "Maximum commands a player may run per second; extra ones are dropped with a warning",
+            "message (Velocity-style flood protection). Set 0 to disable."
+    })
+    private int commandRateLimit = 20;
 
     @Path("listener.forced_hosts")
     @Comments({
