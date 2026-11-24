@@ -16,6 +16,7 @@
 package dev.waterbucket.waterbucketpe.plugin;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
+import dev.waterbucket.waterbucketpe.plugin.php.PhpPluginLoader;
 import dev.waterbucket.waterbucketpe.plugin.python.PythonPluginLoader;
 import dev.waterbucket.waterbucketpe.utils.exceptions.PluginChangeStateException;
 import it.unimi.dsi.fastutil.Pair;
@@ -50,6 +51,7 @@ public class PluginManager {
     private final ProxyServer proxy;
     private final PluginLoader pluginLoader;
     private final PythonPluginLoader pythonLoader;
+    private final PhpPluginLoader phpLoader;
 
     /*
      * Both registry maps are written by the boot scan and by the public runtime APIs
@@ -92,6 +94,7 @@ public class PluginManager {
         this.proxy = proxy;
         this.pluginLoader = new PluginLoader(this);
         this.pythonLoader = new PythonPluginLoader(proxy);
+        this.phpLoader = new PhpPluginLoader(proxy);
         try {
             this.loadPluginsInside(this.proxy.getPluginPath());
         } catch (IOException e) {
@@ -121,7 +124,7 @@ public class PluginManager {
         }
         plugins.forEach(this::registerClassLoader);
 
-        // Folder-based Python plugins load alongside jar plugins; existing jar plugins are untouched
+        // Folder-based Python and PHP plugins load alongside jar plugins; existing jar plugins are untouched
         try (Stream<Path> stream = Files.walk(folderPath, 2)) {
             stream.filter(path -> !path.equals(folderPath)).filter(this.pythonLoader::isPythonPlugin).forEach(dir -> {
                 PluginYAML config = this.pythonLoader.loadDescriptor(dir, yamlLoader);
@@ -136,6 +139,21 @@ public class PluginManager {
             });
         } catch (IOException e) {
             this.proxy.getLogger().error("Error while scanning for Python plugins", e);
+        }
+        try (Stream<Path> stream = Files.walk(folderPath, 2)) {
+            stream.filter(path -> !path.equals(folderPath)).filter(this.phpLoader::isPhpPlugin).forEach(dir -> {
+                PluginYAML config = this.phpLoader.loadDescriptor(dir);
+                if (config == null) {
+                    return;
+                }
+                if (this.getPluginByName(config.getName()) != null) {
+                    this.proxy.getLogger().warning("Plugin is already loaded: {}", config.getName());
+                    return;
+                }
+                this.pluginsToLoad.add(ObjectObjectImmutablePair.of(config, dir));
+            });
+        } catch (IOException e) {
+            this.proxy.getLogger().error("Error while scanning for PHP plugins", e);
         }
     }
 
@@ -235,6 +253,9 @@ public class PluginManager {
         if (config.getMain() != null && config.getMain().endsWith(".py")) {
             // Folder-based Python plugin: no class loader, the script is evaluated on enable
             plugin = this.pythonLoader.loadPlugin(config, path);
+        } else if (config.getMain() != null && config.getMain().endsWith(".php")) {
+            // Folder-based PHP plugin: no class loader, the script is evaluated on enable
+            plugin = this.phpLoader.loadPlugin(config, path);
         } else {
             PluginClassLoader classLoader = this.pluginClassLoaders.get(config.getName());
             if (classLoader == null) {

@@ -77,6 +77,11 @@ dependencies {
     implementation(libs.polyglot)
     implementation(libs.graalpy.python)
 
+    // Embedded PHP for the plugin API (Quercus, PHP-on-JVM). Same lazy-loading story as
+    // GraalPy: the interpreter classes only load once the first PHP context is created, so
+    // servers without PHP plugins pay nothing. GPLv2, same license family as this proxy.
+    implementation(libs.quercus)
+
     // NetherNet transport. The arch-detect bundle carries the WebRTC bindings plus a native for
     // every supported platform, so the shaded jar runs anywhere the proxy does.
     implementation(libs.netty.transport.nethernet)

@@ -1,0 +1,6 @@
+name: HelloPhp
+version: 1.0.0
+author: Test
+description: PHP test plugin for the WaterbucketPE bridge
+main: main.php
+depends: []

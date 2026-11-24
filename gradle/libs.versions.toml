@@ -7,6 +7,7 @@ network = "2.0.0.CR6-20261030.131938-23"
 libdatachannel = "0.24.6.0-20261029.091642-10"
 lombok = "1.18.30"
 graalpy = "25.0.5"
+quercus = "4.0.65"
 
 [libraries]
 bugsnag = { module = "com.bugsnag:bugsnag", version = "[3.0,4.0)" }
@@ -43,6 +44,7 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 mockito-core = { module = "org.mockito:mockito-core", version = "5.14.2" }
 polyglot = { module = "org.graalvm.polyglot:polyglot", version.ref = "graalpy" }
 graalpy-python = { module = "org.graalvm.polyglot:python", version.ref = "graalpy" }
+quercus = { module = "com.caucho:quercus", version.ref = "quercus" }
 
 [plugins]
 shadow = { id = "com.gradleup.shadow", version = "9.6.0" }

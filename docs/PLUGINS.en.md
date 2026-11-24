@@ -1,24 +1,25 @@
-# WaterbucketPE Plugin Development (Java & Python)
+# WaterbucketPE Plugin Development (Java, Python & PHP)
 
-This guide documents the plugin system implemented in WaterbucketPE 1.5.0. It covers installation, descriptors, lifecycle, events, commands, scheduling, configuration, resources, proxy API, join/fallback handlers, Java interop, compatibility, security, performance and troubleshooting.
+This guide documents the plugin system implemented in WaterbucketPE 1.5.5. It covers installation, descriptors, lifecycle, events, commands, scheduling, configuration, resources, proxy API, join/fallback handlers, Java interop, compatibility, security, performance and troubleshooting.
 
 - [فارسی](PLUGINS.fa.md)
 - [Documentation index](PLUGINS.md)
 - [Python example](../examples/plugins/python-example/)
+- [PHP example](../examples/plugins/php-example/)
 - [Java example](../examples/plugins/java-example/)
 
 ## 1. Choose a plugin format
 
-| | Java plugin | Python plugin |
-|---|---|---|
-| Package | One JAR file | One directory |
-| Entry point | Java class extending Plugin | Python file named by main |
-| Descriptor | waterbucket.yml or plugin.yml at JAR root | waterbucket.yml or plugin.yml in plugin directory |
-| Runtime | JVM | Embedded GraalPy through GraalVM Polyglot |
-| Build step | Compile and package a JAR | None; copy the directory |
-| Best fit | Hot paths, larger integrations, maximum JVM control | Small utilities, automation and rapid iteration |
+| | Java plugin | Python plugin | PHP plugin |
+|---|---|---|---|
+| Package | One JAR file | One directory | One directory |
+| Entry point | Java class extending Plugin | Python file named by main | PHP file named by main |
+| Descriptor | waterbucket.yml or plugin.yml at JAR root | waterbucket.yml or plugin.yml in plugin directory | waterbucket.yml or plugin.yml in plugin directory |
+| Runtime | JVM | Embedded GraalPy through GraalVM Polyglot | Embedded Quercus (PHP on the JVM) |
+| Build step | Compile and package a JAR | None; copy the directory | None; copy the directory |
+| Best fit | Hot paths, larger integrations, maximum JVM control | Small utilities, automation and rapid iteration | Small utilities, web-flavored integrations, rapid iteration |
 
-Both formats are discovered by the same PluginManager and share the proxy's event manager, command map, scheduler and core Java APIs.
+All three formats are discovered by the same PluginManager and share the proxy's event manager, command map, scheduler and core Java APIs.
 
 ## 2. Install a plugin
 
@@ -47,6 +48,17 @@ plugins/
 The Python descriptor must be directly inside the plugin directory. The main script path is relative to that directory. Sibling Python modules can be imported.
 
 Python plugin directories are discovered up to two directory levels below the plugins directory (for example, plugins/ExamplePython or plugins/category/ExamplePython). The descriptor must be directly inside the plugin directory. Deeper directory layouts are not discovered by the current scan.
+
+### PHP layout
+
+~~~text
+plugins/
+└── ExamplePHP/
+    ├── waterbucket.yml
+    └── main.php
+~~~
+
+PHP plugin folders follow the same discovery rules as Python plugin folders (descriptor directly inside the folder, main path relative to it). No system PHP installation is required: the embedded Quercus interpreter ships inside the proxy.
 
 Restart the proxy after installation. The current implementation does not provide a supported plugin hot-reload command.
 
@@ -209,7 +221,7 @@ dependencies {
 
 Do not bundle WaterbucketPE itself into your plugin JAR. The proxy supplies its API and runtime dependencies. Build your plugin JAR with the descriptor at the archive root.
 
-## 5. Python plugin quick start
+## 5. Python and PHP plugin quick start
 
 A Python plugin is a folder containing a descriptor and a main script. No external Python installation is required for the bundled runtime.
 
@@ -284,23 +296,92 @@ def on_enable(plugin):
 
 Keep imported modules inside the plugin directory unless you intentionally manage a shared runtime path.
 
+### PHP plugin quick start
+
+A PHP plugin is a folder containing a descriptor and a main script. The PHP runtime (Quercus) is embedded in the proxy - no external PHP installation is needed.
+
+Descriptor:
+
+~~~yaml
+name: ExamplePHP
+version: 1.0.0
+author: YourName
+main: main.php
+depends: []
+~~~
+
+Main script (the file starts with the usual `<?php` tag; the loader strips it before evaluating):
+
+~~~php
+<?php
+
+function on_startup($plugin) {
+    global $logger;
+    $logger->info("ExamplePHP loaded");
+}
+
+function on_enable($plugin) {
+    $plugin->subscribe('PlayerChatEvent', 'on_chat');
+
+    $plugin->registerCommand(
+        "phhello",
+        "Example command from PHP",
+        "/phhello",
+        array("phhi"),
+        "",
+        function ($sender, $alias, $args) {
+            $sender->sendMessage("Hello from PHP");
+            return true;
+        }
+    );
+}
+
+function on_chat($event) {
+    global $logger;
+    $logger->info($event->getPlayer()->getName() . ": " . $event->getMessage());
+}
+
+function on_disable($plugin) {
+    global $logger;
+    $logger->info("ExamplePHP stopping");
+}
+~~~
+
+Copy the directory to **plugins/ExamplePHP/** and restart the proxy.
+
+PHP helpers live in the same globals as the Python bridge: `$plugin` (the facade below), `$proxy` (ProxyServer) and `$logger` (the plugin logger). Java interop works through PHP object syntax - call any public Java method on a bound object directly, for example `$proxy->getAllPlayers()` or `$event->getPlayer()->getName()`.
+
+PHP facade methods implemented directly by PhpPlugin:
+
+| Method | Arguments | Behavior |
+|---|---|---|
+| subscribe | event_class_name, handler | Subscribe a PHP callable to a proxy event by class name (simple name, FQCN, or any loaded plugin's class) |
+| registerCommand | name, description, usage, aliases, permission, handler | Register a proxy command; the handler returns truthy for success |
+| scheduleAsync | handler | Schedule asynchronous work on the proxy scheduler |
+| scheduleDelayed | handler, delay_ticks | Schedule delayed asynchronous work |
+| scheduleRepeating | handler, period_ticks | Schedule repeating asynchronous work |
+| getProxy | none | Return ProxyServer |
+| getResourceFile | filename | Open a file relative to the PHP plugin folder |
+
+The lifecycle hooks `on_startup($plugin)`, `on_enable($plugin)` and `on_disable($plugin)` are optional functions detected by name after the main script has been evaluated. Subscriptions, commands and scheduled tasks are detached automatically when the plugin is disabled.
+
 ## 6. Lifecycle and failure behavior
 
 The lifecycle is:
 
 1. **Discovery:** the manager scans JAR files and Python plugin directories and reads descriptors.
 2. **Load:** Java main classes are instantiated; Python main scripts are evaluated when the plugin starts up.
-3. **Startup:** Java onStartup() or Python on_startup(plugin) runs.
-4. **Enable:** Java onEnable() or Python on_enable(plugin) runs after dependencies have been enabled.
-5. **Disable:** Java onDisable() or Python on_disable(plugin) runs during proxy shutdown.
+3. **Startup:** Java onStartup(), Python on_startup(plugin) or PHP on_startup($plugin) runs.
+4. **Enable:** Java onEnable(), Python on_enable(plugin) or PHP on_enable($plugin) runs after dependencies have been enabled.
+5. **Disable:** Java onDisable(), Python on_disable(plugin) or PHP on_disable($plugin) runs during proxy shutdown.
 
 Java onEnable() is abstract and must be implemented. Python hooks are looked up by name. The current Python bridge logs a warning when a hook is missing, so define all three hooks even when one is intentionally empty.
 
 A failure while loading or starting one plugin is logged and does not intentionally abort loading every other plugin. A plugin whose enable hook fails stays disabled: the failed state is reverted, onDisable() is not called for it, and the error is logged with its stack trace. Plugins are disabled in reverse enable order so dependents shut down before their dependencies.
 
-Calling `PluginManager.disablePlugin(plugin)` at runtime disables a plugin and every enabled plugin that depends on it (dependents first, cycle-safe). Disabling a plugin also cancels every task the plugin scheduled through the plugin-aware scheduler methods (see section 9) and, for Python plugins, detaches subscriptions and commands.
+Calling `PluginManager.disablePlugin(plugin)` at runtime disables a plugin and every enabled plugin that depends on it (dependents first, cycle-safe). Disabling a plugin also cancels every task the plugin scheduled through the plugin-aware scheduler methods (see section 9) and, for Python and PHP plugins, detaches subscriptions and commands.
 
-On disable (or proxy shutdown), WaterbucketPE detaches what a plugin registered where the implementation can do so safely: Python plugins have their event subscriptions removed and their commands unregistered automatically before the interpreter context closes. Java plugins should unsubscribe their event handlers (EventManager.unsubscribe) and unregister their commands (CommandMap.unregisterCommand) in onDisable, because Java handlers registered directly with the event manager are not tracked per plugin.
+On disable (or proxy shutdown), WaterbucketPE detaches what a plugin registered where the implementation can do so safely: Python and PHP plugins have their event subscriptions removed, their commands unregistered and their scheduled tasks cancelled automatically before the interpreter closes. Java plugins should unsubscribe their event handlers (EventManager.unsubscribe) and unregister their commands (CommandMap.unregisterCommand) in onDisable, because Java handlers registered directly with the event manager are not tracked per plugin.
 
 The current manager is a startup/shutdown lifecycle manager, not a full runtime module manager. There is no supported hot reload, live replacement, or general-purpose unload API.
 
@@ -783,7 +864,7 @@ saveResource("messages.yml", false);
 plugin.saveResource("messages.yml")
 ~~~
 
-## 12. Python runtime, Java interop and compatibility
+## 12. Python, PHP and the Java interop layers
 
 Python plugins run in the embedded GraalVM Polyglot Python runtime included in the proxy distribution. The runtime is initialized when a Python plugin context is created; Java-only installations do not need to start a Python context.
 
@@ -838,6 +919,7 @@ Do not expose secrets in logs or commit API tokens/passwords to plugin folders. 
 - Cache Java class references (java.type results) rather than resolving them repeatedly.
 - Avoid unbounded repeating tasks and unbounded in-memory collections.
 - Remember that adding a Python runtime/context has memory and startup costs. The interpreter is not a zero-cost feature when Python plugins are installed.
+- The same applies to PHP: a Quercus environment exists per PHP plugin while it is enabled, and PHP executions are serialized per plugin. Prefer Java for per-tick or per-packet work.
 - The proxy's internal executors (scheduler and event dispatch) use fixed-resident bounded pools: no extra thread spawns per burst, so RAM and CPU stay flat instead of bouncing. Follow the same pattern in your plugin; do not create your own unbounded thread production.
 
 ### Lifecycle limitations to account for
@@ -859,6 +941,10 @@ Python scheduling helpers do not return cancellation handles, so Python plugins 
 | Command registration returns false | Another command already owns the name | Choose a unique command name |
 | Config value is missing | Wrong dotted key or YAML type | Inspect config.yml and use a default value |
 | Python package fails to install | Package may require unsupported native extensions | Check GraalPy compatibility; not every CPython wheel works |
+| PHP plugin is not discovered | main does not end in .php | The descriptor main must point at a .php file inside the plugin folder |
+| PHP main file does not exist | main path is wrong | Path is relative to the PHP plugin folder and ends in .php |
+| PHP script fails to load | Syntax/runtime error in main.php | Read the Quercus error in the proxy logs; the file must start with <?php (the loader strips it) |
+| PHP event handler never fires | Event class name typo | Use the simple name (PlayerChatEvent) or the FQCN exactly as written in Java |
 
 ## 15. Testing and development checklist
 
@@ -884,5 +970,7 @@ Use the source as the final authority:
 - Discovery/lifecycle: **src/main/java/dev/waterbucket/waterbucketpe/plugin/PluginManager.java**
 - Python bridge: **src/main/java/dev/waterbucket/waterbucketpe/plugin/python/PythonPlugin.java**
 - Python loader: **src/main/java/dev/waterbucket/waterbucketpe/plugin/python/PythonPluginLoader.java**
+- PHP bridge: **src/main/java/dev/waterbucket/waterbucketpe/plugin/php/PhpPlugin.java**
+- PHP loader: **src/main/java/dev/waterbucket/waterbucketpe/plugin/php/PhpPluginLoader.java**
 - Event manager: **src/main/java/dev/waterbucket/waterbucketpe/event/EventManager.java**
 - Scheduler: **src/main/java/dev/waterbucket/waterbucketpe/scheduler/WaterbucketScheduler.java**

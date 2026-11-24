@@ -1,24 +1,25 @@
-# راهنمای توسعه پلاگین WaterbucketPE (Java و Python)
+# راهنمای توسعه پلاگین WaterbucketPE (Java، Python و PHP)
 
-این راهنما سیستم پلاگین WaterbucketPE نسخه 1.5.0 را بر اساس پیاده‌سازی واقعی سورس توضیح می‌دهد: نصب، ساختار فایل‌ها، Descriptor، چرخه عمر، Eventها، Commandها، Scheduler، تنظیمات، منابع، کار با Proxy و بازیکنان، Handlerهای Join و Fallback، ارتباط Python و Java، سازگاری، امنیت، کارایی و عیب‌یابی.
+این راهنما سیستم پلاگین WaterbucketPE نسخه 1.5.5 را بر اساس پیاده‌سازی واقعی سورس توضیح می‌دهد: نصب، ساختار فایل‌ها، Descriptor، چرخه عمر، Eventها، Commandها، Scheduler، تنظیمات، منابع، کار با Proxy و بازیکنان، Handlerهای Join و Fallback، ارتباط Python و Java، سازگاری، امنیت، کارایی و عیب‌یابی.
 
 - [English](PLUGINS.en.md)
 - [فهرست مستندات](PLUGINS.md)
 - [نمونه پلاگین Python](../examples/plugins/python-example/)
+- [نمونه پلاگین PHP](../examples/plugins/php-example/)
 - [پروژه نمونه Java](../examples/plugins/java-example/)
 
 ## ۱. انتخاب نوع پلاگین
 
-| مورد | پلاگین Java | پلاگین Python |
-|---|---|---|
-| بسته‌بندی | یک فایل JAR | یک پوشه |
-| نقطه ورود | کلاس Java که Plugin را extend می‌کند | فایل Python مشخص‌شده در main |
-| Descriptor | فایل waterbucket.yml یا plugin.yml در ریشه JAR | فایل waterbucket.yml یا plugin.yml در پوشه پلاگین |
-| Runtime | JVM | GraalPy تعبیه‌شده از طریق GraalVM Polyglot |
-| مرحله ساخت | کامپایل و ساخت JAR | ندارد؛ پوشه را کپی می‌کنید |
-| مناسب برای | پردازش پرتکرار، اتصال‌های بزرگ و کنترل کامل JVM | ابزارهای کوچک، اتوماسیون و توسعه سریع |
+| مورد | پلاگین Java | پلاگین Python | پلاگین PHP |
+|---|---|---|---|
+| بسته‌بندی | یک فایل JAR | یک پوشه | یک پوشه |
+| نقطه ورود | کلاس Java که Plugin را extend می‌کند | فایل Python مشخص‌شده در main | فایل PHP مشخص‌شده در main |
+| Descriptor | فایل waterbucket.yml یا plugin.yml در ریشه JAR | فایل waterbucket.yml یا plugin.yml در پوشه پلاگین | فایل waterbucket.yml یا plugin.yml در پوشه پلاگین |
+| Runtime | JVM | GraalPy تعبیه‌شده از طریق GraalVM Polyglot | Quercus تعبیه‌شده (PHP روی JVM) |
+| مرحله ساخت | کامپایل و ساخت JAR | ندارد؛ پوشه را کپی می‌کنید | ندارد؛ پوشه را کپی می‌کنید |
+| مناسب برای | پردازش پرتکرار، اتصال‌های بزرگ و کنترل کامل JVM | ابزارهای کوچک، اتوماسیون و توسعه سریع | ابزارهای کوچک، یکپارچه‌سازی سبک وب و توسعه سریع |
 
-هر دو نوع توسط PluginManager مدیریت می‌شوند و از Event Manager، Command Map، Scheduler و API جاوای Proxy استفاده می‌کنند.
+هر سه نوع توسط PluginManager مدیریت می‌شوند و از Event Manager، Command Map، Scheduler و API جاوای Proxy استفاده می‌کنند.
 
 ## ۲. نصب پلاگین
 
@@ -47,6 +48,17 @@ plugins/
 Descriptor پلاگین Python باید مستقیماً داخل پوشه پلاگین باشد. مسیر main نسبت به همان پوشه محاسبه می‌شود و فایل‌های Python هم‌سطح main قابل import هستند.
 
 پوشه پلاگین Python تا دو سطح زیر پوشه plugins شناسایی می‌شود؛ برای مثال plugins/ExamplePython یا plugins/category/ExamplePython. فایل Descriptor باید مستقیماً داخل پوشه خود پلاگین باشد. مسیرهای عمیق‌تر در اسکن فعلی پیدا نمی‌شوند.
+
+### ساختار PHP
+
+~~~text
+plugins/
+└── ExamplePHP/
+    ├── waterbucket.yml
+    └── main.php
+~~~
+
+پوشه‌های پلاگین PHP همان قواعد کشف پلاگین‌های Python را دارند (Descriptor مستقیماً داخل پوشه و مسیر main نسبی به همان پوشه است). برای PHP نیازی به نصب PHP روی سیستم نیست؛ مفسر تعبیه‌شده Quercus داخل خود Proxy ارسال می‌شود.
 
 پس از نصب، Proxy را مجدداً اجرا کنید. در حال حاضر فرمان رسمی برای Hot Reload یا بارگذاری مجدد پلاگین وجود ندارد.
 
@@ -209,7 +221,7 @@ dependencies {
 
 خود WaterbucketPE را داخل JAR پلاگین Shade یا Bundle نکنید؛ Proxy API و وابستگی‌های Runtime را فراهم می‌کند. Descriptor باید در ریشه فایل JAR نهایی قرار بگیرد.
 
-## ۵. شروع سریع Python
+## ۵. شروع سریع Python و PHP
 
 پلاگین Python یک پوشه شامل Descriptor و فایل اصلی است. برای اجرای آن نیازی به نصب جداگانه Python روی سیستم نیست؛ Runtime در توزیع Proxy قرار دارد.
 
@@ -284,23 +296,92 @@ def on_enable(plugin):
 
 بهتر است ماژول‌های پلاگین را داخل همان پوشه نگه دارید؛ مگر اینکه عمداً مسیر مشترک Runtime را مدیریت کنید.
 
+### شروع سریع PHP
+
+پلاگین PHP یک پوشه شامل Descriptor و اسکریپت اصلی است. Runtime PHP (یعنی Quercus) داخل Proxy تعبیه شده است و نیازی به نصب PHP خارجی نیست.
+
+Descriptor:
+
+~~~yaml
+name: ExamplePHP
+version: 1.0.0
+author: YourName
+main: main.php
+depends: []
+~~~
+
+اسکریپت اصلی (فایل با تگ معمول `<?php` شروع می‌شود؛ Loader آن را پیش از ارزیابی حذف می‌کند):
+
+~~~php
+<?php
+
+function on_startup($plugin) {
+    global $logger;
+    $logger->info("ExamplePHP loaded");
+}
+
+function on_enable($plugin) {
+    $plugin->subscribe('PlayerChatEvent', 'on_chat');
+
+    $plugin->registerCommand(
+        "phhello",
+        "Example command from PHP",
+        "/phhello",
+        array("phhi"),
+        "",
+        function ($sender, $alias, $args) {
+            $sender->sendMessage("Hello from PHP");
+            return true;
+        }
+    );
+}
+
+function on_chat($event) {
+    global $logger;
+    $logger->info($event->getPlayer()->getName() . ": " . $event->getMessage());
+}
+
+function on_disable($plugin) {
+    global $logger;
+    $logger->info("ExamplePHP stopping");
+}
+~~~
+
+پوشه را در مسیر **plugins/ExamplePHP/** کپی کنید و Proxy را دوباره راه‌اندازی کنید.
+
+متغیرهای Global در PHP همانند Bridge پایتون هستند: `$plugin` (Facade زیر)، `$proxy` (ProxyServer) و `$logger` (Logger پلاگین). Java Interop از طریق Syntax شیء PHP انجام می‌شود؛ هر متد عمومی Java روی یک شیء متصل را مستقیم صدا بزنید، مثلاً `$proxy->getAllPlayers()` یا `$event->getPlayer()->getName()`.
+
+متدهایی که مستقیماً در PhpPlugin پیاده‌سازی شده‌اند:
+
+| متد | آرگومان‌ها | رفتار |
+|---|---|---|
+| subscribe | event_class_name، handler | یک Callable پی‌اچ‌پی را با نام کلاس به Event پروکسی متصل می‌کند (نام ساده، مسیر کامل یا کلاس هر پلاگین بارگذاری‌شده) |
+| registerCommand | name، description، usage، aliases، permission، handler | یک Command پروکسی ثبت می‌کند؛ Handler برای موفقیت مقدار درست برمی‌گرداند |
+| scheduleAsync | handler | کار غیرهمگام را روی Scheduler پروکسی زمان‌بندی می‌کند |
+| scheduleDelayed | handler، delay_ticks | کار غیرهمگام تأخیری را زمان‌بندی می‌کند |
+| scheduleRepeating | handler، period_ticks | کار غیرهمگام تکرارشونده را زمان‌بندی می‌کند |
+| getProxy | ندارد | ProxyServer را برمی‌گرداند |
+| getResourceFile | filename | فایلی نسبی به پوشه پلاگین PHP را باز می‌کند |
+
+Hookهای چرخه عمر یعنی `on_startup($plugin)`، `on_enable($plugin)` و `on_disable($plugin)` توابع اختیاری هستند که پس از ارزیابی اسکریپت اصلی با نام پیدا می‌شوند. اشتراک‌های Event، Commandها و Taskهای زمان‌بندی‌شده هنگام غیرفعال‌شدن پلاگین به‌صورت خودکار جدا می‌شوند.
+
 ## ۶. چرخه عمر و رفتار هنگام خطا
 
 چرخه بارگذاری به این ترتیب است:
 
-۱. **Discovery:** مدیر پلاگین JARها و پوشه‌های Python را پیدا می‌کند و Descriptorها را می‌خواند.
+۱. **Discovery:** مدیر پلاگین JARها و پوشه‌های Python و PHP را پیدا می‌کند و Descriptorها را می‌خواند.
 ۲. **Load:** کلاس اصلی Java ساخته می‌شود؛ اسکریپت Python هنگام مرحله Startup ارزیابی می‌شود.
-۳. **Startup:** متد onStartup() در Java یا تابع on_startup(plugin) در Python اجرا می‌شود.
-۴. **Enable:** متد onEnable() یا تابع on_enable(plugin) پس از فعال‌شدن وابستگی‌ها اجرا می‌شود.
-۵. **Disable:** متد onDisable() یا تابع on_disable(plugin) هنگام خاموش‌شدن Proxy اجرا می‌شود.
+۳. **Startup:** متد onStartup() در Java، تابع on_startup(plugin) در Python یا تابع on_startup($plugin) در PHP اجرا می‌شود.
+۴. **Enable:** متد onEnable()، تابع on_enable(plugin) یا تابع on_enable($plugin) پس از فعال‌شدن وابستگی‌ها اجرا می‌شود.
+۵. **Disable:** متد onDisable()، تابع on_disable(plugin) یا تابع on_disable($plugin) هنگام خاموش‌شدن Proxy اجرا می‌شود.
 
 پیاده‌سازی onEnable() در Java اجباری است. Hookهای Python با نام تابع پیدا می‌شوند. در پیاده‌سازی فعلی، نبودن Hook باعث ثبت هشدار در لاگ می‌شود؛ بنابراین هر سه تابع را تعریف کنید، حتی اگر بدنه یکی از آن‌ها خالی باشد.
 
 خطای بارگذاری یا راه‌اندازی یک پلاگین ثبت می‌شود و قرار نیست به‌صورت عمدی بارگذاری همه پلاگین‌های دیگر را متوقف کند. اگر Hook فعال‌سازی شکست بخورد، پلاگین غیرفعال باقی می‌ماند: وضعیت ناموفق به حالت قبل برمی‌گردد، onDisable() برای آن اجرا نمی‌شود و خطا همراه Stack Trace در لاگ ثبت می‌شود. هنگام خاموش‌شدن، پلاگین‌ها به ترتیب معکوس فعال‌سازی غیرفعال می‌شوند تا وابسته‌ها زودتر از وابستگی‌هایشان خاموش شوند.
 
-هنگام Disable (یا خاموش‌شدن Proxy)، هر جا که پیاده‌سازی بتواند امن انجام دهد، Registrationهای پلاگین جدا می‌شوند: برای پلاگین‌های Python، اشتراک‌های Event پیش از بسته‌شدن Context مفسر حذف و Commandهایشان Unregister می‌شود. پلاگین‌های Java باید در onDisable خودشان Handlerهای Event را (با EventManager.unsubscribe) لغو و Commandهایشان را (با CommandMap.unregisterCommand) حذف کنند، چون Handlerهای Java که مستقیم با EventManager ثبت شده‌اند به‌تفکیک پلاگین پیگیری نمی‌شوند.
+هنگام Disable (یا خاموش‌شدن Proxy)، هر جا که پیاده‌سازی بتواند امن انجام دهد، Registrationهای پلاگین جدا می‌شوند: برای پلاگین‌های Python و PHP، اشتراک‌های Event حذف، Commandها Unregister و Taskهای زمان‌بندی‌شده لغو می‌شوند؛ همه این‌ها پیش از بسته‌شدن مفسر انجام می‌شود. پلاگین‌های Java باید در onDisable خودشان Handlerهای Event را (با EventManager.unsubscribe) لغو و Commandهایشان را (با CommandMap.unregisterCommand) حذف کنند، چون Handlerهای Java که مستقیم با EventManager ثبت شده‌اند به‌تفکیک پلاگین پیگیری نمی‌شوند.
 
-فراخوانی `PluginManager.disablePlugin(plugin)` در زمان اجرا یک پلاگین و همه پلاگین‌های فعال وابسته به آن را غیرفعال می‌کند (اول وابسته‌ها خاموش می‌شوند و حلقه وابستگی هم باعث توقف بی‌پایان نمی‌شود). غیرفعال‌سازی یک پلاگین، همه Taskهایی که از طریق متدهای زمان‌بندی مخصوص پلاگین (بخش ۹) ساخته شده را نیز لغو می‌کند و برای پلاگین‌های Python، اشتراک‌ها و Commandها جدا می‌شوند.
+فراخوانی `PluginManager.disablePlugin(plugin)` در زمان اجرا یک پلاگین و همه پلاگین‌های فعال وابسته به آن را غیرفعال می‌کند (اول وابسته‌ها خاموش می‌شوند و حلقه وابستگی هم باعث توقف بی‌پایان نمی‌شود). غیرفعال‌سازی یک پلاگین، همه Taskهایی که از طریق متدهای زمان‌بندی مخصوص پلاگین (بخش ۹) ساخته شده را نیز لغو می‌کند و برای پلاگین‌های Python و PHP، اشتراک‌ها و Commandها جدا می‌شوند.
 
 PluginManager فعلی یک مدیر چرخه عمر Startup/Shutdown است، نه یک سیستم مدیریت کامل ماژول در زمان اجرا. Hot Reload، جایگزینی زنده و API عمومی Unload در حال حاضر وجود ندارد.
 
@@ -783,7 +864,7 @@ saveResource("messages.yml", false);
 plugin.saveResource("messages.yml")
 ~~~
 
-## ۱۲. Runtime پایتون، Java Interop و سازگاری
+## ۱۲. Runtime پایتون و PHP و Java Interop
 
 پلاگین‌های Python در Runtime تعبیه‌شده GraalVM Polyglot اجرا می‌شوند که همراه توزیع Proxy است. Runtime هنگام ایجاد Context یک پلاگین Python راه‌اندازی می‌شود؛ در نصب‌هایی که فقط پلاگین Java دارند Context پایتون ساخته نمی‌شود.
 
@@ -838,6 +919,7 @@ Secretها را در لاگ قرار ندهید و Token یا رمز عبور ر
 - نتیجه java.type را Cache کنید و در هر Event دوباره کلاس را Resolve نکنید.
 - Task تکرارشونده و Collection بدون محدودیت نسازید.
 - ایجاد Runtime و Context پایتون هزینه حافظه و Startup دارد؛ قابلیت Python هنگام نصب پلاگین Python رایگان نیست.
+- همین موضوع درباره PHP هم صادق است: هر پلاگین PHP تا زمانی که فعال است یک محیط Quercus جداگانه دارد و اجرای PHP به‌تفکیک هر پلاگین سری می‌شود. برای کارهای هر Tick یا هر Packet، Java را انتخاب کنید.
 - Executorهای داخلی پروکسی (زمان‌بند و Event) اکنون Pool محدود با Thread مقیم ثابت هستند؛ Thread اضافی برای هر Burst ساخته نمی‌شود، پس مصرف RAM و CPU ثابت و صاف می‌ماند. Taskهای خودتان را هم با الگوی همین API بسازید و از ساخت Thread آزاد خودداری کنید.
 
 ### محدودیت‌های فعلی چرخه عمر
@@ -859,6 +941,10 @@ Secretها را در لاگ قرار ندهید و Token یا رمز عبور ر
 | ثبت Command مقدار false می‌دهد | نام فرمان قبلاً ثبت شده | نام یکتا انتخاب کنید |
 | مقدار Config پیدا نمی‌شود | کلید نقطه‌دار یا نوع YAML اشتباه است | config.yml و مقدار پیش‌فرض را بررسی کنید |
 | نصب Package پایتون شکست می‌خورد | Package به Native Extension ناسازگار نیاز دارد | سازگاری با GraalPy را بررسی کنید؛ همه Wheelهای CPython قابل استفاده نیستند |
+| پلاگین PHP کشف نمی‌شود | main با .php تمام نمی‌شود | مقدار main در Descriptor باید به فایل .php داخل پوشه پلاگین اشاره کند |
+| فایل اصلی PHP وجود ندارد | مسیر main اشتباه است | مسیر نسبی به پوشه پلاگین PHP است و باید با .php تمام شود |
+| اسکریپت PHP اجرا نمی‌شود | خطای Syntax یا Runtime در main.php | خطای Quercus را در لاگ Proxy بررسی کنید؛ فایل باید با `<?php` شروع شود (Loader آن را حذف می‌کند) |
+| Handler رویداد PHP اجرا نمی‌شود | غلط املایی در نام کلاس Event | نام ساده (PlayerChatEvent) یا مسیر کامل کلاس را دقیقاً مطابق Java بنویسید |
 
 ## ۱۵. چک‌لیست تست و انتشار
 
@@ -884,5 +970,7 @@ Secretها را در لاگ قرار ندهید و Token یا رمز عبور ر
 - کشف و چرخه عمر: **src/main/java/dev/waterbucket/waterbucketpe/plugin/PluginManager.java**
 - Bridge پایتون: **src/main/java/dev/waterbucket/waterbucketpe/plugin/python/PythonPlugin.java**
 - Loader پایتون: **src/main/java/dev/waterbucket/waterbucketpe/plugin/python/PythonPluginLoader.java**
+- Bridge پی‌اچ‌پی: **src/main/java/dev/waterbucket/waterbucketpe/plugin/php/PhpPlugin.java**
+- Loader پی‌اچ‌پی: **src/main/java/dev/waterbucket/waterbucketpe/plugin/php/PhpPluginLoader.java**
 - Event Manager: **src/main/java/dev/waterbucket/waterbucketpe/event/EventManager.java**
 - Scheduler: **src/main/java/dev/waterbucket/waterbucketpe/scheduler/WaterbucketScheduler.java**

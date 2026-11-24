@@ -3,6 +3,32 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
+## [1.5.5] - 2026-11-24
+
+### Added — PHP plugin language
+
+- **PHP is now a first-class plugin language** alongside Java and Python. Plugins are
+  folder-based (`plugins/MyPHPPlugin/waterbucket.yml` + `main.php`) and run on the embedded
+  **Quercus** PHP interpreter (PHP-on-JVM, GPLv2, shipped inside the proxy jar) - no system
+  PHP installation is required, and servers without PHP plugins pay nothing at boot.
+- The bridge keeps one persistent Quercus environment per plugin, so functions the script
+  defines stay callable for the whole lifetime and state survives across dispatches; all
+  PHP execution is serialized per plugin with Quercus' thread-local environment installed
+  for the duration, making concurrent event dispatch safe.
+- Lifecycle hooks `on_startup($plugin)`, `on_enable($plugin)`, `on_disable($plugin)` are
+  optional functions detected by name; events (`$plugin->subscribe('PlayerChatEvent', fn)`),
+  commands (`$plugin->registerCommand(...)` with aliases), and scheduling
+  (`scheduleAsync/scheduleDelayed/scheduleRepeating`) mirror the Python facade. Event classes
+  resolve by simple name, FQCN or any loaded plugin's class loader. PHP closures marshal
+  natively into Java callbacks - nothing is re-evaluated per dispatch.
+- The pipeline-safety contract matches the Java and Python bridges: a throwing PHP event
+  handler is logged and swallowed (including on completable events, so a broken plugin can
+  never disconnect players), and disable detaches subscriptions, unregisters commands and
+  cancels scheduled tasks automatically before the interpreter closes.
+- Runnable example under `examples/plugins/php-example/`; plugin guides (EN/FA) gained the
+  PHP quick start, facade reference, troubleshooting rows and source references.
+  68 suites / 406 tests green (8 new end-to-end PHP bridge tests).
+
 ## [1.5.0] - 2026-11-24
 
 The operator-experience release: full console/brand rebrand, a rebuilt Liquid Glass web
