@@ -28,6 +28,10 @@ public class PluginYAML {
     public String version;
     public String author;
     public String main;
+    /**
+     * Optional human-readable summary shown by the panel plugin list and /wbplugins verbose output.
+     */
+    public String description;
     public List<String> depends;
 
 }

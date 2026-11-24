@@ -26,6 +26,7 @@ import dev.waterbucket.waterbucketpe.console.TerminalConsole;
 import dev.waterbucket.waterbucketpe.event.EventManager;
 import dev.waterbucket.waterbucketpe.event.defaults.DispatchCommandEvent;
 import dev.waterbucket.waterbucketpe.event.defaults.NetworkRegisterEvent;
+import dev.waterbucket.waterbucketpe.event.defaults.PlayerCommandEvent;
 import dev.waterbucket.waterbucketpe.event.defaults.ProxyPingEvent;
 import dev.waterbucket.waterbucketpe.event.defaults.ProxyStartEvent;
 import dev.waterbucket.waterbucketpe.logger.MainLogger;
@@ -75,6 +76,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -159,6 +161,13 @@ public class ProxyServer {
     private final ScheduledExecutorService tickExecutor;
     private ScheduledFuture<?> tickFuture;
     private volatile boolean shutdown = false;
+
+    /**
+     * Runtime maximum-player override set through {@code setMaxPlayers}; {@code -1} means
+     * "use listener.max_players from config.yml". Volatile: plugins set it from their own
+     * threads while ping/query/logins read it on the network threads.
+     */
+    private volatile int maxPlayersOverride = -1;
     /**
      * Written by the tick thread, read from any thread that schedules tasks; volatile so a
      * scheduled task's next-run tick is never computed from a stale value.
@@ -547,6 +556,15 @@ public class ProxyServer {
     }
 
     public boolean handlePlayerCommand(ProxiedPlayer player, String message) {
+        // Give plugins a hook on every command a player types, before the proxy decides
+        // whether the command belongs to it or to the downstream server. Canceling consumes
+        // the command; rewriting applies to both proxy and downstream commands alike.
+        PlayerCommandEvent commandEvent = new PlayerCommandEvent(player, message);
+        this.eventManager.callEvent(commandEvent);
+        if (commandEvent.isCancelled()) {
+            return true;
+        }
+        message = commandEvent.getCommand();
         if (!this.commandMap.handleMessage(player, message)) {
             return false;
         }
@@ -634,7 +652,7 @@ public class ProxyServer {
                 "MCPE",
                 ProtocolVersion.latest().getMinecraftVersion(),
                 this.getPlayerManager().getPlayers().values(),
-                config.getMaxPlayerCount(),
+                this.getMaxPlayers(),
                 address);
         this.getEventManager().callEvent(event);
         return event;
@@ -666,6 +684,117 @@ public class ProxyServer {
 
     public Map<UUID, ProxiedPlayer> getPlayers() {
         return this.playerManager.getPlayers();
+    }
+
+    /**
+     * @param name the exact player name, case-insensitive
+     * @return the online player whose name equals {@code name} ignoring case, or null
+     */
+    public ProxiedPlayer getPlayerExact(String name) {
+        ProxiedPlayer player = this.playerManager.getPlayer(name);
+        return player != null && player.getName().equalsIgnoreCase(name) ? player : null;
+    }
+
+    /**
+     * @param name a partial player name, case-insensitive
+     * @return every online player whose name contains {@code name} ignoring case
+     */
+    public List<ProxiedPlayer> matchPlayer(String name) {
+        String query = name.toLowerCase(Locale.ROOT);
+        List<ProxiedPlayer> matched = new ObjectArrayList<>();
+        for (ProxiedPlayer player : this.getPlayers().values()) {
+            String playerName = player.getName().toLowerCase(Locale.ROOT);
+            if (playerName.contains(query)) {
+                matched.add(player);
+            }
+        }
+        return matched;
+    }
+
+    /**
+     * @return the effective maximum player count: the runtime override when one was set,
+     * otherwise {@code listener.max_players} from config.yml. {@code 0} or less means unlimited.
+     */
+    public int getMaxPlayers() {
+        return resolveMaxPlayers(this.maxPlayersOverride, this.getConfiguration().getMaxPlayerCount());
+    }
+
+    /**
+     * Sets the maximum player count at runtime, overriding {@code listener.max_players}.
+     * The change applies to new logins and to ping/query responses immediately.
+     *
+     * @param maxPlayers the new maximum player count, {@code 0} disables the limit
+     */
+    public void setMaxPlayers(int maxPlayers) {
+        this.setMaxPlayers(maxPlayers, true);
+    }
+
+    /**
+     * Sets the maximum player count at runtime.
+     *
+     * @param maxPlayers the new maximum player count, {@code 0} disables the limit
+     * @param persist whether the change is written back to config.yml and survives restarts
+     */
+    public void setMaxPlayers(int maxPlayers, boolean persist) {
+        Preconditions.checkArgument(maxPlayers >= 0, "maxPlayers can not be negative!");
+        this.maxPlayersOverride = maxPlayers;
+        if (persist) {
+            ProxyConfig config = this.getConfiguration();
+            config.setMaxPlayerCount(maxPlayers);
+            try {
+                config.save();
+            } catch (InvalidConfigurationException e) {
+                this.getLogger().error("Could not persist max_players to config.yml!", e);
+            }
+        }
+        this.getLogger().info("Maximum player count set to {}{}", maxPlayers,
+                persist ? " (saved to config.yml)" : " (runtime only)");
+    }
+
+    /**
+     * Pure resolver kept package-private so tests can exercise the override semantics.
+     *
+     * @return the override when it is zero or greater, otherwise the configured value
+     */
+    static int resolveMaxPlayers(int override, int configured) {
+        return override >= 0 ? override : configured;
+    }
+
+    /**
+     * Whether the proxy can still accept a login. The proxy is full when the effective
+     * maximum player count is above zero, reached, and the player does not hold the
+     * {@code waterbucket.bypass.maxplayers} permission (or the full permission).
+     */
+    public boolean isFull(ProxiedPlayer player) {
+        int max = this.getMaxPlayers();
+        if (max <= 0 || this.getPlayers().size() < max) {
+            return false;
+        }
+        return player == null || !player.hasPermission("waterbucket.bypass.maxplayers");
+    }
+
+    /**
+     * Sends a message to every online player and the console.
+     *
+     * @param message the raw text to broadcast
+     */
+    public void broadcastMessage(String message) {
+        for (ProxiedPlayer player : this.getPlayers().values()) {
+            player.sendMessage(message);
+        }
+        this.commandSender.sendMessage(message);
+    }
+
+    /**
+     * Sends a (translatable) message container to every online player and the console.
+     *
+     * @param message the container to broadcast
+     */
+    public void broadcastMessage(TextContainer message) {
+        for (ProxiedPlayer player : this.getPlayers().values()) {
+            player.sendMessage(message);
+        }
+        this.commandSender.sendMessage(message);
     }
 
     @Deprecated

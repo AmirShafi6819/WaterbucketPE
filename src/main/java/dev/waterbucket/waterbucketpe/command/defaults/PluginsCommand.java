@@ -35,6 +35,29 @@ public class PluginsCommand extends Command {
     @Override
     public boolean onExecute(CommandSender sender, String alias, String[] args) {
         Map<String, Plugin> plugins = sender.getProxy().getPluginManager().getPluginMap();
+
+        // verbose mode: "wbplugins verbose" / "wbplugins -v" prints description, author and dependencies
+        boolean verbose = args.length > 0 && (args[0].equalsIgnoreCase("verbose") || args[0].equalsIgnoreCase("-v"));
+        if (verbose) {
+            StringBuilder verboseList = new StringBuilder();
+            for (Plugin plugin : plugins.values()) {
+                verboseList.append(plugin.isEnabled() ? "§a" : "§c");
+                verboseList.append(plugin.getDescription().getName()).append(" v").append(plugin.getDescription().getVersion());
+                String description = plugin.getDescription().getDescription();
+                if (description != null && !description.isEmpty()) {
+                    verboseList.append("§f: §7").append(description);
+                }
+                String author = plugin.getDescription().getAuthor();
+                if (author != null && !author.isEmpty()) {
+                    verboseList.append(" §8by ").append(author);
+                }
+                verboseList.append('\n');
+            }
+            sender.sendMessage(new TranslationContainer("waterbucket.command.plugins.format",
+                    String.valueOf(plugins.size()), String.valueOf(verboseList)));
+            return true;
+        }
+
         StringBuilder list = new StringBuilder();
         for (Plugin plugin: plugins.values()) {
             if (list.length() > 0) {

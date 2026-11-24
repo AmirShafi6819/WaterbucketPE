@@ -1,6 +1,6 @@
 # WaterbucketPE Plugin Development (Java & Python)
 
-This guide documents the plugin system implemented in WaterbucketPE 1.1.0. It covers installation, descriptors, lifecycle, events, commands, scheduling, configuration, resources, Java interop, compatibility, security, performance and troubleshooting.
+This guide documents the plugin system implemented in WaterbucketPE 1.5.0. It covers installation, descriptors, lifecycle, events, commands, scheduling, configuration, resources, proxy API, join/fallback handlers, Java interop, compatibility, security, performance and troubleshooting.
 
 - [فارسی](PLUGINS.fa.md)
 - [Documentation index](PLUGINS.md)
@@ -58,6 +58,7 @@ Both formats accept **waterbucket.yml** or **plugin.yml**. If both exist, waterb
 name: ExamplePlugin
 version: 1.0.0
 author: YourName
+description: An example WaterbucketPE plugin
 main: com.example.waterbucket.ExamplePlugin
 depends:
   - AnotherPlugin
@@ -69,6 +70,7 @@ For Python, use a script path for main:
 name: ExamplePython
 version: 1.0.0
 author: YourName
+description: An example Python plugin
 main: main.py
 depends: []
 ~~~
@@ -81,6 +83,7 @@ depends: []
 | main | Yes | Fully qualified Java class name, or a relative .py path for Python |
 | version | Recommended | Display/version metadata |
 | author | Recommended | Display/author metadata |
+| description | Optional | Human-readable summary shown by `wbplugins verbose` |
 | depends | Optional | List of plugin names that must be enabled first |
 
 The descriptor model currently contains only these fields. Do not rely on Bukkit/Paper fields such as api-version, softdepend, load, permissions or website; they are not implemented by this descriptor.
@@ -262,6 +265,8 @@ Java onEnable() is abstract and must be implemented. Python hooks are looked up 
 
 A failure while loading or starting one plugin is logged and does not intentionally abort loading every other plugin. A plugin whose enable hook fails stays disabled: the failed state is reverted, onDisable() is not called for it, and the error is logged with its stack trace. Plugins are disabled in reverse enable order so dependents shut down before their dependencies.
 
+Calling `PluginManager.disablePlugin(plugin)` at runtime disables a plugin and every enabled plugin that depends on it (dependents first, cycle-safe). Disabling a plugin also cancels every task the plugin scheduled through the plugin-aware scheduler methods (see section 9) and, for Python plugins, detaches subscriptions and commands.
+
 On disable (or proxy shutdown), WaterbucketPE detaches what a plugin registered where the implementation can do so safely: Python plugins have their event subscriptions removed and their commands unregistered automatically before the interpreter context closes. Java plugins should unsubscribe their event handlers (EventManager.unsubscribe) and unregister their commands (CommandMap.unregisterCommand) in onDisable, because Java handlers registered directly with the event manager are not tracked per plugin.
 
 The current manager is a startup/shutdown lifecycle manager, not a full runtime module manager. There is no supported hot reload, live replacement, or general-purpose unload API.
@@ -330,6 +335,33 @@ getProxy().getEventManager().unsubscribe(ProxyPingEvent.class, handler);
 
 Matching is by the exact consumer instance, so keep the reference you subscribed. Unsubscribing an unknown handler is a no-op. Python plugins do not need this API: their subscriptions are detached automatically on disable.
 
+### Reference recipe: intercept commands and the MOTD
+
+~~~java
+import dev.waterbucket.waterbucketpe.event.EventPriority;
+import dev.waterbucket.waterbucketpe.event.defaults.PlayerCommandEvent;
+import dev.waterbucket.waterbucketpe.event.defaults.ProxyPingEvent;
+
+@Override
+public void onEnable() {
+    // Block a command before the proxy or the downstream server sees it
+    getProxy().getEventManager().subscribe(PlayerCommandEvent.class, event -> {
+        if (event.getCommand().equalsIgnoreCase("/greed")) {
+            event.setCancelled(true);              // consumed: neither proxy nor server runs it
+            event.getPlayer().sendMessage("§cThat command is disabled.");
+        }
+        // or rewrite it:
+        // event.setCommand("/hub");
+    });
+
+    // Customise the server-list MOTD and player counts
+    getProxy().getEventManager().subscribe(ProxyPingEvent.class, event -> {
+        event.setMotd("§bMy Network");
+        event.setMaximumPlayerCount(1000);
+    });
+}
+~~~
+
 ### Built-in event classes
 
 The current source tree contains these default event classes:
@@ -346,6 +378,7 @@ The current source tree contains these default event classes:
 | NetworkRegisterEvent | Network interface registration |
 | PlayerAuthenticatedEvent | Player authentication |
 | PlayerChatEvent | Player chat before forwarding; message can be modified/cancelled |
+| PlayerCommandEvent | Player issues any command, before proxy or downstream handling; command can be rewritten or cancelled |
 | PlayerDisconnectedEvent | Player disconnect |
 | PlayerLoginEvent | Login before initial connect; async and cancellable |
 | PlayerPermissionCheckEvent | Permission check |
@@ -449,6 +482,26 @@ repeatingTask.cancel();
 
 The scheduler supports asynchronous tasks, synchronous tasks, delayed tasks and repeating tasks. The overloads without an async flag use synchronous execution for delayed/repeating tasks; scheduleAsync is asynchronous. Use the overloads with an explicit async flag when needed.
 
+### Plugin-owned tasks (Java)
+
+Scheduling with a plugin reference registers the task to the plugin. Every task scheduled this way is cancelled automatically when the plugin disables, so a repeating task can not outlive its owner:
+
+~~~java
+var scheduler = getProxy().getScheduler();
+
+// Runs every 40 ticks after a 20 tick delay; auto-cancelled on plugin disable
+scheduler.scheduleRepeating(this, () -> refreshCache(), 20, 40);
+
+// Delayed one-shot on behalf of this plugin
+scheduler.scheduleDelayed(this, () -> saveAll(), 100);
+
+// Or cancel everything owned by this plugin manually, e.g. in onDisable():
+scheduler.cancelTasks(this);
+
+// Cancel a single task by its id:
+scheduler.cancelTask(taskHandler.getTaskId());
+~~~
+
 ### Python scheduler facade
 
 ~~~python
@@ -461,7 +514,97 @@ Python helper methods schedule their work asynchronously. Their current signatur
 
 Do not use synchronous tasks for blocking I/O or long-running calculations.
 
-## 10. Configuration and plugin resources
+## 10. Working with the proxy
+
+`getProxy()` returns the ProxyServer singleton (`ProxyServer.getInstance()` works too). This is the entry point to every manager and to the player/server registry.
+
+### Players
+
+~~~java
+ProxiedPlayer player = getProxy().getPlayer("Steve");          // by name (null if offline)
+ProxiedPlayer byId  = getProxy().getPlayer(uuid);              // by UUID
+ProxiedPlayer exact = getProxy().getPlayerExact("Steve");      // case-insensitive exact match
+java.util.List<ProxiedPlayer> matches = getProxy().matchPlayer("ste"); // partial name match
+java.util.Map<java.util.UUID, ProxiedPlayer> online = getProxy().getPlayers();
+~~~
+
+ProxiedPlayer exposes, among others: `connect(ServerInfo)`, `sendMessage(String|TextContainer)`, `sendTranslation(...)`, `chat(String)`, `sendPopup`, `sendTip`, `sendTitle`, `sendToastMessage`, `disconnect(reason)`, `sendToFallback(...)`, `kick`, permission methods (`addPermission`, `hasPermission`, `removePermission`), device/protocol info (`getDevicePlatform`, `getDeviceModel`, `getDeviceId`, `getProtocol`), identity (`getName`, `getUniqueId`, `getXuid`), network state (`getAddress`, `getPing`, `isConnected`, `getServerInfo`, `getDownstreamConnection`) and resource-pack controls (`acceptResourcePacks`). Permission checks fire `PlayerPermissionCheckEvent`, so plugins can override the result.
+
+### Servers
+
+~~~java
+ServerInfo lobby = getProxy().getServerInfo("lobby1");         // by name (null if unknown)
+ServerInfo byAddr  = getProxy().getServerInfo(address, port);  // by address
+java.util.Collection<ServerInfo> servers = getProxy().getServers();
+getProxy().registerServerInfo(newServerInfo);                  // register at runtime
+getProxy().removeServerInfo("lobby1");                         // unregister at runtime
+~~~
+
+### Maximum player count
+
+The effective limit comes from `listener.max_players` in config.yml and can be changed at runtime:
+
+~~~java
+int max = getProxy().getMaxPlayers();          // override if set, otherwise the config value
+getProxy().setMaxPlayers(100);                 // runtime change + saved to config.yml
+getProxy().setMaxPlayers(100, false);          // runtime-only, does not touch config.yml
+boolean full = getProxy().isFull(player);      // true when the limit is reached and the player has no bypass
+~~~
+
+Notes:
+
+- `setMaxPlayers(0)` disables the limit. Negative values throw `IllegalArgumentException`.
+- The effective value drives the server-list ping and query responses, the `/wbstatus` and panel displays, and login enforcement: when the proxy is full, new players are disconnected with the `waterbucket.server.full` message unless they hold the `waterbucket.bypass.maxplayers` permission.
+- The same functionality is available from the console/in-game through `/wbmaxplayers [count]`.
+- Handlers in `PlayerLoginEvent` with a higher priority run after the full check and can still admit a player by connecting them in the handler.
+
+### Broadcasting
+
+~~~java
+getProxy().broadcastMessage("§aMaintenance in 5 minutes!");
+getProxy().broadcastMessage(new TranslationContainer("waterbucket.server.shutdown"));
+~~~
+
+Both overloads deliver the message to every online player and the console.
+
+### Managers
+
+| Accessor | Purpose |
+|---|---|
+| getEventManager() | Subscribe/unsubscribe/call events (section 7) |
+| getCommandMap() | Register/unregister commands (section 8) |
+| getScheduler() | Task scheduling (section 9) |
+| getPluginManager() | Look up plugins: `getPluginByName`, `getPlugins`, `getPluginMap`, `enablePlugin`, `disablePlugin` |
+| getConfiguration() | Live ProxyConfig for config.yml values |
+| getLogger() | Proxy logger |
+| getPlayerManager() | Player registry internals |
+| getPackManager() | Resource pack management |
+
+### Join, fallback and forced-host handlers
+
+The routing decisions can be replaced with custom implementations:
+
+~~~java
+import dev.waterbucket.waterbucketpe.network.connection.handler.IJoinHandler;
+import dev.waterbucket.waterbucketpe.network.connection.handler.IReconnectHandler;
+import dev.waterbucket.waterbucketpe.network.connection.handler.ReconnectReason;
+
+// Which server a player lands on when they join
+getProxy().setJoinHandler(player ->
+    getProxy().getServerInfo("lobby1"));
+
+// Where a player goes when a downstream server kicks them (fallback)
+getProxy().setReconnectHandler((player, oldServer, reason, kickMessage) -> {
+    if (reason == ReconnectReason.SERVER_KICK && kickMessage.contains("banned")) {
+        return null;                     // null disconnects the player from the proxy
+    }
+    return getProxy().getServerInfo("lobby1");
+});
+~~~
+
+`ReconnectReason` values are `UNKNOWN`, `TIMEOUT`, `EXCEPTION`, `SERVER_KICK` and `TRANSFER_FAILED`. Default implementations ship with the proxy (`DefaultJoinHandler`, `DefaultReconnectHandler`, `RoundRobinReconnectHandler`) and the configured ones are read from config.yml. Never set a handler to null; use a no-op implementation instead. Both handlers run on the connection path: keep them fast and do slow work in scheduled background tasks (section 9).
+
+## 11. Configuration and plugin resources
 
 Each plugin receives a data directory based on its lower-case name:
 
@@ -492,7 +635,7 @@ config.save()
 
 Configuration supports dotted paths for nested keys, get(key), get(key, default), set(key, value), remove(key), exists(key), getKeys() and save(). Values are YAML-backed through YamlConfig.
 
-Place a default **config.yml** at the root of the Python plugin directory or at the root of the Java JAR. Calling getConfig()/loadConfig() copies the bundled config to the plugin data folder when it does not already exist, then loads it. Existing user configuration is not overwritten by the default save operation.
+Place a default **config.yml** at the root of the Python plugin directory or at the root of the Java JAR. Calling getConfig()/loadConfig() copies the bundled config to the plugin data folder when it does not already exist, then loads it. Existing user configuration is not overwritten by the default save operation. Call `reloadConfig()` (Java) to discard the loaded state and re-read config.yml from disk.
 
 Resource access:
 
@@ -510,7 +653,7 @@ saveResource("messages.yml", false);
 plugin.saveResource("messages.yml")
 ~~~
 
-## 11. Python runtime, Java interop and compatibility
+## 12. Python runtime, Java interop and compatibility
 
 Python plugins run in the embedded GraalVM Polyglot Python runtime included in the proxy distribution. The runtime is initialized when a Python plugin context is created; Java-only installations do not need to start a Python context.
 
@@ -548,7 +691,7 @@ The Python facade is additive; it does not replace the Java API. Python can call
 - The descriptor supports **depends**, not the full metadata schema of Bukkit/Paper.
 - Python plugin API is evolving; use the methods documented above rather than assuming a Bukkit-style API.
 
-## 12. Security and performance guidance
+## 13. Security and performance guidance
 
 ### Security
 
@@ -570,7 +713,7 @@ Do not expose secrets in logs or commit API tokens/passwords to plugin folders. 
 
 Python scheduling helpers do not return cancellation handles, so Python plugins cannot cancel their own tasks through the facade. There is no runtime hot reload, unload, or per-plugin isolation. Do not design plugins around repeated enable/disable cycles; the supported model is enable once at startup, then disable at shutdown (or when another plugin calls setEnabled(false)). When a plugin is disabled, its Python event subscriptions and commands are detached automatically; keep other external resources (files, connections) release-aware in onDisable.
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 | Symptom | Likely cause | What to check |
 |---|---|---|
@@ -586,7 +729,7 @@ Python scheduling helpers do not return cancellation handles, so Python plugins 
 | Config value is missing | Wrong dotted key or YAML type | Inspect config.yml and use a default value |
 | Python package fails to install | Package may require unsupported native extensions | Check GraalPy compatibility; not every CPython wheel works |
 
-## 14. Testing and development checklist
+## 15. Testing and development checklist
 
 Before publishing a plugin:
 
@@ -601,7 +744,7 @@ Before publishing a plugin:
 - Do not block synchronous event handlers.
 - Document permissions and external services your own plugin requires.
 
-## 15. API source references
+## 16. API source references
 
 Use the source as the final authority:
 

@@ -140,6 +140,7 @@ public class PluginLoader {
             config.version = scalarString(fields.get("version"), "version", source);
             config.author = scalarString(fields.get("author"), "author", source);
             config.main = requiredString(fields.get("main"), "main", source);
+            config.description = scalarString(fields.get("description"), "description", source);
             config.depends = dependsList(fields.get("depends"), source);
 
             if (config.name == null || config.main == null) {

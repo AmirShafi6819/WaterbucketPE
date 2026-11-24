@@ -17,6 +17,7 @@ package dev.waterbucket.waterbucketpe.plugin;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.logger.MainLogger;
+import dev.waterbucket.waterbucketpe.scheduler.WaterbucketScheduler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -41,7 +42,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -63,6 +67,9 @@ class PluginLifecycleTest {
         this.proxy = mock(ProxyServer.class);
         when(this.proxy.getPluginPath()).thenReturn(this.tempDir);
         when(this.proxy.getLogger()).thenReturn(mock(MainLogger.class));
+        // Plugin.setEnabled(false) hands its scheduled tasks to the scheduler; the mock keeps
+        // the lifecycle path NPE-free (cancelTasks itself is covered by SchedulerPluginTasksTest)
+        when(this.proxy.getScheduler()).thenReturn(mock(WaterbucketScheduler.class));
         // Scans the (empty) plugin folder; no plugins discovered
         this.manager = new PluginManager(this.proxy);
     }
@@ -278,5 +285,79 @@ class PluginLifecycleTest {
         assertTrue(PluginLoader.isValidPluginName("HelloPy"));
         assertTrue(PluginLoader.isValidPluginName("My-Plugin_2.0"));
         assertTrue(PluginLoader.isValidPluginName("Some Plugin With Spaces"));
+    }
+
+    /** A TestPlugin recording its disable order in a shared list (TestPlugin is final). */
+    private static final class OrderedPlugin extends Plugin {
+        private final java.util.List<String> order;
+        private final String name;
+
+        OrderedPlugin(String name, java.util.List<String> order) {
+            this.name = name;
+            this.order = order;
+        }
+
+        @Override
+        public void onEnable() {
+        }
+
+        @Override
+        public void onDisable() {
+            this.order.add(this.name);
+        }
+    }
+
+    @Test
+    void disablePluginShutsDependentsDownFirst() throws Exception {
+        java.util.List<String> order = new java.util.ArrayList<>();
+        OrderedPlugin base = new OrderedPlugin("Base", order);
+        OrderedPlugin dependent = new OrderedPlugin("Dependent", order);
+        this.register(base, descriptor("OrderBase", null));
+        this.register(dependent, descriptor("OrderDependent", java.util.List.of("OrderBase")));
+
+        assertTrue(this.manager.enablePlugin(dependent, null), "the dependent enables its dependency first");
+        assertTrue(base.isEnabled() && dependent.isEnabled());
+
+        this.manager.disablePlugin(base);
+
+        assertFalse(base.isEnabled(), "disabling a dependency must disable the dependency");
+        assertFalse(dependent.isEnabled(), "disabling a dependency must disable every dependent");
+        assertEquals(java.util.List.of("Dependent", "Base"), order,
+                "dependents must shut down before the dependency they depend on");
+    }
+
+    @Test
+    void disablePluginHandlesCyclesNullAndUnknownPlugins() throws Exception {
+        java.util.List<String> order = new java.util.ArrayList<>();
+        OrderedPlugin a = new OrderedPlugin("LoopA", order);
+        OrderedPlugin b = new OrderedPlugin("LoopB", order);
+        this.register(a, descriptor("LoopA", java.util.List.of("LoopB")));
+        this.register(b, descriptor("LoopB", java.util.List.of("LoopA")));
+        // A depends cycle can not be enabled normally; force both enabled to reach the walk
+        a.setEnabled(true);
+        b.setEnabled(true);
+
+        // Depends cycle: the walk must terminate instead of recursing forever
+        assertDoesNotThrow(() -> this.manager.disablePlugin(a));
+        assertFalse(a.isEnabled() || b.isEnabled(), "both cycle members must end up disabled");
+        assertEquals(2, order.size(), "every plugin of the cycle must disable exactly once");
+
+        // Null and unknown plugins are no-ops
+        assertDoesNotThrow(() -> this.manager.disablePlugin(null));
+        assertDoesNotThrow(() -> this.manager.disablePlugin(new OrderedPlugin("Unknown", order)));
+    }
+
+    @Test
+    void disablingAPluginCancelsItsScheduledTasks() throws Exception {
+        WaterbucketScheduler scheduler = mock(WaterbucketScheduler.class);
+        when(this.proxy.getScheduler()).thenReturn(scheduler);
+
+        TestPlugin plugin = new TestPlugin();
+        this.register(plugin, descriptor("Tasked", null));
+        assertTrue(this.manager.enablePlugin(plugin, null));
+        verify(scheduler, never()).cancelTasks(any());
+
+        this.manager.disablePlugin(plugin);
+        verify(scheduler).cancelTasks(plugin);
     }
 }

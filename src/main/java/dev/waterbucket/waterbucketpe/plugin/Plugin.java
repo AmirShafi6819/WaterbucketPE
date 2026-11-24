@@ -225,6 +225,15 @@ public abstract class Plugin {
     }
 
     /**
+     * Discards the currently loaded config and loads config.yml from disk again. Values a
+     * plugin changed in memory are lost, so save before reloading when needed.
+     */
+    public void reloadConfig() {
+        this.config = null;
+        this.loadConfig();
+    }
+
+    /**
      * @return Returns the config.yml class, loads it if not loaded yet using loadConfig()
      */
     public Configuration getConfig() {
@@ -249,7 +258,15 @@ public abstract class Plugin {
             if (enabled) {
                 this.onEnable();
             } else {
-                this.onDisable();
+                try {
+                    this.onDisable();
+                } finally {
+                    // Tasks scheduled through the plugin-aware scheduler methods must not
+                    // outlive their owner: a repeating task would keep running against a
+                    // disabled plugin (NPE storm or worse). Runs even when onDisable() threw,
+                    // so a broken plugin can not leak tasks either.
+                    this.proxy.getScheduler().cancelTasks(this);
+                }
             }
         } catch (Exception e) {
             if (enabled) {

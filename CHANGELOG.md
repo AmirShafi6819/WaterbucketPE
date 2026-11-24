@@ -7,7 +7,44 @@ versioning follows [semantic versioning](https://semver.org/).
 
 The operator-experience release: full console/brand rebrand, a rebuilt Liquid Glass web
 panel with Persian localization, every player message in one editable file, and the fixes
-the first real deployment surfaced. 59 suites / 339 tests green.
+the first real deployment surfaced. 59 suites / 339 tests green; the plugin-API
+round at the end of the release brought the suite to 62 suites / 364 tests.
+
+### Added — complete plugin API (2026-11-24, shipped in the same release)
+
+The plugin module was audited against the upstream WaterdogPE plugin documentation
+(docs.waterdog.dev/plugins) and rounded out to a full surface. 62 suites / 364 tests green.
+
+- **`PlayerCommandEvent`** — a new cancellable event fired for every command a player types,
+  before the proxy decides whether the command belongs to it or to the downstream server.
+  The command can be rewritten (`setCommand`) or cancelled (consumed: neither the proxy nor
+  the backend server runs it). `DispatchCommandEvent` keeps covering the dispatch stage.
+- **Runtime max players** — `ProxyServer.getMaxPlayers()` / `setMaxPlayers(int)` /
+  `setMaxPlayers(int, boolean persist)` / `isFull(ProxiedPlayer)`. The effective value
+  (runtime override or `listener.max_players`) now drives the server-list ping, the query
+  response, `/wbstatus` and the panel, and is **enforced at login**: when the proxy is full,
+  players are disconnected with the new `waterbucket.server.full` message unless they hold
+  the `waterbucket.bypass.maxplayers` permission.
+- **`/wbmaxplayers [count]`** — new built-in command (alias `/wdmaxplayers`) to show or set
+  the limit; `wbmaxplayers 0` disables it. The persisted form survives restarts.
+- **Player lookup + broadcast** — `getPlayerExact(name)` (case-insensitive exact match),
+  `matchPlayer(name)` (partial match) and `broadcastMessage(String|TextContainer)` which
+  reaches every online player plus the console.
+- **Plugin-owned scheduler tasks** — `scheduleTask/scheduleDelayed/scheduleRepeating(Plugin,
+  Runnable, ...)` register a task to its plugin; everything scheduled that way is cancelled
+  automatically when the plugin disables (so a repeating task can no longer outlive its
+  owner), plus `cancelTask(int)` and `cancelTasks(Plugin)` for manual control. Tasks are
+  deregistered as they complete, cancel or the scheduler shuts down.
+- **Runtime plugin disable** — `PluginManager.disablePlugin(Plugin)` disables a plugin and
+  every enabled dependent first (cycle-safe; no infinite recursion on a depends loop).
+- **Plugin.yml `description`** — the optional descriptor field is now parsed and shown by
+  `wbplugins verbose` (which also prints author; plain `wbplugins` output is unchanged).
+- **`Plugin.reloadConfig()`** — discard the loaded config and re-read config.yml from disk.
+- **Docs** — `docs/PLUGINS.en.md` / `docs/PLUGINS.fa.md` updated in lockstep: a new
+  "Working with the proxy" chapter (players, servers, max players, broadcast, managers,
+  join/fallback/forced-host handlers), plugin-owned scheduling, `PlayerCommandEvent`,
+  the `description` field and the new commands; the Java example plugin now tours the full
+  API (and compiles against the shipped JAR).
 
 ### Fixed — follow-up patch (2026-11-24, shipped in the same release)
 

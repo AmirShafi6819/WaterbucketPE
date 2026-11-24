@@ -16,6 +16,7 @@
 package dev.waterbucket.waterbucketpe.scheduler;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
+import dev.waterbucket.waterbucketpe.plugin.Plugin;
 import dev.waterbucket.waterbucketpe.utils.ThreadFactoryBuilder;
 import dev.waterbucket.waterbucketpe.utils.exceptions.SchedulerException;
 import io.netty.util.internal.PlatformDependent;
@@ -37,6 +38,13 @@ public class WaterbucketScheduler {
     private final Map<Integer, TaskHandler<?>> taskHandlerMap = new ConcurrentHashMap<>();
     private final Map<Integer, LinkedList<TaskHandler<?>>> assignedTasks = new ConcurrentHashMap<>();
     private final Queue<TaskHandler<?>> pendingTasks = PlatformDependent.newMpscQueue();
+    /**
+     * Tasks registered per owning plugin: {@code scheduleRepeating(plugin, runnable, ...)} and
+     * friends append here, and {@code cancelTasks(plugin)} cancels the whole set at once when
+     * the plugin disables. Entries are removed as soon as a task completes, cancels or the
+     * scheduler shuts down, so the map never grows without bound.
+     */
+    private final Map<Plugin, Set<Integer>> pluginTasks = new ConcurrentHashMap<>();
 
     private final AtomicInteger currentId = new AtomicInteger();
 
@@ -90,6 +98,10 @@ public class WaterbucketScheduler {
     }
 
     public <T extends Runnable> TaskHandler<T> addTask(T task, int delay, int period, boolean async) {
+        return this.addTask(null, task, delay, period, async);
+    }
+
+    public <T extends Runnable> TaskHandler<T> addTask(Plugin plugin, T task, int delay, int period, boolean async) {
         if (delay < 0 || period < 0) {
             throw new SchedulerException("Attempted to register a task with negative delay or period!");
         }
@@ -104,7 +116,85 @@ public class WaterbucketScheduler {
 
         this.pendingTasks.offer(handler);
         this.taskHandlerMap.put(taskId, handler);
+        if (plugin != null) {
+            handler.setOwner(plugin);
+            this.pluginTasks.computeIfAbsent(plugin, key -> ConcurrentHashMap.newKeySet()).add(taskId);
+        }
         return handler;
+    }
+
+    /**
+     * Schedules {@code runnable} on behalf of {@code plugin}. The task is cancelled
+     * automatically when the plugin disables, so a repeating task can not leak past its
+     * owner's lifetime.
+     *
+     * @param delay ticks to wait before the first run
+     */
+    public TaskHandler<?> scheduleDelayed(Plugin plugin, Runnable runnable, int delay) {
+        return this.scheduleDelayed(plugin, runnable, delay, false);
+    }
+
+    public TaskHandler<?> scheduleDelayed(Plugin plugin, Runnable runnable, int delay, boolean async) {
+        return this.addTask(plugin, runnable, delay, 0, async);
+    }
+
+    public TaskHandler<?> scheduleTask(Plugin plugin, Runnable runnable, boolean async) {
+        return this.addTask(plugin, runnable, 0, 0, async);
+    }
+
+    /**
+     * Schedules {@code runnable} on behalf of {@code plugin}, running every {@code interval}
+     * ticks after {@code delay} ticks. Cancelled automatically when the plugin disables.
+     */
+    public TaskHandler<?> scheduleRepeating(Plugin plugin, Runnable runnable, int delay, int interval) {
+        return this.scheduleRepeating(plugin, runnable, delay, interval, false);
+    }
+
+    public TaskHandler<?> scheduleRepeating(Plugin plugin, Runnable runnable, int delay, int interval, boolean async) {
+        return this.addTask(plugin, runnable, delay, interval, async);
+    }
+
+    /**
+     * Cancels a single pending or repeating task by its id. Unknown ids are ignored.
+     */
+    public void cancelTask(int taskId) {
+        TaskHandler<?> handler = this.taskHandlerMap.remove(taskId);
+        if (handler != null) {
+            handler.cancel();
+            this.unregisterPluginTask(handler);
+        }
+    }
+
+    /**
+     * Cancels every task the plugin registered through the plugin-aware scheduling methods.
+     * Called from {@code Plugin.setEnabled(false)}, so plugins never have to clean up
+     * themselves.
+     */
+    public void cancelTasks(Plugin plugin) {
+        // ConcurrentHashMap.remove(null) throws; a null/unknown plugin simply owns no tasks
+        if (plugin == null) {
+            return;
+        }
+        Set<Integer> taskIds = this.pluginTasks.remove(plugin);
+        if (taskIds == null) {
+            return;
+        }
+        for (int taskId : taskIds) {
+            TaskHandler<?> handler = this.taskHandlerMap.remove(taskId);
+            if (handler != null) {
+                handler.cancel();
+            }
+        }
+    }
+
+    private void unregisterPluginTask(TaskHandler<?> handler) {
+        Plugin owner = handler.getOwner();
+        if (owner != null) {
+            Set<Integer> taskIds = this.pluginTasks.get(owner);
+            if (taskIds != null) {
+                taskIds.remove(handler.getTaskId());
+            }
+        }
     }
 
     public void onTick(int currentTick) {
@@ -127,6 +217,7 @@ public class WaterbucketScheduler {
     private void runTask(TaskHandler<?> taskHandler, int currentTick) {
         if (taskHandler.isCancelled()) {
             this.taskHandlerMap.remove(taskHandler.getTaskId());
+            this.unregisterPluginTask(taskHandler);
             return;
         }
 
@@ -157,6 +248,7 @@ public class WaterbucketScheduler {
         // Task.onCancel(), which for CallbackTask fires every callback a second time - with
         // null instead of the produced result - after the task already completed successfully.
         this.taskHandlerMap.remove(taskHandler.getTaskId());
+        this.unregisterPluginTask(taskHandler);
     }
 
     public void shutdown() {
@@ -178,9 +270,10 @@ public class WaterbucketScheduler {
         // Tasks still running after the grace period get interrupted; without this they kept
         // the (non-daemon) workers alive past the shutdown, delaying or blocking process exit.
         this.threadedExecutor.shutdownNow();
-        // Release the task registry so queued-but-never-run handlers are not retained forever.
+        // Release the task registries so queued-but-never-run handlers are not retained forever.
         this.taskHandlerMap.clear();
         this.assignedTasks.clear();
+        this.pluginTasks.clear();
         TaskHandler<?> leftover;
         while ((leftover = this.pendingTasks.poll()) != null) {
             // drain; MPSC queues have no clear()

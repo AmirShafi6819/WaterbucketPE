@@ -1,6 +1,6 @@
 # راهنمای توسعه پلاگین WaterbucketPE (Java و Python)
 
-این راهنما سیستم پلاگین WaterbucketPE نسخه 1.1.0 را بر اساس پیاده‌سازی واقعی سورس توضیح می‌دهد: نصب، ساختار فایل‌ها، Descriptor، چرخه عمر، Eventها، Commandها، Scheduler، تنظیمات، منابع، ارتباط Python و Java، سازگاری، امنیت، کارایی و عیب‌یابی.
+این راهنما سیستم پلاگین WaterbucketPE نسخه 1.5.0 را بر اساس پیاده‌سازی واقعی سورس توضیح می‌دهد: نصب، ساختار فایل‌ها، Descriptor، چرخه عمر، Eventها، Commandها، Scheduler، تنظیمات، منابع، کار با Proxy و بازیکنان، Handlerهای Join و Fallback، ارتباط Python و Java، سازگاری، امنیت، کارایی و عیب‌یابی.
 
 - [English](PLUGINS.en.md)
 - [فهرست مستندات](PLUGINS.md)
@@ -58,6 +58,7 @@ Descriptor پلاگین Python باید مستقیماً داخل پوشه پل�
 name: ExamplePlugin
 version: 1.0.0
 author: YourName
+description: یک پلاگین نمونه WaterbucketPE
 main: com.example.waterbucket.ExamplePlugin
 depends:
   - AnotherPlugin
@@ -69,6 +70,7 @@ depends:
 name: ExamplePython
 version: 1.0.0
 author: YourName
+description: یک پلاگین نمونه پایتون
 main: main.py
 depends: []
 ~~~
@@ -81,6 +83,7 @@ depends: []
 | main | ضروری | نام کامل کلاس Java یا مسیر نسبی فایل .py |
 | version | پیشنهادی | نسخه نمایشی پلاگین |
 | author | پیشنهادی | سازنده پلاگین |
+| description | اختیاری | توضیح یک‌خطی پلاگین؛ با `wbplugins verbose` نمایش داده می‌شود |
 | depends | اختیاری | فهرست پلاگین‌هایی که باید پیش از این پلاگین فعال شوند |
 
 مدل Descriptor فعلی فقط همین فیلدها را دارد. فیلدهایی مانند api-version، softdepend، load، permissions و website که در Bukkit/Paper دیده می‌شوند، در این Descriptor پیاده‌سازی نشده‌اند.
@@ -264,6 +267,8 @@ def on_enable(plugin):
 
 هنگام Disable (یا خاموش‌شدن Proxy)، هر جا که پیاده‌سازی بتواند امن انجام دهد، Registrationهای پلاگین جدا می‌شوند: برای پلاگین‌های Python، اشتراک‌های Event پیش از بسته‌شدن Context مفسر حذف و Commandهایشان Unregister می‌شود. پلاگین‌های Java باید در onDisable خودشان Handlerهای Event را (با EventManager.unsubscribe) لغو و Commandهایشان را (با CommandMap.unregisterCommand) حذف کنند، چون Handlerهای Java که مستقیم با EventManager ثبت شده‌اند به‌تفکیک پلاگین پیگیری نمی‌شوند.
 
+فراخوانی `PluginManager.disablePlugin(plugin)` در زمان اجرا یک پلاگین و همه پلاگین‌های فعال وابسته به آن را غیرفعال می‌کند (اول وابسته‌ها خاموش می‌شوند و حلقه وابستگی هم باعث توقف بی‌پایان نمی‌شود). غیرفعال‌سازی یک پلاگین، همه Taskهایی که از طریق متدهای زمان‌بندی مخصوص پلاگین (بخش ۹) ساخته شده را نیز لغو می‌کند و برای پلاگین‌های Python، اشتراک‌ها و Commandها جدا می‌شوند.
+
 PluginManager فعلی یک مدیر چرخه عمر Startup/Shutdown است، نه یک سیستم مدیریت کامل ماژول در زمان اجرا. Hot Reload، جایگزینی زنده و API عمومی Unload در حال حاضر وجود ندارد.
 
 ## ۷. سیستم Event
@@ -330,6 +335,33 @@ getProxy().getEventManager().unsubscribe(ProxyPingEvent.class, handler);
 
 تطبیق بر اساس همان نمونه (Instance) Consumer انجام می‌شود، پس مرجعی که ثبت کرده‌اید را نگه دارید. لغو یک Handler ناموجود بی‌اثر است. پلاگین‌های Python به این API نیاز ندارند: اشتراک‌های آن‌ها هنگام Disable به‌طور خودکار جدا می‌شود.
 
+### نمونه کاربردی: رهگیری فرمان‌ها و MOTD
+
+~~~java
+import dev.waterbucket.waterbucketpe.event.EventPriority;
+import dev.waterbucket.waterbucketpe.event.defaults.PlayerCommandEvent;
+import dev.waterbucket.waterbucketpe.event.defaults.ProxyPingEvent;
+
+@Override
+public void onEnable() {
+    // مسدود کردن یک فرمان پیش از رسیدن به Proxy یا سرور Backend
+    getProxy().getEventManager().subscribe(PlayerCommandEvent.class, event -> {
+        if (event.getCommand().equalsIgnoreCase("/greed")) {
+            event.setCancelled(true);              // فرمان مصرف می‌شود: نه Proxy اجرا می‌کند نه سرور
+            event.getPlayer().sendMessage("§cاین فرمان غیرفعال است.");
+        }
+        // یا بازنویسی فرمان:
+        // event.setCommand("/hub");
+    });
+
+    // سفارشی‌سازی MOTD و تعداد بازیکنان در لیست سرورها
+    getProxy().getEventManager().subscribe(ProxyPingEvent.class, event -> {
+        event.setMotd("§bMy Network");
+        event.setMaximumPlayerCount(1000);
+    });
+}
+~~~
+
 ### کلاس‌های Event داخلی
 
 سورس فعلی این Eventهای پیش‌فرض را دارد:
@@ -346,6 +378,7 @@ getProxy().getEventManager().unsubscribe(ProxyPingEvent.class, handler);
 | NetworkRegisterEvent | ثبت Network Interface |
 | PlayerAuthenticatedEvent | احراز هویت بازیکن |
 | PlayerChatEvent | پیام چت پیش از ارسال؛ قابل تغییر و لغو |
+| PlayerCommandEvent | اجرای هر فرمان توسط بازیکن، پیش از پردازش در Proxy یا Backend؛ فرمان قابل بازنویسی یا لغو است |
 | PlayerDisconnectedEvent | قطع اتصال بازیکن |
 | PlayerLoginEvent | پیش از اتصال اولیه؛ ناهمگام و قابل لغو |
 | PlayerPermissionCheckEvent | بررسی Permission |
@@ -449,6 +482,26 @@ repeatingTask.cancel();
 
 Scheduler از Task همگام، ناهمگام، تأخیری و تکرارشونده پشتیبانی می‌کند. نسخه‌های بدون پارامتر async برای Taskهای تأخیری و تکراری به‌صورت همگام اجرا می‌شوند؛ scheduleAsync ناهمگام است. در صورت نیاز از Overload دارای پارامتر async استفاده کنید.
 
+### Taskهای متعلق به پلاگین (Java)
+
+زمان‌بندی با ارجاع پلاگین، Task را به آن پلاگین متصل می‌کند. هر Task که این‌طور ساخته شود هنگام غیرفعال‌شدن پلاگین به‌طور خودکار لغو می‌شود، پس یک Task تکرارشونده نمی‌تواند از عمر صاحبش بیشتر شود:
+
+~~~java
+var scheduler = getProxy().getScheduler();
+
+// هر 40 تیک با تأخیر 20 تیک اجرا می‌شود؛ هنگام Disable پلاگین خودکار لغو می‌شود
+scheduler.scheduleRepeating(this, () -> refreshCache(), 20, 40);
+
+// یک‌بار اجرا با تأخیر به نام این پلاگین
+scheduler.scheduleDelayed(this, () -> saveAll(), 100);
+
+// یا لغو دستی همه Taskهای این پلاگین، مثلاً در onDisable():
+scheduler.cancelTasks(this);
+
+// لغو یک Task مشخص با شناسه‌اش:
+scheduler.cancelTask(taskHandler.getTaskId());
+~~~
+
 ### Scheduler در Python
 
 ~~~python
@@ -461,7 +514,97 @@ plugin.schedule_repeating(check_status, 100)
 
 برای عملیات مسدودکننده فایل و شبکه از Task همگام استفاده نکنید.
 
-## ۱۰. تنظیمات و فایل‌های Resource
+## ۱۰. کار با Proxy
+
+`getProxy()` نمونه ProxyServer را برمی‌گرداند (`ProxyServer.getInstance()` هم همین کار را می‌کند). این نقطه ورود به همه Managerها و رجیستری بازیکن/سرور است.
+
+### بازیکنان
+
+~~~java
+ProxiedPlayer player = getProxy().getPlayer("Steve");          // با نام (اگر آفلاین باشد null)
+ProxiedPlayer byId  = getProxy().getPlayer(uuid);              // با UUID
+ProxiedPlayer exact = getProxy().getPlayerExact("Steve");      // تطبیق دقیق بدون حساسیت به حروف
+java.util.List<ProxiedPlayer> matches = getProxy().matchPlayer("ste"); // تطبیق جزئی نام
+java.util.Map<java.util.UUID, ProxiedPlayer> online = getProxy().getPlayers();
+~~~
+
+ProxiedPlayer این متدها را در اختیار می‌گذارد: `connect(ServerInfo)`، `sendMessage(String|TextContainer)`، `sendTranslation(...)`، `chat(String)`، `sendPopup`، `sendTip`، `sendTitle`، `sendToastMessage`، `disconnect(reason)`، `sendToFallback(...)`، متدهای Permission (`addPermission`، `hasPermission`، `removePermission`)، اطلاعات دستگاه/پروتکل (`getDevicePlatform`، `getDeviceModel`، `getDeviceId`، `getProtocol`)، شناسه‌ها (`getName`، `getUniqueId`، `getXuid`)، وضعیت شبکه (`getAddress`، `getPing`، `isConnected`، `getServerInfo`، `getDownstreamConnection`) و کنترل Resource Pack (`acceptResourcePacks`). هر بررسی Permission رویداد `PlayerPermissionCheckEvent` را اجرا می‌کند، پس پلاگین‌ها می‌توانند نتیجه را بازنویسی کنند.
+
+### سرورها
+
+~~~java
+ServerInfo lobby = getProxy().getServerInfo("lobby1");         // با نام (اگر ثبت نشده باشد null)
+ServerInfo byAddr  = getProxy().getServerInfo(address, port);  // با آدرس
+java.util.Collection<ServerInfo> servers = getProxy().getServers();
+getProxy().registerServerInfo(newServerInfo);                  // ثبت در زمان اجرا
+getProxy().removeServerInfo("lobby1");                         // حذف در زمان اجرا
+~~~
+
+### حداکثر تعداد بازیکن (Max Players)
+
+مقدار مؤثر از `listener.max_players` در config.yml خوانده می‌شود و در زمان اجرا قابل تغییر است:
+
+~~~java
+int max = getProxy().getMaxPlayers();          // اگر Override باشد همان، وگرنه مقدار Config
+getProxy().setMaxPlayers(100);                 // تغییر در زمان اجرا + ذخیره در config.yml
+getProxy().setMaxPlayers(100, false);          // فقط برای همین اجرا؛ config.yml دست نمی‌خورد
+boolean full = getProxy().isFull(player);      // وقتی سقف پر شده و بازیکن اجازه دور زدن ندارد true است
+~~~
+
+نکته‌ها:
+
+- `setMaxPlayers(0)` محدودیت را غیرفعال می‌کند. مقدار منفی `IllegalArgumentException` می‌دهد.
+- مقدار مؤثر در پاسخ Ping لیست سرورها و Query، نمایش `/wbstatus` و پنل و اجرای محدودیت ورود استفاده می‌شود: وقتی پراکسی پر است، بازیکنان جدید با پیام `waterbucket.server.full` قطع می‌شوند مگر اینکه Permission با نام `waterbucket.bypass.maxplayers` داشته باشند.
+- همین قابلیت از کنسول یا داخل بازی با `/wbmaxplayers [count]` هم در دسترس است.
+- Handlerهای `PlayerLoginEvent` با اولویت بالاتر بعد از بررسی پر بودن اجرا می‌شوند و در صورت نیاز می‌توانند بازیکن را در همان Handler پذیرش کنند.
+
+### پیام همگانی (Broadcast)
+
+~~~java
+getProxy().broadcastMessage("§aنگهداری سرور تا ۵ دقیقه دیگر!");
+getProxy().broadcastMessage(new TranslationContainer("waterbucket.server.shutdown"));
+~~~
+
+هر دو نسخه پیام را به همه بازیکن‌های آنلاین و کنسول می‌رسانند.
+
+### Managerها
+
+| متد | کاربرد |
+|---|---|
+| getEventManager() | ثبت/حذف/اجرای Eventها (بخش ۷) |
+| getCommandMap() | ثبت و حذف Commandها (بخش ۸) |
+| getScheduler() | زمان‌بندی Taskها (بخش ۹) |
+| getPluginManager() | یافتن پلاگین‌ها: `getPluginByName`، `getPlugins`، `getPluginMap`، `enablePlugin`، `disablePlugin` |
+| getConfiguration() | دسترسی زنده ProxyConfig به مقادیر config.yml |
+| getLogger() | لاگر پروکسی |
+| getPlayerManager() | رجیستری داخلی بازیکنان |
+| getPackManager() | مدیریت Resource Pack |
+
+### Handlerهای Join، Fallback و Forced Host
+
+تصمیم‌های مسیریابی را می‌توان با پیاده‌سازی سفارشی جایگزین کرد:
+
+~~~java
+import dev.waterbucket.waterbucketpe.network.connection.handler.IJoinHandler;
+import dev.waterbucket.waterbucketpe.network.connection.handler.IReconnectHandler;
+import dev.waterbucket.waterbucketpe.network.connection.handler.ReconnectReason;
+
+// بازیکن هنگام ورود به کدام سرور برود
+getProxy().setJoinHandler(player ->
+    getProxy().getServerInfo("lobby1"));
+
+// وقتی سرور Backend بازیکن را Kick کرد، او به کجا برود (Fallback)
+getProxy().setReconnectHandler((player, oldServer, reason, kickMessage) -> {
+    if (reason == ReconnectReason.SERVER_KICK && kickMessage.contains("banned")) {
+        return null;                     // null یعنی بازیکن از پراکسی قطع می‌شود
+    }
+    return getProxy().getServerInfo("lobby1");
+});
+~~~
+
+مقادیر `ReconnectReason` برابرند با `UNKNOWN`، `TIMEOUT`، `EXCEPTION`، `SERVER_KICK` و `TRANSFER_FAILED`. پیاده‌سازی‌های پیش‌فرض همراه پروکسی عرضه می‌شوند (`DefaultJoinHandler`، `DefaultReconnectHandler`، `RoundRobinReconnectHandler`) و مقادیر پیکربندی‌شده از config.yml خوانده می‌شوند. هرگز Handler را null نکنید؛ به‌جایش یک پیاده‌سازی بدون عملیات بدهید. هر دو Handler روی مسیر اتصال اجرا می‌شوند: کوتاه نگهشان دارید و کارهای کند را در Taskهای پس‌زمینه (بخش ۹) انجام دهید.
+
+## ۱۱. تنظیمات و فایل‌های Resource
 
 هر پلاگین یک پوشه داده بر اساس نام کوچک‌شده پلاگین دریافت می‌کند:
 
@@ -492,7 +635,7 @@ config.save()
 
 Configuration از مسیرهای نقطه‌دار برای کلیدهای تو در تو پشتیبانی می‌کند: get(key)، get(key, default)، set(key, value)، remove(key)، exists(key)، getKeys() و save(). فایل با YamlConfig مدیریت می‌شود.
 
-فایل پیش‌فرض **config.yml** را در ریشه پوشه پلاگین Python یا در ریشه JAR قرار دهید. فراخوانی getConfig()/loadConfig() در صورت نبود فایل، Resource پیش‌فرض را به پوشه داده پلاگین کپی و سپس بارگذاری می‌کند. فایل تنظیمات موجود کاربر با کپی پیش‌فرض بازنویسی نمی‌شود.
+فایل پیش‌فرض **config.yml** را در ریشه پوشه پلاگین Python یا در ریشه JAR قرار دهید. فراخوانی getConfig()/loadConfig() در صورت نبود فایل، Resource پیش‌فرض را به پوشه داده پلاگین کپی و سپس بارگذاری می‌کند. فایل تنظیمات موجود کاربر با کپی پیش‌فرض بازنویسی نمی‌شود. برای دور ریختن وضعیت فعلی و خواندن دوباره config.yml از دیسک، در Java از `reloadConfig()` استفاده کنید.
 
 دسترسی به Resource:
 
@@ -510,7 +653,7 @@ saveResource("messages.yml", false);
 plugin.saveResource("messages.yml")
 ~~~
 
-## ۱۱. Runtime پایتون، Java Interop و سازگاری
+## ۱۲. Runtime پایتون، Java Interop و سازگاری
 
 پلاگین‌های Python در Runtime تعبیه‌شده GraalVM Polyglot اجرا می‌شوند که همراه توزیع Proxy است. Runtime هنگام ایجاد Context یک پلاگین Python راه‌اندازی می‌شود؛ در نصب‌هایی که فقط پلاگین Java دارند Context پایتون ساخته نمی‌شود.
 
@@ -548,7 +691,7 @@ Facade پایتون افزوده‌ای بر API Java است، نه جایگزی
 - Descriptor از **depends** پشتیبانی می‌کند، نه تمام Schema مربوط به Bukkit/Paper.
 - API پایتون در حال توسعه است؛ API شبیه Bukkit را بدون وجود پیاده‌سازی فرض نکنید.
 
-## ۱۲. امنیت و کارایی
+## ۱۳. امنیت و کارایی
 
 ### امنیت
 
@@ -570,7 +713,7 @@ Secretها را در لاگ قرار ندهید و Token یا رمز عبور ر
 
 متدهای زمان‌بندی Python Handle لغو Task برنمی‌گردانند، بنابراین پلاگین Python نمی‌تواند از طریق Facade خودش Taskها را لغو کند. Hot Reload، Unload زمان اجرا و ایزوله‌سازی هر پلاگین وجود ندارد. پلاگین را بر مبنای Reload/Unload زمان اجرا یا چرخه‌های مکرر Enable/Disable طراحی نکنید؛ مدل پشتیبانی‌شده این است که پلاگین یک‌بار هنگام Startup فعال شود و هنگام Shutdown (یا وقتی پلاگین دیگری setEnabled(false) را صدا می‌زند) غیرفعال شود. هنگام Disable پلاگین، اشتراک‌های Event و Commandهای Python به‌طور خودکار جدا می‌شوند؛ منابع بیرونی دیگر (فایل‌ها، اتصال‌ها) را در onDisable خودتان آزاد کنید.
 
-## ۱۳. عیب‌یابی
+## ۱۴. عیب‌یابی
 
 | مشکل | علت احتمالی | راه بررسی |
 |---|---|---|
@@ -586,7 +729,7 @@ Secretها را در لاگ قرار ندهید و Token یا رمز عبور ر
 | مقدار Config پیدا نمی‌شود | کلید نقطه‌دار یا نوع YAML اشتباه است | config.yml و مقدار پیش‌فرض را بررسی کنید |
 | نصب Package پایتون شکست می‌خورد | Package به Native Extension ناسازگار نیاز دارد | سازگاری با GraalPy را بررسی کنید؛ همه Wheelهای CPython قابل استفاده نیستند |
 
-## ۱۴. چک‌لیست تست و انتشار
+## ۱۵. چک‌لیست تست و انتشار
 
 پیش از انتشار پلاگین:
 
@@ -601,7 +744,7 @@ Secretها را در لاگ قرار ندهید و Token یا رمز عبور ر
 - Handler همگام را مسدود نکنید.
 - Permissionها و سرویس‌های خارجی موردنیاز پلاگین خود را مستند کنید.
 
-## ۱۵. مراجع سورس API
+## ۱۶. مراجع سورس API
 
 برای جزئیات نهایی از سورس استفاده کنید:
 

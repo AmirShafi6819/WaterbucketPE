@@ -375,15 +375,65 @@ public class PluginManager {
         }
 
         for (int i = order.size() - 1; i >= 0; i--) {
-            Plugin plugin = order.get(i);
-            this.proxy.getLogger().info("Disabling plugin " + plugin.getName() + "!");
-            try {
-                plugin.setEnabled(false);
-            } catch (PluginChangeStateException e) {
-                this.proxy.getLogger().error(e.getMessage(), e.getCause());
-            }
+            this.doDisablePlugin(order.get(i));
         }
         this.enabledOrder.clear();
+    }
+
+    /**
+     * Disables a single plugin at runtime, disabling every enabled dependent first so no
+     * plugin keeps running against an already-disabled dependency. Cycle-safe: a depends
+     * loop between plugins can not recurse forever. Safe to call from plugin code; the
+     * whole walk runs serialized with the other enable/disable operations.
+     *
+     * @param plugin the plugin to disable, null is ignored
+     */
+    public synchronized void disablePlugin(Plugin plugin) {
+        if (plugin == null) {
+            return;
+        }
+        Set<String> visited = new HashSet<>();
+        Deque<Plugin> stack = new ArrayDeque<>();
+        stack.push(plugin);
+        while (!stack.isEmpty()) {
+            Plugin current = stack.peek();
+            if (!current.isEnabled()) {
+                stack.pop();
+                continue;
+            }
+            // A name already on the visited set means a depends cycle; force-disable the
+            // top of the cycle so the walk still terminates.
+            if (!visited.add(current.getName())) {
+                stack.pop();
+                this.doDisablePlugin(current);
+                continue;
+            }
+
+            boolean pushed = false;
+            for (Plugin dependent : this.pluginMap.values()) {
+                List<String> depends = dependent.getDescription().getDepends();
+                if (dependent.isEnabled() && depends != null && depends.contains(current.getName())
+                        && !visited.contains(dependent.getName())) {
+                    stack.push(dependent);
+                    pushed = true;
+                }
+            }
+            if (!pushed) {
+                // No (unvisited) dependents left: current shuts down first.
+                stack.pop();
+                this.doDisablePlugin(current);
+            }
+        }
+    }
+
+    private void doDisablePlugin(Plugin plugin) {
+        this.proxy.getLogger().info("Disabling plugin " + plugin.getName() + "!");
+        try {
+            plugin.setEnabled(false);
+        } catch (PluginChangeStateException e) {
+            this.proxy.getLogger().error(e.getMessage(), e.getCause());
+        }
+        this.enabledOrder.remove(plugin);
     }
 
     public Class<?> getClassFromCache(String className) {

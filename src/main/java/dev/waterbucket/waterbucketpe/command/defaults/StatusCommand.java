@@ -30,7 +30,7 @@ public class StatusCommand extends Command {
         sb.append("§3Uptime: §b").append(formatUptime(uptimeMs)).append("\n");
 
         int onlinePlayers = proxy.getPlayers().size();
-        int maxPlayers = proxy.getConfiguration().getMaxPlayerCount();
+        int maxPlayers = proxy.getMaxPlayers();
         sb.append("§3Players: §b").append(onlinePlayers).append(" / ").append(maxPlayers).append("\n");
 
         sb.append("§3Servers: §b").append(proxy.getServers().size()).append("\n");

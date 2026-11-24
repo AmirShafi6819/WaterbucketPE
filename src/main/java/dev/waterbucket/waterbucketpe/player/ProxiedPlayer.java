@@ -210,6 +210,11 @@ public class ProxiedPlayer implements CommandSender {
             return;
         }
 
+        if (this.proxy.isFull(this)) {
+            this.disconnect(new TranslationContainer("waterbucket.server.full"));
+            return;
+        }
+
         PlayerLoginEvent event = new PlayerLoginEvent(this);
         this.proxy.getEventManager().callEvent(event)
                 // Never let a misbehaving (hung) async login handler strand the player forever.

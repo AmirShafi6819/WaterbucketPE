@@ -217,7 +217,7 @@ public class PanelMetrics {
         status.put("time", System.currentTimeMillis());
         status.put("uptimeMs", System.currentTimeMillis() - this.startedAt);
         status.put("players", this.proxy.getPlayerManager().getPlayerCount());
-        status.put("maxPlayers", this.proxy.getConfiguration().getMaxPlayerCount());
+        status.put("maxPlayers", this.proxy.getMaxPlayers());
         status.put("proxyName", this.proxy.getConfiguration().getName());
         status.put("proxyVersion", dev.waterbucket.waterbucketpe.WaterbucketPE.version().baseVersion());
         status.put("javaVersion", System.getProperty("java.version"));

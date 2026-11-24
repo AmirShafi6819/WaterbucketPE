@@ -16,6 +16,7 @@
 package dev.waterbucket.waterbucketpe.scheduler;
 
 import dev.waterbucket.waterbucketpe.logger.MainLogger;
+import dev.waterbucket.waterbucketpe.plugin.Plugin;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -28,6 +29,15 @@ public class TaskHandler<T extends Runnable> {
     private final boolean async;
 
     private final T task;
+
+    /**
+     * The plugin that scheduled this task through the plugin-aware scheduling methods, or
+     * null for proxy-internal tasks. Used to cancel a plugin's tasks as a set when the
+     * plugin disables.
+     */
+    @Getter
+    @Setter
+    private Plugin owner;
 
     @Setter
     private int delay;

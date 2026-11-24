@@ -65,13 +65,16 @@ answer as aliases of the rebranded `wb*` ones. The Python front-end is purely ad
 - **Web panel built in** — token-secured, served by the proxy itself, no external services:
   live charts, players, per-server management with real pings, a command console with colored
   output, and a drag-and-drop layout editor. Persian and English, dark and light.
-- **Plugins in Java *and* Python** — the classic jar API is untouched; Python plugins are
+- **A complete plugin API** — every event from the upstream WaterdogPE docs (plus
+  `PlayerCommandEvent`), runtime max players (`setMaxPlayers`), player lookups, broadcasting,
+  plugin-owned scheduler tasks that auto-cancel on disable, runtime `disablePlugin`, the
+  `description` descriptor field and `reloadConfig()`; Python plugins are
   plain folders next to your jars, powered by GraalPy with zero configuration.
 - **Messages you own** — `ingame-messages.yml` covers every text a player can see, with §
   codes and `{%0}` placeholders documented inline.
 - **Quiet logs by design** — STUN/ICE noise filtered without hiding real failures; the
   console shows `time LEVEL | message` and nothing floods.
-- **Actively maintained** — 59 test suites / 339 tests green on every change, CI on every
+- **Actively maintained** — 62 test suites / 364 tests green on every change, CI on every
   push, docker images for every tagged release.
 
 ## Screenshots
@@ -151,7 +154,9 @@ Rebranded `wb*`; the old `wd*` names keep working as hidden aliases.
 | `/server <name> [player]` | transfer yourself or someone else |
 | `/wbsend <target>` | move everyone at once |
 | `/wbnethernet …` | inspect the NetherNet transport |
-| `/wbplugins`, `/wbreloadpacks`, `/end` | plugins, packs, shutdown |
+| `/wbmaxplayers [count]` | show or set the max player count (`0` = unlimited, persisted) |
+| `/wbplugins [verbose]` | plugins list; `verbose` adds description + author |
+| `/wbreloadpacks`, `/end` | packs, shutdown |
 
 ## The web panel
 

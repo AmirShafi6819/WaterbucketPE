@@ -136,4 +136,46 @@ class PluginDescriptorParsingTest {
         assertNull(this.manager.loadPluginDataForTest(jar.toFile()),
                 "a descriptor with wrong value types must be rejected");
     }
+
+    @Test
+    void descriptionFieldIsParsedAndOptional() throws Exception {
+        String withDescription = """
+                name: Described
+                version: 1.0.0
+                author: test
+                description: A very real plugin summary
+                main: dev.waterbucket.waterbucketpe.plugin.PluginDescriptorParsingTest$GadgetProbe
+                """;
+        Path described = this.buildJar(Map.of("waterbucket.yml", withDescription));
+        PluginYAML config = this.manager.loadPluginDataForTest(described.toFile());
+        assertNotNull(config, "a valid descriptor with a description must load");
+        assertEquals("A very real plugin summary", config.getDescription());
+
+        String withoutDescription = """
+                name: Plain
+                version: 1.0.0
+                author: test
+                main: dev.waterbucket.waterbucketpe.plugin.PluginDescriptorParsingTest$GadgetProbe
+                """;
+        Path plain = this.buildJar(Map.of("waterbucket.yml", withoutDescription));
+        PluginYAML plainConfig = this.manager.loadPluginDataForTest(plain.toFile());
+        assertNotNull(plainConfig);
+        assertNull(plainConfig.getDescription(), "description stays optional");
+    }
+
+    @Test
+    void pluginYmlFallbackStillWorksForDescription() throws Exception {
+        // Plugins written for upstream WaterdogPE carry plugin.yml; the fork accepts both names
+        String descriptor = """
+                name: UpstreamStyle
+                version: 2.0.0
+                author: test
+                description: shipped as plugin.yml
+                main: dev.waterbucket.waterbucketpe.plugin.PluginDescriptorParsingTest$GadgetProbe
+                """;
+        Path jar = this.buildJar(Map.of("plugin.yml", descriptor));
+        PluginYAML config = this.manager.loadPluginDataForTest(jar.toFile());
+        assertNotNull(config, "a plugin.yml descriptor must load");
+        assertEquals("shipped as plugin.yml", config.getDescription());
+    }
 }
