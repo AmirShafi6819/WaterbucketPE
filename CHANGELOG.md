@@ -127,6 +127,29 @@ versioning follows [semantic versioning](https://semver.org/).
   PHP quick start, facade reference, troubleshooting rows and source references.
   68 suites / 406 tests green (8 new end-to-end PHP bridge tests).
 
+### Added — Velocity features, reverse engineered
+
+Three stable, battle-tested Velocity listener features were reimplemented natively for the
+Bedrock proxy, with the same config names and semantics so operators coming from Velocity
+feel at home.
+
+- **`listener.ping_passthrough`** (`disabled` / `description` / `all`, default `disabled`):
+  the proxy keeps a background snapshot of the first enabled priority server's real
+  server-list pong and answers its own pings with it - `description` swaps the backend's
+  motd/sub-motd in (player counts stay live), `all` also swaps the backend's player counts
+  and game type. The snapshot refreshes every 5 seconds through a single in-flight probe
+  that never runs on the ping path itself, pauses while the proxy sleeps and keeps the
+  last-good value while the backend is down, so the server list answers instantly and can
+  not flap. Values apply before `ProxyPingEvent` fires, so plugins always get the final say.
+- **`listener.show_max_players`** (default `true`): set to `false` to show the live player
+  count as the maximum, so the proxy never looks full.
+- **`listener.command_rate_limit`** (default `20`, `0` disables): a smooth per-player token
+  bucket with one second of burst drops commands past the rate and answers with the new
+  `waterbucket.command.ratelimit` message. Console and panel commands are never limited,
+  players are isolated from each other, and idle buckets are swept every ten minutes so the
+  limiter can not grow with the day's visitor count.
+  75 suites / 448 tests green (12 new passthrough/rate-limiter tests).
+
 ## [1.5.0] - 2026-11-24
 
 The operator-experience release: full console/brand rebrand, a rebuilt Liquid Glass web

@@ -10,7 +10,7 @@
 <p align="center">
   <strong>The Bedrock proxy that stays smooth when players show up.</strong><br>
   A drop-in WaterdogPE replacement with a rebuilt networking core, a Liquid Glass web panel,
-  plugins in Java <em>and</em> Python, and benchmarks we publish even when they hurt.
+  plugins in Java, Python <em>and</em> PHP, and benchmarks we publish even when they hurt.
 </p>
 
 <p align="center">
@@ -50,9 +50,9 @@ answer as aliases of the rebranded `wb*` ones. The Python front-end is purely ad
 
 | | |
 |---|---|
-| **Smooth joins** | the login crypto, zlib codec and every packet class warm up at boot, so the first player of the day doesn't pay for JIT and class loading in front of everyone |
+| **Smooth joins** | the login crypto, zlib codec, packet classes and the downstream dial path all warm up at boot, so the first player of the day doesn't pay for JIT and class loading in front of everyone |
 | **Honest numbers** | the WaterdogPE comparison is measured by one harness on one machine, re-measured whenever the harness itself has a bug, adverse panels reported as ties |
-| **Operator surface** | Liquid Glass panel (dark/light, fa/en), editable layout, per-server management, colored console |
+| **Operator surface** | Liquid Glass panel (dark/light, fa/en), editable layout, per-server management, colored console, `/restart`, server offline toggle, sleep mode |
 | **Customizable messages** | every player-visible text — kick reasons, transfer errors, the shutdown notice — lives in one `ingame-messages.yml` with § color codes |
 
 ## Features
@@ -61,20 +61,40 @@ answer as aliases of the rebranded `wb*` ones. The Python front-end is purely ad
   queues, guarded transfer handoff, hot-reload visibility and snapshot races fixed, failure
   containment at every layer: one malformed packet never kills a peer or IP-blocks a client.
 - **Fast networking** — per-leg zlib compression levels, flush consolidation on both legs,
-  right-sized event loops and pooled allocators, adaptive packet-batch drain, O(1) player lookups.
+  right-sized event loops and pooled allocators, adaptive packet-batch drain, O(1) player
+  lookups, async events that skip the executor when nobody is listening, and a warm dial
+  path so joins cost network time and nothing else.
+- **Velocity features, reverse engineered** — `ping_passthrough` serves the priority
+  server's real MOTD (and optionally its player counts and game type) on the server list,
+  `show_max_players` can hide the maximum so the proxy never looks full, and
+  `command_rate_limit` floods back at the configured rate per player.
+- **Only Proxy Join** — one config switch keeps host firewall rules that block direct public
+  access to every downstream server's UDP port (loopback stays open for the proxy itself), so
+  players can only enter through the proxy port you picked.
+- **Sleep mode** — an empty proxy falls asleep after the idle window: one GC pass trims the
+  heap and the probe cycle pauses, while the listener, tick loop and every connection path
+  stay fully alive. The first ping, login, panel hit or console command wakes it instantly.
+- **Professional `/restart`** — a managed sequence (cancellable `ProxyRestartEvent`, notice
+  broadcast, graceful kick, plugin disable, relaunch script, clean shutdown) that brings the
+  process back with newly added plugins, packs and config values in place. Concurrent
+  requests collapse into one; systemd/Docker wrappers keep working.
+- **Server offline toggle** — `/wbserveroffline <server> on` stops sending players to a
+  server that keeps running: it reports offline, is skipped in priority/fallback lists and
+  refuses new connections, and the state persists across restarts.
 - **Web panel built in** — token-secured, served by the proxy itself, no external services:
   live charts, players, per-server management with real pings, a command console with colored
   output, and a drag-and-drop layout editor. Persian and English, dark and light.
-- **A complete plugin API** — every event from the upstream WaterdogPE docs (plus
-  `PlayerCommandEvent`), runtime max players (`setMaxPlayers`), player lookups, broadcasting,
-  plugin-owned scheduler tasks that auto-cancel on disable, runtime `disablePlugin`, the
-  `description` descriptor field and `reloadConfig()`; Python plugins are
-  plain folders next to your jars, powered by GraalPy with zero configuration.
+- **A complete plugin API in three languages** — every event from the upstream WaterdogPE
+  docs (plus `PlayerCommandEvent`), runtime max players (`setMaxPlayers`), player lookups,
+  broadcasting, plugin-owned scheduler tasks that auto-cancel on disable, runtime
+  `disablePlugin`, the `description` descriptor field and `reloadConfig()`. Java jars stay
+  untouched; Python plugins are plain folders powered by GraalPy; **PHP plugins run on the
+  embedded Quercus interpreter** — no system PHP or Python install needed.
 - **Messages you own** — `ingame-messages.yml` covers every text a player can see, with §
   codes and `{%0}` placeholders documented inline.
 - **Quiet logs by design** — STUN/ICE noise filtered without hiding real failures; the
   console shows `time LEVEL | message` and nothing floods.
-- **Actively maintained** — 62 test suites / 364 tests green on every change, CI on every
+- **Actively maintained** — 75 test suites / 448 tests green on every change, CI on every
   push, docker images for every tagged release.
 
 ## Screenshots
@@ -156,6 +176,10 @@ Rebranded `wb*`; the old `wd*` names keep working as hidden aliases.
 | `/wbnethernet …` | inspect the NetherNet transport |
 | `/wbmaxplayers [count]` | show or set the max player count (`0` = unlimited, persisted) |
 | `/wbplugins [verbose]` | plugins list; `verbose` adds description + author |
+| `/restart` | managed restart: notice, graceful kick, plugin disable, relaunch with new plugins/packs/config in place |
+| `/wbserveroffline <server> [on\|off]` | stop sending players to a server that keeps running (persists) |
+| `/wbsleep [status\|sleep\|wake]` | inspect or force the sleep-mode transition |
+| `/wbonlyproxy [status\|apply\|remove]` | inspect or manage the Only Proxy Join firewall rules |
 | `/wbreloadpacks`, `/end` | packs, shutdown |
 
 ## The web panel
@@ -201,12 +225,19 @@ Full walkthrough in the file's header comment.
 | `upstream_compression_level` | `6` | zlib level proxy → client |
 | `downstream_compression_level` | `2` | zlib level proxy → servers |
 | `prefer_fast_transfer` | `true` | intercept downstream `TransferPacket`s into fast transfers |
+| `ping_passthrough` | `disabled` | show the priority server's real MOTD (`description`) plus counts/game type (`all`) |
+| `show_max_players` | `true` | `false` shows the live player count as the maximum, so the proxy never looks full |
+| `command_rate_limit` | `20` | max commands per player per second; `0` disables |
+| `sleep_mode.enable` / `after_minutes` | `true` / `5` | trim an idle proxy's heap until the next contact wakes it |
+| `only_proxy_join.enable` / `proxy_port` | `false` / `19132` | block direct public access to downstream ports; the proxy port stays the only way in |
+| `restart.script_path` / `use_script` | *(auto)* / `true` | the relaunch script `/restart` uses; wrappers like systemd keep working with `false` |
 
 The full configuration lives in `configs/config.txt` with inline comments.
 
 ## Plugins
 
-The classic jar API is untouched; Python plugins are plain folders next to your jars:
+The classic jar API is untouched; Python and PHP plugins are plain folders next to your
+jars — one folder, one descriptor, one entry script per language:
 
 ```yaml
 # plugins/HelloPy/waterbucket.yml
@@ -221,13 +252,26 @@ def on_enable(plugin):
         "{} says {}", event.getPlayer().getName(), event.getMessage()))
 ```
 
-Full documentation for both languages, including a facade reference and troubleshooting,
-is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
+```php
+<?php
+// plugins/HelloPHP/main.php — runs on the embedded Quercus interpreter
+function on_enable($plugin) {
+    $plugin->registerCommand('phlobby', 'Takes you to the lobby', '/phlobby',
+        array('phl'), '',
+        function ($sender, $alias, $args) {
+            $sender->sendMessage('§aPHP says hi!');
+            return true;
+        });
+}
+```
+
+Full documentation for all three languages, including the facade reference and
+troubleshooting, is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
 [examples/plugins/](examples/plugins/) and in each release's `plugin-examples.zip`.
 
 ## Documentation
 
-- [Plugin API — Java & Python](docs/PLUGINS.md) · [نسخه فارسی](docs/PLUGINS.fa.md)
+- [Plugin API — Java, Python & PHP](docs/PLUGINS.md) · [نسخه فارسی](docs/PLUGINS.fa.md)
 - [Changelog](CHANGELOG.md) — every release, evidence-backed
 - [Benchmark methodology](https://github.com/AmirShafi6819/WaterbucketPE/tree/v1.4.0/benchmarks/METHODOLOGY.md) — the harness and its caveats
 - [Compiling](COMPILING.md) · [Security policy](SECURITY.md)
@@ -237,7 +281,7 @@ is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
 - **Fallback routing** — automatic player failover when a downstream dies, with configurable
   priorities and a reconnect flow that keeps the player in the world, not on an error screen.
   *Coming in the next feature release.*
-- Further panel tooling: scheduled restarts and per-server console filters.
+- Further panel tooling: scheduled restart windows and per-server console filters.
 
 ## Building from source
 
@@ -245,10 +289,11 @@ is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
 git clone https://github.com/AmirShafi6819/WaterbucketPE.git
 cd WaterbucketPE
 ./gradlew shadowJar        # build/libs/Waterbucket.jar
-./gradlew test             # 59 suites, 339 tests
+./gradlew test             # 75 suites, 448 tests
 ```
 
-JDK 17+ is required; the jar embeds a Python runtime, so no GraalPy install is needed.
+JDK 17+ is required; the jar embeds a Python runtime and the Quercus PHP interpreter, so no
+GraalPy or PHP install is needed.
 
 ## Contributing
 
