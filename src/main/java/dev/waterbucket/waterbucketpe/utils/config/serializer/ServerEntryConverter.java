@@ -36,7 +36,8 @@ public class ServerEntryConverter implements Converter {
 
     @Override
     public Object toConfig(Class<?> type, Object object, ParameterizedType parameterizedType) {
-        Map<String, String> map = new HashMap<>();
+        // Object values: the optional disabled flag serializes as a YAML boolean
+        Map<String, Object> map = new HashMap<>();
         ServerEntry serverEntry = (ServerEntry) object;
         map.put("address", serverEntry.getAddress().getHostString() + ":" + serverEntry.getAddress().getPort());
         if (serverEntry.getPublicAddress() != null && serverEntry.getPublicAddress() != serverEntry.getAddress()) {
@@ -44,6 +45,10 @@ public class ServerEntryConverter implements Converter {
         }
         if (serverEntry.getServerType() != null) {
             map.put("server_type", serverEntry.getServerType());
+        }
+        // Omitted when false so existing config files stay byte-identical until used
+        if (serverEntry.isDisabled()) {
+            map.put("disabled", true);
         }
         return map;
     }
@@ -64,7 +69,8 @@ public class ServerEntryConverter implements Converter {
             // The server type is a plain string: routing it through the address converter made
             // every entry with a non-empty server_type fail with "Invalid address 'bedrock'".
             serverType = (String) section.get("server_type");
-            return new ServerEntry(section.get("name"), address, publicAddress, this.validateServerType(serverType));
+            return new ServerEntry(section.get("name"), address, publicAddress, this.validateServerType(serverType),
+                    this.readDisabled(section.get("disabled")));
         }
 
         if (object instanceof Map) {
@@ -73,10 +79,25 @@ public class ServerEntryConverter implements Converter {
                 address = (InetSocketAddress) inetConverter.fromConfig(InetSocketAddress.class, subMap.getValue().get("address"), null);
                 publicAddress = (InetSocketAddress) inetConverter.fromConfig(InetSocketAddress.class, subMap.getValue().get("public_address"), null);
                 serverType = (String) subMap.getValue().get("server_type");
-                return new ServerEntry(subMap.getKey(), address, publicAddress, this.validateServerType(serverType));
+                return new ServerEntry(subMap.getKey(), address, publicAddress, this.validateServerType(serverType),
+                        this.readDisabled(subMap.getValue().get("disabled")));
             }
         }
         throw new IllegalArgumentException("ServerInfoConverter#fromConfig cannot parse obj: " + object.getClass().getName());
+    }
+
+    /**
+     * Tolerant reader for the optional disabled flag: YAML may deliver it as Boolean or as a
+     * string ("true"/"false") from hand-edited files. Absent = enabled.
+     */
+    private boolean readDisabled(Object value) {
+        if (value instanceof Boolean b) {
+            return b;
+        }
+        if (value instanceof String s) {
+            return Boolean.parseBoolean(s.trim());
+        }
+        return false;
     }
 
     private String validateServerType(String serverType) {

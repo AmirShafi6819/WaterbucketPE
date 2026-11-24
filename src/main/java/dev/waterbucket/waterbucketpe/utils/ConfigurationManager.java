@@ -70,7 +70,14 @@ public class ConfigurationManager {
     public void loadServerInfos(ServerInfoMap serverInfoMap) {
         for (ServerEntry entry : this.proxyConfig.getServerList().values()) {
             try {
-                ServerInfo previous = serverInfoMap.putIfAbsent(entry.getServerName(), serverInfoMap.fromServerEntry(entry));
+                ServerInfo serverInfo = serverInfoMap.fromServerEntry(entry);
+                serverInfo.setDisabled(entry.isDisabled());
+                if (entry.isDisabled()) {
+                    this.proxy.getLogger().info("Server '{}' starts marked offline (servers.{}.disabled: true) - "
+                            + "joins are refused until /wbserveroffline {} off re-enables it",
+                            entry.getServerName(), entry.getServerName(), entry.getServerName());
+                }
+                ServerInfo previous = serverInfoMap.putIfAbsent(entry.getServerName(), serverInfo);
                 if (previous != null) {
                     this.proxy.getLogger().warning("Duplicate server definition for '" + entry.getServerName()
                             + "' (server names are case-insensitive); keeping the first entry and skipping this one");

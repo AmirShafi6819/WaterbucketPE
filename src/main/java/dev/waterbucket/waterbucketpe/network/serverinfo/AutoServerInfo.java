@@ -66,6 +66,11 @@ public class AutoServerInfo extends ServerInfo {
 
     @Override
     public Future<ClientConnection> createConnection(ProxiedPlayer player) {
+        // Operator-disabled servers fail before the transport probe, so no RakNet or
+        // signaling traffic is spent on a server that must not receive players.
+        if (this.isDisabled()) {
+            return this.disabledFuture();
+        }
         EventLoop eventLoop = player.getProxy().getWorkerEventLoopGroup().next();
         Promise<ClientConnection> promise = eventLoop.newPromise();
 
@@ -129,6 +134,9 @@ public class AutoServerInfo extends ServerInfo {
      */
     @Override
     public Future<BedrockPong> ping(long timeout, TimeUnit unit) {
+        if (this.isDisabled()) {
+            return this.disabledFuture();
+        }
         EventLoop eventLoop = ProxyServer.getInstance().getWorkerEventLoopGroup().next();
         Promise<BedrockPong> promise = eventLoop.newPromise();
         BedrockServerInfo.pingAddress(this.getResolvedAddress(), timeout, unit).addListener(rakNet -> {

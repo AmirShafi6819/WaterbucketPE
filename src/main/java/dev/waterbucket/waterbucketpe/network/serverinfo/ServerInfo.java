@@ -77,6 +77,16 @@ public abstract class ServerInfo {
     private final Set<ClientConnection> connections = ConcurrentHashMap.newKeySet();
     private final Set<ProxiedPlayer> players = ConcurrentHashMap.newKeySet();
 
+    /**
+     * Operator-controlled availability flag (config {@code servers.<name>.disabled}, toggled
+     * at runtime via {@code /wbserveroffline}). A disabled server reports itself as offline
+     * (pings fail fast, so the panel shows it offline) and refuses new connections, while the
+     * downstream process itself may still be running - the proxy just stops sending players
+     * to it. Volatile: toggled from command threads, read on event loops.
+     */
+    @Getter
+    private volatile boolean disabled = false;
+
     public ServerInfo(String serverName, InetSocketAddress address, InetSocketAddress publicAddress) {
         this.serverName = serverName;
         this.address = address;
@@ -257,6 +267,26 @@ public abstract class ServerInfo {
             this.players.add(connection.getPlayer());
             this.connections.add(connection);
         }
+    }
+
+    /**
+     * Toggles this server's operator-controlled availability at runtime.
+     *
+     * @param disabled true to mark the server offline (joins refused, pings fail), false to
+     *                 accept players again
+     */
+    public void setDisabled(boolean disabled) {
+        this.disabled = disabled;
+    }
+
+    /**
+     * A failed future with the shared "server is disabled" reason, so every entry point
+     * (connection attempts, health probes) reports the same, accurate state.
+     */
+    protected <T> Future<T> disabledFuture() {
+        Promise<T> promise = io.netty.util.concurrent.GlobalEventExecutor.INSTANCE.newPromise();
+        promise.setFailure(new ServerDisabledException(this.serverName));
+        return promise;
     }
 
     public void removeConnection(ClientConnection connection) {

@@ -52,7 +52,7 @@ public class RoundRobinReconnectHandler implements IReconnectHandler {
                 continue;
             }
             ServerInfo info = proxy.getServerInfo(server);
-            if (info != null) {
+            if (info != null && !info.isDisabled()) {
                 return info;
             }
         }

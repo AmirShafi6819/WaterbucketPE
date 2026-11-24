@@ -29,11 +29,21 @@ public class DefaultJoinHandler implements IJoinHandler {
 
     @Override
     public ServerInfo determineServer(ProxiedPlayer player) {
-        ProxyServer proxy = ProxyServer.getInstance();
+        // Resolved from the connecting player's proxy rather than the static instance: same
+        // object at runtime, but the handler stays usable from tests and tooling.
+        ProxyServer proxy = player.getProxy();
         List<String> priorities = proxy.getConfiguration().getPriorities();
-        // An empty priorities list used to throw IndexOutOfBoundsException out of the join path,
-        // which disconnected the client and additionally blocked its IP; null is the documented
+        // Servers marked offline (/wbserveroffline, servers.<name>.disabled) are skipped like
+        // genuinely unreachable ones: the first AVAILABLE priority server wins. An empty
+        // priorities list used to throw IndexOutOfBoundsException out of the join path, which
+        // disconnected the client and additionally blocked its IP; null is the documented
         // "no server" answer and fails the login with a clean message.
-        return priorities.isEmpty() ? null : proxy.getServerInfo(priorities.get(0));
+        for (String name : priorities) {
+            ServerInfo server = proxy.getServerInfo(name);
+            if (server != null && !server.isDisabled()) {
+                return server;
+            }
+        }
+        return null;
     }
 }

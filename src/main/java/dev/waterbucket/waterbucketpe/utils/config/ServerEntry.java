@@ -33,8 +33,18 @@ public class ServerEntry {
     private final InetSocketAddress address;
     private final InetSocketAddress publicAddress;
     private final String serverType;
+    /**
+     * Operator-controlled availability: a disabled entry keeps its address but the proxy
+     * refuses joins and reports the server offline (see {@code /wbserveroffline}).
+     */
+    private final boolean disabled;
 
     public ServerEntry(String serverName, InetSocketAddress address, InetSocketAddress publicAddress, String serverType) {
+        this(serverName, address, publicAddress, serverType, false);
+    }
+
+    public ServerEntry(String serverName, InetSocketAddress address, InetSocketAddress publicAddress,
+                       String serverType, boolean disabled) {
         Preconditions.checkArgument(serverName != null && !serverName.isEmpty(), "Server name is not valid");
         Preconditions.checkNotNull(address, "Server address can not be null");
         Preconditions.checkNotNull(serverType, "ServerInfoType can not be null");
@@ -42,6 +52,7 @@ public class ServerEntry {
         this.address = address;
         this.publicAddress = publicAddress;
         this.serverType = serverType;
+        this.disabled = disabled;
     }
 
     public ServerInfoType getServerInfoType() {

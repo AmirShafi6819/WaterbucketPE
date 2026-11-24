@@ -64,6 +64,11 @@ public class NetherNetServerInfo extends ServerInfo {
      */
     @Override
     public Future<BedrockPong> ping(long timeout, TimeUnit unit) {
+        // Disabled servers answer "offline" immediately: no probe traffic, the panel
+        // health tracker sees the failure and renders the server as offline.
+        if (this.isDisabled()) {
+            return this.disabledFuture();
+        }
         EventLoop eventLoop = ProxyServer.getInstance().getWorkerEventLoopGroup().next();
         Promise<BedrockPong> promise = eventLoop.newPromise();
         NetherNetHTTPClientSignaling.probe(this.getResolvedAddress(), HttpSignalingSettings.DEFAULT)
@@ -78,6 +83,14 @@ public class NetherNetServerInfo extends ServerInfo {
     }
 
     static Future<ClientConnection> connect(ProxiedPlayer player, ServerInfo serverInfo) {
+        // Operator-disabled servers fail before any network traffic - like a genuinely
+        // offline downstream, so the reconnect handler and failure messages apply.
+        if (serverInfo.isDisabled()) {
+            EventLoop guardLoop = player.getProxy().getWorkerEventLoopGroup().next();
+            Promise<ClientConnection> guard = guardLoop.newPromise();
+            guard.setFailure(new ServerDisabledException(serverInfo.getServerName()));
+            return guard;
+        }
         EventLoop eventLoop = player.getProxy().getWorkerEventLoopGroup().next();
         Promise<ClientConnection> promise = eventLoop.newPromise();
         InetSocketAddress remoteAddress = serverInfo.getResolvedAddress();

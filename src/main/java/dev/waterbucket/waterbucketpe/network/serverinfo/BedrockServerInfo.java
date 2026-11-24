@@ -61,6 +61,14 @@ public class BedrockServerInfo extends ServerInfo {
     }
 
     static Future<ClientConnection> connect(ProxiedPlayer player, ServerInfo serverInfo) {
+        // Operator-disabled servers fail before any network traffic - exactly like a
+        // genuinely offline downstream, so the reconnect handler and failure messages apply.
+        if (serverInfo.isDisabled()) {
+            EventLoop guardLoop = player.getProxy().getWorkerEventLoopGroup().next();
+            Promise<ClientConnection> guard = guardLoop.newPromise();
+            guard.setFailure(new ServerDisabledException(serverInfo.getServerName()));
+            return guard;
+        }
         ProtocolVersion version = player.getProtocol();
         NetworkSettings networkSettings = player.getProxy().getNetworkSettings();
 
@@ -124,6 +132,11 @@ public class BedrockServerInfo extends ServerInfo {
 
     @Override
     public Future<BedrockPong> ping(long timeout, TimeUnit timeUnit) {
+        // Disabled servers answer "offline" immediately: no probe traffic, the panel
+        // health tracker sees the failure and renders the server as offline.
+        if (this.isDisabled()) {
+            return this.disabledFuture();
+        }
         return pingAddress(this.getResolvedAddress(), timeout, timeUnit);
     }
 

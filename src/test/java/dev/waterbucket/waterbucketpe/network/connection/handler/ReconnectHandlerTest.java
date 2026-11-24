@@ -68,6 +68,16 @@ public class ReconnectHandlerTest {
         when(this.proxy.getConfiguration()).thenReturn(config);
     }
 
+    /**
+     * The join/reconnect handlers resolve the proxy from the connecting player, so every
+     * player mock must expose this test's proxy instance.
+     */
+    private ProxiedPlayer player() {
+        ProxiedPlayer player = mock(ProxiedPlayer.class);
+        when(player.getProxy()).thenReturn(this.proxy);
+        return player;
+    }
+
     private ServerInfo server(String name) {
         ServerInfo info = mock(ServerInfo.class);
         when(info.getServerName()).thenReturn(name);
@@ -82,7 +92,7 @@ public class ReconnectHandlerTest {
         priorities("lobby", "lobby");
         RoundRobinReconnectHandler handler = new RoundRobinReconnectHandler();
 
-        ServerInfo result = handler.getFallbackServer(mock(ProxiedPlayer.class), this.server("lobby"),
+        ServerInfo result = handler.getFallbackServer(player(), this.server("lobby"),
                 ReconnectReason.SERVER_KICK, null);
 
         assertNull(result, "no candidate differs from the old server, so the fallback is null - not a hang");
@@ -94,7 +104,7 @@ public class ReconnectHandlerTest {
         RoundRobinReconnectHandler handler = new RoundRobinReconnectHandler();
         this.server("survival");
         this.server("creative");
-        ProxiedPlayer player = mock(ProxiedPlayer.class);
+        ProxiedPlayer player = player();  // named player mock
 
         ServerInfo first = handler.getFallbackServer(player, this.server("lobby"), ReconnectReason.SERVER_KICK, null);
         ServerInfo second = handler.getFallbackServer(player, this.server("survival"), ReconnectReason.SERVER_KICK, null);
@@ -115,7 +125,7 @@ public class ReconnectHandlerTest {
         RoundRobinReconnectHandler handler = new RoundRobinReconnectHandler();
         ServerInfo survival = this.server("survival");
 
-        ServerInfo result = handler.getFallbackServer(mock(ProxiedPlayer.class), this.server("lobby"),
+        ServerInfo result = handler.getFallbackServer(player(), this.server("lobby"),
                 ReconnectReason.SERVER_KICK, null);
 
         assertEquals(survival, result);
@@ -128,7 +138,7 @@ public class ReconnectHandlerTest {
         when(this.proxy.getConfiguration()).thenReturn(config);
         DefaultJoinHandler handler = new DefaultJoinHandler();
 
-        assertNull(handler.determineServer(mock(ProxiedPlayer.class)));
+        assertNull(handler.determineServer(player()));
     }
 
     @Test
@@ -138,7 +148,7 @@ public class ReconnectHandlerTest {
         when(this.proxy.getConfiguration()).thenReturn(config);
         DefaultReconnectHandler handler = new DefaultReconnectHandler();
 
-        assertNull(handler.getFallbackServer(mock(ProxiedPlayer.class), null, ReconnectReason.SERVER_KICK, null));
+        assertNull(handler.getFallbackServer(player(), null, ReconnectReason.SERVER_KICK, null));
     }
 
     @Test
@@ -147,6 +157,6 @@ public class ReconnectHandlerTest {
         DefaultJoinHandler handler = new DefaultJoinHandler();
         ServerInfo lobby = this.server("lobby");
 
-        assertEquals(lobby, handler.determineServer(mock(ProxiedPlayer.class)));
+        assertEquals(lobby, handler.determineServer(player()));
     }
 }

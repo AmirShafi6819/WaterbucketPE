@@ -30,21 +30,32 @@ public class DefaultReconnectHandler implements IReconnectHandler {
 
     @Override
     public ServerInfo getFallbackServer(ProxiedPlayer player, ServerInfo oldServer, ReconnectReason reason, String kickMessage) {
-        ProxyServer proxy = ProxyServer.getInstance();
+        // From the player rather than the static instance: same object at runtime, testable.
+        ProxyServer proxy = player.getProxy();
         List<String> servers = proxy.getConfiguration().getPriorities();
         if (servers.isEmpty()) {
             // Same guard as the join handler: an empty list used to escape as
             // IndexOutOfBoundsException and block the client's IP instead of a clean refusal.
             return null;
         }
-        if (oldServer == null) {
-            return proxy.getServerInfo(servers.get(0));
-        }
 
-        int index = servers.indexOf(oldServer.getServerName());
-        if (index == -1 || (index + 1) >= servers.size()) {
-            return null;
+        // Walk forward from the old server, skipping names that are not registered or are
+        // marked offline (/wbserveroffline) - a fallback must be a server that can accept
+        // the player, otherwise the loop returns an entry that fails the same way again.
+        int start = oldServer == null ? -1 : servers.indexOf(oldServer.getServerName());
+        for (int i = Math.max(start + 1, 0); i < servers.size(); i++) {
+            ServerInfo candidate = proxy.getServerInfo(servers.get(i));
+            if (candidate != null && !candidate.isDisabled() && candidate != oldServer) {
+                return candidate;
+            }
         }
-        return proxy.getServerInfo(servers.get(index + 1));
+        // Nothing usable after the old server: fall back to the first available entry
+        for (String name : servers) {
+            ServerInfo candidate = proxy.getServerInfo(name);
+            if (candidate != null && !candidate.isDisabled() && candidate != oldServer) {
+                return candidate;
+            }
+        }
+        return null;
     }
 }

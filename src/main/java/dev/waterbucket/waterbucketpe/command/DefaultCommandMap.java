@@ -39,5 +39,6 @@ public class DefaultCommandMap extends SimpleCommandMap {
         this.registerCommand(new MeCommand());
         this.registerCommand(new MaxPlayersCommand());
         this.registerCommand(new RestartCommand());
+        this.registerCommand(new ServerOfflineCommand());
     }
 }

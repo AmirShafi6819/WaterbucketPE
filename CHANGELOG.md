@@ -5,6 +5,24 @@ versioning follows [semantic versioning](https://semver.org/).
 
 ## [1.5.5] - 2026-11-24
 
+### Added — mark a server offline while it keeps running
+
+- **`/wbserveroffline <server> [on|off]`** (alias `/wdserveroffline`, permission
+  `waterbucket.command.serveroffline`): toggles a downstream server's availability without
+  touching the server itself. A marked-offline server keeps running, but the proxy reports it
+  offline (server-list health checks and the panel fail instantly, no probe traffic),
+  skips it in join/fallback/round-robin priority lists like a genuinely unreachable server,
+  and refuses new connections before any network attempt - players reconnect through the
+  normal fallback chain instead of hanging on a doomed dial. Players already on it are not
+  kicked. Toggling persists to config.yml (`servers.<name>.disabled: true`, omitted when
+  false so existing files stay byte-identical) and survives restarts; startup logs servers
+  that come up marked offline.
+- `ServerDisabledException` drives the refusal through the regular connect-failure paths, so
+  a disabled server behaves exactly like a dead one everywhere (transfers, initial join,
+  reconnect handler, panel health tracker). Join/reconnect handlers now resolve the proxy
+  from the connecting player (same instance at runtime, but testable).
+  70 suites / 417 tests green (5 new offline-toggle tests).
+
 ### Added — professional `/restart`
 
 - **`/restart` command** (alias `/wdrestart`, permission `waterbucket.command.restart`, also
