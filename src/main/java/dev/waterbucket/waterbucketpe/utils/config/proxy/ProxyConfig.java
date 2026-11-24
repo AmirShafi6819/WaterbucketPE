@@ -209,6 +209,11 @@ public class ProxyConfig extends YamlConfig {
     @Comment("Replaces username spaces with underscores if enabled")
     private boolean replaceUsernameSpaces = false;
 
+    @Path("kick_existing_players")
+    @Accessors(fluent = true)
+    @Comment("Velocity-style duplicate login handling: when enabled, an older session with the same display name is disconnected (with a notice) so the newcomer takes over. When disabled, both sessions stay online and the newcomer only claims the name lookup")
+    private boolean kickExistingPlayers = false;
+
     @Path("enable_query")
     @Accessors(fluent = true)
     @Comment("Whether server query should be enabled")

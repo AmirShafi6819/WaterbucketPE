@@ -18,6 +18,7 @@ package dev.waterbucket.waterbucketpe.player;
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.utils.types.TextContainer;
 import dev.waterbucket.waterbucketpe.utils.types.Permission;
+import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
 
 import java.util.Collections;
 import java.util.List;
@@ -59,6 +60,21 @@ public class PlayerManager {
         if (previousSession != null) {
             this.playersByName.remove(previousSession.getName().toLowerCase(Locale.ROOT), previousSession);
         }
+
+        // Velocity's kick-existing-players: with the flag on, an older session of a DIFFERENT
+        // identity carrying the same display name is disconnected so the newcomer cleanly takes
+        // the name; with the flag off both sessions stay online exactly as before and only the
+        // name lookup changes hands below.
+        if (this.proxy.getConfiguration().kickExistingPlayers()) {
+            ProxiedPlayer sameName = this.playersByName.remove(player.getName().toLowerCase(Locale.ROOT));
+            if (sameName != null && sameName != player) {
+                if (sameName.getConnection().isConnected()) {
+                    sameName.disconnect(new TranslationContainer("waterbucket.duplicate-login.kick-old").getTranslated());
+                }
+                this.players.remove(sameName.getUniqueId(), sameName);
+            }
+        }
+
         // Only clear the name entry if it currently maps to THIS player: the previous
         // unconditional remove evicted a still-online player's lookup when another identity
         // registered with the same display name, and the put below claims the name anyway.

@@ -5,6 +5,18 @@ versioning follows [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Velocity-style duplicate login handling
+
+- **`kick_existing_players` config key (default off, Velocity parity)**: when enabled, a new
+  login whose display name matches an online session of a different identity closes the older
+  session with a clean notice (`waterbucket.duplicate-login.kick-old`, overridable in
+  `ingame-messages.yml`) and takes over the name; the closed session leaves the registry
+  immediately instead of waiting for the ghost sweep. When disabled, behavior is exactly as
+  before: both sessions stay online and only the name lookup changes hands.
+- The same-identity reconnect path (same XUID/UUID joining again) keeps closing the previous
+  session unconditionally and is untouched by the flag. Covered by four new tests plus the
+  coexist-behavior tests that pin the default.
+
 ### Fixed — downstream servers now see the player's real IP
 
 - **Real IP forwarding, on by default (`forward_client_ip: true`)**: the player's real

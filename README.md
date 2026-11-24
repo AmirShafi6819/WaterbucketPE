@@ -66,8 +66,9 @@ answer as aliases of the rebranded `wb*` ones. The Python front-end is purely ad
   path so joins cost network time and nothing else.
 - **Velocity features, reverse engineered** — `ping_passthrough` serves the priority
   server's real MOTD (and optionally its player counts and game type) on the server list,
-  `show_max_players` can hide the maximum so the proxy never looks full, and
-  `command_rate_limit` floods back at the configured rate per player.
+  `show_max_players` can hide the maximum so the proxy never looks full, `command_rate_limit`
+  floods back at the configured rate per player, and `kick_existing_players` closes the older
+  session when a duplicate login with the same name arrives so the newcomer takes over.
 - **Real IP forwarding** — the player's real address and port travel inside the login data
   (`forward_client_ip`, on by default), so downstream servers log the player's true IP instead
   of the proxy's own socket (127.0.0.1 with a random port on co-located hosts). Servers that

@@ -42,6 +42,10 @@ waterbucket.login.illegal_packet: "§cIllegal packet"
 # The login handshake ran out of order
 waterbucket.login.wrong_flow: "§cWrong login flow"
 
+# The older session was closed because a new login with the same name arrived
+# (only when kick_existing_players is enabled in config.yml)
+waterbucket.duplicate-login.kick-old: "§cYou logged in from another location."
+
 # The transfer queue to a downstream server overflowed
 waterbucket.transfer.queue_full: "§cTransfer queue got too large"
 
