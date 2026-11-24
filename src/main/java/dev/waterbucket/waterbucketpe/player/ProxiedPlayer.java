@@ -78,6 +78,10 @@ public class ProxiedPlayer implements CommandSender {
 
     private final AtomicBoolean disconnected = new AtomicBoolean(false);
     private final AtomicBoolean loginCalled = new AtomicBoolean(false);
+    /** Wall clock of the spawn-sequence start; powers the debug join-duration line. */
+    @Getter
+    private volatile long joinStartMillis;
+
     private final AtomicBoolean loginCompleted = new AtomicBoolean(false);
     private volatile CharSequence disconnectReason;
 
@@ -219,6 +223,9 @@ public class ProxiedPlayer implements CommandSender {
         if (!this.loginCalled.compareAndSet(false, true)) {
             return;
         }
+        // Start the join-duration clock at the spawn sequence; InitialHandler logs the
+        // elapsed time (debug) once the priority server connection is established.
+        this.joinStartMillis = System.currentTimeMillis();
 
         if (this.proxy.isFull(this)) {
             this.disconnect(new TranslationContainer("waterbucket.server.full"));

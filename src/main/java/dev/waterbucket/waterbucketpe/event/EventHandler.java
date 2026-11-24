@@ -63,6 +63,16 @@ public class EventHandler {
         }
 
         CompletableFuture<T> future = new CompletableFuture<>();
+        // Fast path: with no subscribed handlers an async event completes inline instead of
+        // paying an executor queue round-trip. The join path fires several async events
+        // (login, initial server determined, pre-connect), so a plugin-free proxy would
+        // otherwise pay 3+ context switches per join for work that does nothing. Handlers
+        // registered later still see the next event; the read is the same atomic snapshot
+        // the dispatch loop uses, so no handler can be skipped.
+        if (this.priority2handlers.isEmpty()) {
+            event.completeFuture(future);
+            return future;
+        }
         Runnable dispatch = () -> {
             for (EventPriority priority : EventPriority.VALUES) {
                 this.handlePriority(priority, event);

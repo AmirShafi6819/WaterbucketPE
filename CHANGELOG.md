@@ -5,6 +5,24 @@ versioning follows [semantic versioning](https://semver.org/).
 
 ## [1.5.5] - 2026-11-24
 
+### Changed — faster joins and flat idle cost
+
+- **Async events without listeners no longer pay an executor round-trip.** The join path
+  fires several async events (login, initial server determined, pre-connect); with no
+  plugin subscribed they now complete inline instead of hopping the event executor 3+
+  times per join. Handler semantics are unchanged - the dispatch decision reads the same
+  atomic snapshot the pipeline uses, and a handler registered between two events is picked
+  up by the next one. Real effect: plugin-free proxies join at the speed of the network
+  path alone, and login bursts stop queueing behind no-op dispatches.
+- **Startup warmup now covers the downstream dial path**: the RakNet client channel classes,
+  the proxy-side client session initializer chain and the initial server handler are loaded
+  on the boot warm-up thread, so the first transfer pays only the network cost - no
+  class-loading spike on the event loop mid-join.
+- **Join duration telemetry (debug)**: the proxy logs `reached <server> in <ms> since
+  spawn` per initial connection at debug level, so operators can measure the join path
+  and tune priority lists with numbers instead of guesses. Zero cost when debug is off.
+  73 suites / 431 tests green (4 new async-dispatch tests).
+
 ### Added — Only Proxy Join
 
 - **`only_proxy_join` config section** (`enable`, `proxy_port`, `manage_firewall`): when

@@ -76,6 +76,7 @@ public final class StartupWarmup {
             warmLoginCrypto();
             warmCompression();
             warmPacketClasses();
+            warmDownstreamDial();
         } catch (Throwable t) {
             log.debug("Startup warm-up stopped early: {}", t.toString());
             return;
@@ -116,6 +117,27 @@ public final class StartupWarmup {
 
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         digest.digest(SAMPLE);
+    }
+
+    /**
+     * Loads the downstream dial path classes (RakNet client channel factory, the proxy-side
+     * client session initializer chain and the ping probe) so the first transfer pays only
+     * the network cost, not a class-loading spike on the event loop. Class loads only: no
+     * channel is created and no packet leaves the process.
+     */
+    private static void warmDownstreamDial() throws Exception {
+        Class.forName("org.cloudburstmc.netty.channel.raknet.RakChannel");
+        Class.forName("org.cloudburstmc.netty.channel.raknet.RakClientChannel");
+        Class.forName("dev.waterbucket.waterbucketpe.network.connection.codec.initializer.ProxiedClientSessionInitializer");
+        Class.forName("dev.waterbucket.waterbucketpe.network.connection.codec.client.ClientPingHandler");
+        Class.forName("dev.waterbucket.waterbucketpe.network.protocol.handler.downstream.InitialHandler");
+        // One EC agreement is also what the downstream handshake cipher setup runs through
+        KeyAgreement agreement = KeyAgreement.getInstance("ECDH");
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("EC");
+        generator.initialize(384);
+        KeyPair local = generator.generateKeyPair();
+        agreement.init(local.getPrivate());
+        agreement.generateSecret();
     }
 
     /** One full deflate/inflate cycle through the JDK zlib code the batch codec sits on. */

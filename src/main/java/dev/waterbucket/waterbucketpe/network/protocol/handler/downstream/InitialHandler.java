@@ -174,6 +174,9 @@ public class InitialHandler extends AbstractDownstreamHandler {
         this.player.setDownstreamConnection(this.connection);
 
         this.connection.setPacketHandler(new ConnectedDownstreamHandler(this.player, this.connection));
+        this.player.getProxy().getLogger().debug("[{}|{}] reached {} in {} ms since spawn", this.player.getAddress(),
+                this.player.getName(), this.connection.getServerInfo().getServerName(),
+                System.currentTimeMillis() - this.player.getJoinStartMillis());
         this.player.getProxy().getEventManager().callEvent(new InitialServerConnectedEvent(this.player, this.connection));
         return PacketSignal.HANDLED;
     }
