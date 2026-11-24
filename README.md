@@ -68,6 +68,11 @@ answer as aliases of the rebranded `wb*` ones. The Python front-end is purely ad
   server's real MOTD (and optionally its player counts and game type) on the server list,
   `show_max_players` can hide the maximum so the proxy never looks full, and
   `command_rate_limit` floods back at the configured rate per player.
+- **Real IP forwarding** — the player's real address and port travel inside the login data
+  (`forward_client_ip`, on by default), so downstream servers log the player's true IP instead
+  of the proxy's own socket (127.0.0.1 with a random port on co-located hosts). Servers that
+  understand the Waterdog login fields display it natively: Nukkit-MOT, Geyser, and PMMP with
+  a proxy login-extras plugin.
 - **Only Proxy Join** — one config switch keeps host firewall rules that block direct public
   access to every downstream server's UDP port (loopback stays open for the proxy itself), so
   players can only enter through the proxy port you picked.

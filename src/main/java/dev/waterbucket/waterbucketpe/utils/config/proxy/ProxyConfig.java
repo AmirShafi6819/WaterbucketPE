@@ -197,8 +197,13 @@ public class ProxyConfig extends YamlConfig {
 
     @Path("use_login_extras")
     @Accessors(fluent = true)
-    @Comment("If enabled, the proxy will pass information like XUID or IP to the downstream server using custom fields in the LoginPacket")
+    @Comment("If enabled, the proxy passes extra login fields such as the XUID and Minecraft ID to the downstream server using custom fields in the LoginPacket. The player's real IP is forwarded separately by forward_client_ip")
     private boolean useLoginExtras = false;
+
+    @Path("forward_client_ip")
+    @Accessors(fluent = true)
+    @Comment("If enabled, the proxy embeds the player's real IP and port into the login data sent to every downstream server, so servers stop logging joins from the proxy's own socket (e.g. 127.0.0.1 with a random port) and show the player's real address. Servers that understand the Waterdog login fields display it natively: Nukkit-MOT, Geyser, and PMMP with a proxy login-extras plugin")
+    private boolean forwardClientIp = true;
 
     @Path("replace_username_spaces")
     @Comment("Replaces username spaces with underscores if enabled")

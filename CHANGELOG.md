@@ -3,6 +3,26 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed — downstream servers now see the player's real IP
+
+- **Real IP forwarding, on by default (`forward_client_ip: true`)**: the player's real
+  address and source port are embedded into the client data JWT that is re-signed and sent
+  to every downstream server, so servers stop logging joins as `127.0.0.1` with a random
+  port (the proxy's own dial socket) and can show the player's true IP. The `Waterdog_IP`
+  field is the de-facto claim the ecosystem already reads — Nukkit-MOT (`ClientChainData`),
+  Geyser (`BedrockClientData`) and the PMMP proxy login-extras plugins — and the fork adds
+  `Waterbucket_IP` / `Waterbucket_Port` under its own namespace.
+- **Works on existing installs without touching config.yml**: the new key is missing from
+  older files, so the field default (enabled) applies and the key is appended on the next
+  start. Operators who do not want the real address shared with backends set
+  `forward_client_ip: false`.
+- **`use_login_extras` keeps its meaning**: it still controls the XUID / Minecraft ID
+  fields and continues to imply IP forwarding, so setups that relied on it behave exactly
+  as before. Claim injection is split into tested helpers (`addForwardingClaims`,
+  `addLoginExtras`) covering both switches, IPv6 addresses and the off/off case.
+
 ## [1.5.5] - 2026-11-24
 
 ### Changed — faster joins and flat idle cost
