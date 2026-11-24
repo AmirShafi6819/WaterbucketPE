@@ -119,6 +119,11 @@ public class PanelMetrics {
         if (!this.running) {
             return;
         }
+        // Sleeping proxy with no players: the probes only burn CPU on servers nobody can
+        // join right now; the last states stay on the dashboard until wake refreshes them.
+        if (this.proxy.getSleepModeManager().isSleeping()) {
+            return;
+        }
         for (ServerInfo server : this.proxy.getServerInfoMap().values()) {
             this.probeServer(server.getServerName(), server);
         }
@@ -232,6 +237,7 @@ public class PanelMetrics {
         status.put("systemLoadAverage", this.os.getSystemLoadAverage());
         status.put("threads", Thread.activeCount());
         status.put("tick", this.proxy.getCurrentTick());
+        status.put("sleeping", this.proxy.getSleepModeManager().isSleeping());
 
         List<Map<String, Object>> servers = new ArrayList<>();
         for (ServerInfo server : this.proxy.getServerInfoMap().values()) {
@@ -243,6 +249,7 @@ public class PanelMetrics {
             entry.put("players", server.getPlayers().size());
             entry.put("pingMs", state == null ? -1 : state.lastPingMs);
             entry.put("online", state == null || state.lastPingMs >= 0);
+            entry.put("disabled", server.isDisabled());
             long upSince = state == null ? this.startedAt : Math.max(state.lastSuccessAt, this.startedAt);
             entry.put("upMs", state == null || state.lastPingMs >= 0 ? System.currentTimeMillis() - upSince : 0);
             // Tail of the ping history for the grid sparkline (last 30 samples)

@@ -54,6 +54,7 @@ import dev.waterbucket.waterbucketpe.packs.PackManager;
 import dev.waterbucket.waterbucketpe.panel.PanelServer;
 import dev.waterbucket.waterbucketpe.player.PlayerManager;
 import dev.waterbucket.waterbucketpe.restart.RestartManager;
+import dev.waterbucket.waterbucketpe.sleep.SleepModeManager;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.plugin.PluginManager;
 import dev.waterbucket.waterbucketpe.scheduler.WaterbucketScheduler;
@@ -144,6 +145,8 @@ public class ProxyServer {
     private final SecurityManager securityManager;
     @Getter
     private final RestartManager restartManager;
+    @Getter
+    private final SleepModeManager sleepModeManager;
     @Getter
     private final ErrorReporting errorReporting;
     private PanelServer panelServer;
@@ -265,6 +268,7 @@ public class ProxyServer {
         this.packManager = new PackManager(this);
         this.securityManager = new SecurityManager(this);
         this.restartManager = new RestartManager(this);
+        this.sleepModeManager = new SleepModeManager(this);
         this.commandSender = new ConsoleCommandSender(this);
         this.commandMap = new DefaultCommandMap(this, SimpleCommandMap.DEFAULT_PREFIX);
         this.console = new TerminalConsole(this);
@@ -389,6 +393,9 @@ public class ProxyServer {
         // Periodically evict ghost registrations whose disconnect event was never processed;
         // they would otherwise stay registered forever and block reconnects for that identity.
         this.scheduler.scheduleRepeating(this.playerManager::sweepDisconnectedPlayers, GHOST_SWEEP_PERIOD_TICKS, true);
+
+        // Sleep mode heartbeat: once a second, decides when an empty proxy falls asleep
+        this.scheduler.scheduleRepeating(this.sleepModeManager::tick, SleepModeManager.HEARTBEAT_TICKS, true);
 
         this.startPanel();
 
@@ -581,6 +588,8 @@ public class ProxyServer {
         if (message.trim().isEmpty()) {
             return false;
         }
+        // A console/panel command is contact: an asleep proxy wakes before executing it
+        this.sleepModeManager.onActivity();
 
         String[] args = message.split(" ");
         Command command = this.commandMap.getCommand(args[0]);
@@ -650,6 +659,8 @@ public class ProxyServer {
      * @param address The client asking, or null when none did, as for the NXS listing
      */
     public ProxyPingEvent callPingEvent(InetSocketAddress address) {
+        // A server-list ping is contact: an asleep proxy must wake before answering
+        this.sleepModeManager.onActivity();
         ProxyConfig config = this.getConfiguration();
         ProxyPingEvent event = new ProxyPingEvent(
                 config.getMotd(),

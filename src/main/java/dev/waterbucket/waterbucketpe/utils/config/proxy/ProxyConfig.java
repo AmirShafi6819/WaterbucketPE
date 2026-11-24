@@ -113,6 +113,14 @@ public class ProxyConfig extends YamlConfig {
     @Comment("NetherNet settings, used when listener.transport is nethernet or both")
     private NetherNetSettings netherNetSettings = new NetherNetSettings();
 
+    @Path("sleep_mode")
+    @Comments({
+            "Idle resource saver: with zero players the proxy trims its heap and pauses periodic",
+            "downstream probes after the configured idle time, and wakes instantly on the first",
+            "ping, query, login, panel request or command. The listener stays bound the whole time."
+    })
+    private SleepModeSettings sleepModeSettings = new SleepModeSettings();
+
     @Path("permissions")
     @Comment("Case-Sensitive permission list for players (empty using {})")
     // Empty by default: shipping permissions for specific usernames let anyone registering

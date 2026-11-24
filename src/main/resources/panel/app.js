@@ -26,6 +26,7 @@ const I18N = {
     "players.empty": "No players online", "players.kick": "Kick", "players.transfer": "Move",
     "console.title": "Console", "console.all": "All levels", "console.warnPlus": "Warnings and errors",
     "console.errors": "Errors only", "console.clear": "Clear view", "console.send": "Send",
+    "sleep.title": "Sleep mode: idle saver active, wakes instantly", "sleep.asleep": "Sleeping",
     "console.placeholder": "Type a command…",
     "settings.title": "Settings", "settings.appearance": "Appearance", "settings.theme": "Theme",
     "settings.dark": "Dark", "settings.light": "Light", "settings.accent": "Accent",
@@ -64,6 +65,7 @@ const I18N = {
     "players.empty": "بازیکنی آنلاین نیست", "players.kick": "اخراج", "players.transfer": "انتقال",
     "console.title": "کنسول", "console.all": "همه سطوح", "console.warnPlus": "هشدار و خطا",
     "console.errors": "فقط خطاها", "console.clear": "پاک کردن", "console.send": "ارسال",
+    "sleep.title": "حالت خواب: ذخیره‌سازی منابع فعال، بیدار شدن آنی", "sleep.asleep": "در حال خواب",
     "console.placeholder": "دستور را بنویسید…",
     "settings.title": "تنظیمات", "settings.appearance": "ظاهر", "settings.theme": "پوسته",
     "settings.dark": "تیره", "settings.light": "روشن", "settings.accent": "رنگ اصلی",
@@ -299,6 +301,9 @@ function renderStatus(status) {
   $("#stat-uptime").textContent = fmtUptime(status.uptimeMs);
   $("#stat-threads").textContent = t("stat.threads", { n: status.threads });
   $("#version-pill").textContent = "v" + status.proxyVersion;
+  const sleepPill = $("#sleep-pill");
+  sleepPill.classList.toggle("hidden", !status.sleeping);
+  if (status.sleeping) $("#sleep-pill-text").textContent = t("sleep.asleep");
   $("#uptime-pill").textContent = fmtUptime(status.uptimeMs);
   $("#health-dot").classList.toggle("bad", false);
   $("#badge-players").textContent = status.players;

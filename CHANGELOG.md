@@ -5,6 +5,23 @@ versioning follows [semantic versioning](https://semver.org/).
 
 ## [1.5.5] - 2026-11-24
 
+### Added — sleep mode for empty proxies
+
+- **`sleep_mode` config section** (`enable`, `after_minutes`, default on / 5 minutes): when
+  no player has been online for the idle window and no other contact happened, the proxy
+  falls asleep - a GC pass releases the join/session caches (logged with before/after heap
+  numbers) and the periodic downstream probe cycle pauses, so an idle proxy sits at a flat
+  CPU/RAM floor instead of pinging servers nobody is using.
+- **Nothing is ever stopped**: the listener, tick loop, scheduler and every connection path
+  stay fully alive. Waking is a single volatile flip plus one log line - the first ping,
+  query, login, panel request or console/panel command after days of sleep is served
+  instantly with the same entry cost as one second of idling.
+- **Panel**: a sleeping badge appears in the header (moon icon, localized EN/FA) and the
+  status API reports `sleeping`; downstream probe refreshes resume automatically on wake.
+  Console/panel command `/wbsleep [status|sleep|wake]` shows the state or forces a
+  transition (force-sleep is refused while players are online).
+  71 suites / 422 tests green (5 new SleepModeManager state-machine tests).
+
 ### Added — mark a server offline while it keeps running
 
 - **`/wbserveroffline <server> [on|off]`** (alias `/wdserveroffline`, permission

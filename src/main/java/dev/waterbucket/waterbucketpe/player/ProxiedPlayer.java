@@ -225,6 +225,8 @@ public class ProxiedPlayer implements CommandSender {
             return;
         }
 
+        // A login is contact: an asleep proxy wakes before processing it
+        this.proxy.getSleepModeManager().onActivity();
         PlayerLoginEvent event = new PlayerLoginEvent(this);
         this.proxy.getEventManager().callEvent(event)
                 // Never let a misbehaving (hung) async login handler strand the player forever.
