@@ -45,8 +45,55 @@ public class WaterbucketScheduler {
      * scheduler shuts down, so the map never grows without bound.
      */
     private final Map<Plugin, Set<Integer>> pluginTasks = new ConcurrentHashMap<>();
+    /*
+     * Time-based scheduling (buildTask/TaskBuilder) registry, mirroring pluginTasks: one set
+     * of ScheduledTask handles per owning plugin, cancelled wholesale when the plugin
+     * disables. Entries are removed on completion, cancel or shutdown, so the map never
+     * grows without bound.
+     */
+    private final Map<Plugin, Set<ScheduledTask>> timePluginTasks = new ConcurrentHashMap<>();
+    private final AtomicInteger timeTaskId = new AtomicInteger();
+    /**
+     * Real-time scheduler pool for TaskBuilder tasks, deliberately separate from the tick
+     * loop: schedules expressed in {@link java.util.concurrent.TimeUnit} must keep their
+     * cadence even while the tick loop is catching up, and repeating tasks must never pile
+     * up concurrent executions of themselves (scheduleWithFixedDelay guarantees that).
+     * Fixed resident pool: no per-task thread churn, flat idle memory.
+     */
+    private final ScheduledThreadPoolExecutor timeExecutor;
 
     private final AtomicInteger currentId = new AtomicInteger();
+
+    /**
+     * Shared construction recipe for both proxy executors: a fixed set of resident threads
+     * (flat idle memory, no per-task thread churn) with a large bounded queue for bursts and
+     * a small elastic head-room when the queue itself saturates.
+     * <p>
+     * The previous pool was {@code (idleThreads, Integer.MAX_VALUE, SynchronousQueue)}: every
+     * burst spawned fresh threads that died 60s later, so RAM and CPU bounced up and down on
+     * join bursts and query storms. The queue trades a few microseconds of queuing for a
+     * steady thread count; 8192 queued runnables cost ~2 MB, against ~1 MB of stack per
+     * thread the old design could spawn without any cap.
+     */
+    public static ThreadPoolExecutor buildBoundedExecutor(String threadName, int residentThreads) {
+        ThreadFactoryBuilder builder = ThreadFactoryBuilder.builder()
+                .format(threadName)
+                // Internal pool: must not keep the JVM alive on its own, matching the tick
+                // executor and the Netty event loops.
+                .daemon(true)
+                .build();
+        int core = Math.max(2, residentThreads);
+        int maximum = core * 2;
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(core, maximum, 120, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(8192), builder);
+        // Practically unreachable (8192-slot queue): if it ever fires, log loudly instead of
+        // throwing out of submit sites or running the task on the caller thread (which for the
+        // scheduler would be the tick thread and would stall the whole proxy).
+        executor.setRejectedExecutionHandler((task, pool) ->
+                ProxyServer.getInstance().getLogger().error("Executor {} saturated, dropping task {}",
+                        threadName, task));
+        return executor;
+    }
 
     public WaterbucketScheduler(ProxyServer proxy) {
         if (instance != null) {
@@ -54,15 +101,17 @@ public class WaterbucketScheduler {
         }
         instance = this;
         this.proxy = proxy;
+        int idleThreads = this.proxy.getConfiguration().getIdleThreads();
+        this.threadedExecutor = buildBoundedExecutor("WaterbucketScheduler Executor - #%d", idleThreads);
 
-        ThreadFactoryBuilder builder = ThreadFactoryBuilder.builder()
-                .format("WaterbucketScheduler Executor - #%d")
-                // Internal pool: must not keep the JVM alive on its own, matching the tick
-                // executor and the Netty event loops.
+        ThreadFactoryBuilder timeBuilder = ThreadFactoryBuilder.builder()
+                .format("WaterbucketTimeScheduler - #%d")
                 .daemon(true)
                 .build();
-        int idleThreads = this.proxy.getConfiguration().getIdleThreads();
-        this.threadedExecutor = new ThreadPoolExecutor(idleThreads, Integer.MAX_VALUE, 60, TimeUnit.SECONDS, new SynchronousQueue<>(), builder);
+        this.timeExecutor = new ScheduledThreadPoolExecutor(Math.max(2, idleThreads / 2), timeBuilder);
+        // Cancelled one-shot tasks are purged from the work queue instead of being retained
+        // until their delay elapses - matters for plugins that create and cancel many timers.
+        this.timeExecutor.setRemoveOnCancelPolicy(true);
     }
 
     public <T extends Runnable> TaskHandler<T> scheduleAsync(T task) {
@@ -166,7 +215,8 @@ public class WaterbucketScheduler {
     }
 
     /**
-     * Cancels every task the plugin registered through the plugin-aware scheduling methods.
+     * Cancels every task the plugin registered through the plugin-aware scheduling methods
+     * and every TaskBuilder task it owns.
      * Called from {@code Plugin.setEnabled(false)}, so plugins never have to clean up
      * themselves.
      */
@@ -176,13 +226,18 @@ public class WaterbucketScheduler {
             return;
         }
         Set<Integer> taskIds = this.pluginTasks.remove(plugin);
-        if (taskIds == null) {
-            return;
+        if (taskIds != null) {
+            for (int taskId : taskIds) {
+                TaskHandler<?> handler = this.taskHandlerMap.remove(taskId);
+                if (handler != null) {
+                    handler.cancel();
+                }
+            }
         }
-        for (int taskId : taskIds) {
-            TaskHandler<?> handler = this.taskHandlerMap.remove(taskId);
-            if (handler != null) {
-                handler.cancel();
+        Set<ScheduledTask> timeTasks = this.timePluginTasks.remove(plugin);
+        if (timeTasks != null) {
+            for (ScheduledTask task : timeTasks) {
+                task.cancel();
             }
         }
     }
@@ -194,6 +249,83 @@ public class WaterbucketScheduler {
             if (taskIds != null) {
                 taskIds.remove(handler.getTaskId());
             }
+        }
+    }
+
+    /**
+     * Starts the Velocity-style fluent time-based scheduling chain: the task runs on the
+     * dedicated time-scheduler pool in real time, independent of the tick loop.
+     *
+     * @param owner the plugin owning the task; its tasks are cancelled when the plugin
+     *              disables (null allowed for framework-internal timers)
+     * @param task  the work to run; exceptions are logged, never allowed to kill the schedule
+     */
+    public TaskBuilder buildTask(Plugin owner, Runnable task) {
+        if (task == null) {
+            throw new SchedulerException("Attempted to schedule a null task!");
+        }
+        return new TaskBuilder(this, owner, task);
+    }
+
+    /** Unowned variant of {@link #buildTask(Plugin, Runnable)} for proxy-internal timers. */
+    public TaskBuilder buildTask(Runnable task) {
+        return this.buildTask(null, task);
+    }
+
+    /**
+     * Materializes a TaskBuilder schedule. Repeating tasks use fixed-delay semantics: the
+     * next repetition starts a full period after the previous one finished, so a slow task
+     * backs up instead of overlapping itself.
+     */
+    ScheduledTask scheduleTimeTask(Plugin owner, Runnable task, long delayMillis, long repeatMillis) {
+        if (delayMillis < 0 || repeatMillis < 0) {
+            throw new SchedulerException("Attempted to register a time task with negative delay or repeat!");
+        }
+        ScheduledTask handle = new ScheduledTask(owner, task, this.timeTaskId.getAndIncrement());
+
+        Runnable wrapped = () -> {
+            if (handle.isCancelled()) {
+                return;
+            }
+            try {
+                task.run();
+            } catch (Throwable t) {
+                // A throwing task must not silently kill a repeating schedule (the
+                // ScheduledThreadPoolExecutor swallows uncaught exceptions into the future).
+                this.proxy.getLogger().error("Exception in scheduled time task #{} (owner={})",
+                        handle.getTaskId(), owner == null ? "<none>" : owner.getName(), t);
+            }
+        };
+
+        ScheduledFuture<?> future = repeatMillis > 0
+                ? this.timeExecutor.scheduleWithFixedDelay(wrapped, delayMillis, repeatMillis, TimeUnit.MILLISECONDS)
+                : this.timeExecutor.schedule(() -> {
+                    try {
+                        wrapped.run();
+                    } finally {
+                        this.detachTimeTask(handle);
+                    }
+                }, delayMillis, TimeUnit.MILLISECONDS);
+        handle.attach(future);
+
+        if (owner != null) {
+            this.timePluginTasks.computeIfAbsent(owner, key -> ConcurrentHashMap.newKeySet()).add(handle);
+        }
+        return handle;
+    }
+
+    /**
+     * Removes a finished or cancelled time task from its owner's registry. Package-private:
+     * called from {@link ScheduledTask#cancel()} and from the one-shot completion wrapper.
+     */
+    void detachTimeTask(ScheduledTask task) {
+        Plugin owner = task.getOwner();
+        if (owner == null) {
+            return;
+        }
+        Set<ScheduledTask> tasks = this.timePluginTasks.get(owner);
+        if (tasks != null) {
+            tasks.remove(task);
         }
     }
 
@@ -254,11 +386,14 @@ public class WaterbucketScheduler {
     public void shutdown() {
         this.proxy.getLogger().debug("Scheduler shutdown initialized!");
         this.threadedExecutor.shutdown();
+        this.timeExecutor.shutdown();
 
         int count = 25;
         while (count-- > 0) {
             try {
-                if (this.threadedExecutor.awaitTermination(100, TimeUnit.MILLISECONDS)) {
+                boolean bothDone = this.threadedExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
+                boolean timeDone = this.timeExecutor.awaitTermination(100, TimeUnit.MILLISECONDS);
+                if (bothDone && timeDone) {
                     break;
                 }
             } catch (InterruptedException e) {
@@ -270,10 +405,12 @@ public class WaterbucketScheduler {
         // Tasks still running after the grace period get interrupted; without this they kept
         // the (non-daemon) workers alive past the shutdown, delaying or blocking process exit.
         this.threadedExecutor.shutdownNow();
+        this.timeExecutor.shutdownNow();
         // Release the task registries so queued-but-never-run handlers are not retained forever.
         this.taskHandlerMap.clear();
         this.assignedTasks.clear();
         this.pluginTasks.clear();
+        this.timePluginTasks.clear();
         TaskHandler<?> leftover;
         while ((leftover = this.pendingTasks.poll()) != null) {
             // drain; MPSC queues have no clear()

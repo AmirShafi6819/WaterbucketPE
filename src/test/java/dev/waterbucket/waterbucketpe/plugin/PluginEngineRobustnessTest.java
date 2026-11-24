@@ -75,6 +75,7 @@ class PluginEngineRobustnessTest {
     @BeforeEach
     void setUp() throws Exception {
         this.proxy = mock(ProxyServer.class);
+        when(this.proxy.getEventManager()).thenReturn(mock(dev.waterbucket.waterbucketpe.event.EventManager.class));
         this.logger = mock(MainLogger.class);
         when(this.proxy.getPluginPath()).thenReturn(this.tempDir);
         when(this.proxy.getLogger()).thenReturn(this.logger);

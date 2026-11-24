@@ -47,7 +47,8 @@ set /a "T1=((1%TIME:~0,2%-100)*360000)+((1%TIME:~3,2%-100)*6000)+((1%TIME:~6,2%-
 "%JAVA_BIN%" -Xms%HEAP% -Xmx%HEAP% ^
      -XX:+UseG1GC ^
      -XX:+UnlockExperimentalVMOptions ^
-     -XX:MaxGCPauseMillis=200 ^
+     -XX:MaxGCPauseMillis=120
+     -XX:InitiatingHeapOccupancyPercent=35 ^
      -XX:G1NewSizePercent=30 ^
      -XX:G1MaxNewSizePercent=40 ^
      -XX:G1ReservePercent=20 ^

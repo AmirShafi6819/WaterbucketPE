@@ -266,6 +266,10 @@ public abstract class Plugin {
                     // disabled plugin (NPE storm or worse). Runs even when onDisable() threw,
                     // so a broken plugin can not leak tasks either.
                     this.proxy.getScheduler().cancelTasks(this);
+                    // Same contract for @Subscribe listeners registered through
+                    // registerListener(this, ...): a disabled plugin must never keep receiving
+                    // events. Runs even when onDisable() threw, mirroring the task cleanup.
+                    this.proxy.getEventManager().unregisterListeners(this);
                 }
             }
         } catch (Exception e) {

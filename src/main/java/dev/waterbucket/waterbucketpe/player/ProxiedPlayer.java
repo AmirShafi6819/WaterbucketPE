@@ -57,10 +57,12 @@ import org.cloudburstmc.protocol.common.util.Preconditions;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * Base Player class.
@@ -149,6 +151,14 @@ public class ProxiedPlayer implements CommandSender {
      */
     private volatile ClientConnection clientConnection;
     private ClientConnection pendingConnection;
+    /*
+     * ConnectionRequest plumbing: listeners waiting for the terminal outcome of a dial to a
+     * specific target (ConnectionRequest.connectWithIndication), plus a single slot carrying
+     * the synchronous outcome of the connect() call currently executing on behalf of one
+     * request. Touched only by request lifecycle calls, never on the packet hot path.
+     */
+    private final ConcurrentMap<ServerInfo, Set<Consumer<ConnectionResultStatus>>> connectionResultListeners = new ConcurrentHashMap<>();
+    private volatile Consumer<ConnectionResultStatus> connectOutcomeObserver;
 
 
     /**
@@ -305,11 +315,13 @@ public class ProxiedPlayer implements CommandSender {
         ServerTransferRequestEvent event = new ServerTransferRequestEvent(this, serverInfo);
         ProxyServer.getInstance().getEventManager().callEvent(event);
         if (event.isCancelled()) {
+            this.notifyConnectOutcome(ConnectionResultStatus.CONNECTION_CANCELLED);
             return;
         }
 
         ServerInfo targetServer = event.getTargetServer();
         if (this.clientConnection != null && this.clientConnection.getServerInfo() == targetServer) {
+            this.notifyConnectOutcome(ConnectionResultStatus.ALREADY_CONNECTED);
             this.sendMessage(new TranslationContainer("waterbucket.downstream.connected", targetServer.getServerName()));
             return;
         }
@@ -321,6 +333,7 @@ public class ProxiedPlayer implements CommandSender {
         // with a permanent "connecting". Check and add under the same monitor.
         synchronized (this.pendingServers) {
             if (this.pendingServers.contains(targetServer)) {
+                this.notifyConnectOutcome(ConnectionResultStatus.CONNECTION_IN_PROGRESS);
                 this.sendMessage(new TranslationContainer("waterbucket.downstream.connecting", targetServer.getServerName()));
                 return;
             }
@@ -329,6 +342,7 @@ public class ProxiedPlayer implements CommandSender {
             // dimension change sequence completes corrupts the client state and the transfer queue.
             TransferCallback activeTransfer = this.rewriteData.getTransferCallback();
             if (activeTransfer != null && activeTransfer.getPhase() != TransferCallback.TransferPhase.RESET) {
+                this.notifyConnectOutcome(ConnectionResultStatus.CONNECTION_IN_PROGRESS);
                 this.sendMessage(new TranslationContainer("waterbucket.downstream.connecting", activeTransfer.getTargetServer().getServerName()));
                 this.getLogger().debug("[{}] Denied transfer to {}: transfer to {} is still in progress",
                         this.getName(), targetServer.getServerName(), activeTransfer.getTargetServer().getServerName());
@@ -342,6 +356,7 @@ public class ProxiedPlayer implements CommandSender {
         if (connectingServer != null) {
             if (connectingServer.getServerInfo() == targetServer) {
                 this.pendingServers.remove(targetServer);
+                this.notifyConnectOutcome(ConnectionResultStatus.CONNECTION_IN_PROGRESS);
                 this.sendMessage(new TranslationContainer("waterbucket.downstream.connecting", targetServer.getServerName()));
                 return;
             } else {
@@ -378,6 +393,9 @@ public class ProxiedPlayer implements CommandSender {
                     }
                     if (ev.isCancelled()) {
                         this.pendingServers.remove(targetServer);
+                        // A plugin held the connection and cancelled it after connect() already
+                        // returned: settle waiting ConnectionRequests here, synchronously.
+                        this.notifyConnectResult(targetServer, ConnectionResultStatus.CONNECTION_CANCELLED);
                         return;
                     }
 
@@ -419,6 +437,102 @@ public class ProxiedPlayer implements CommandSender {
         });
     }
 
+    /**
+     * Velocity-style connection request for this player: dials {@code targetServer} and
+     * completes with the actual outcome (success, already connected, in progress, cancelled,
+     * failed) instead of forcing plugins to infer it from events. The returned future always
+     * completes normally, at the latest after {@link ConnectionRequest#REQUEST_TIMEOUT_SECONDS}.
+     *
+     * @param targetServer the downstream server to connect to
+     * @return a live request handle; call {@code connectWithIndication()} to start it
+     */
+    public ConnectionRequest createConnectionRequest(ServerInfo targetServer) {
+        org.cloudburstmc.protocol.common.util.Preconditions.checkNotNull(targetServer, "Server info can not be null!");
+        return new ConnectionRequest(this, targetServer);
+    }
+
+    /**
+     * Registers a listener for the terminal outcome of a dial to {@code targetServer}.
+     * Package-private: part of the ConnectionRequest machinery, not a public extension point.
+     */
+    void awaitConnectResult(ServerInfo targetServer, Consumer<ConnectionResultStatus> listener) {
+        if (targetServer == null || listener == null) {
+            return;
+        }
+        this.connectionResultListeners.computeIfAbsent(targetServer, key -> ConcurrentHashMap.newKeySet()).add(listener);
+    }
+
+    /**
+     * Removes one specific listener; detaching by target alone would drop a concurrent
+     * request's listener for the same target. Package-private, same scope as above.
+     */
+    void detachConnectResult(ServerInfo targetServer, Consumer<ConnectionResultStatus> listener) {
+        if (targetServer == null || listener == null) {
+            return;
+        }
+        Set<Consumer<ConnectionResultStatus>> listeners = this.connectionResultListeners.get(targetServer);
+        if (listeners != null) {
+            listeners.remove(listener);
+            if (listeners.isEmpty()) {
+                this.connectionResultListeners.remove(targetServer, listeners);
+            }
+        }
+    }
+
+    /**
+     * Sets the slot the next {@code connect()} call reports its synchronous early-return
+     * outcome to. One slot per player: requests for one player are effectively serialized
+     * (a second dial while one is in flight settles as in-progress immediately).
+     */
+    void setConnectOutcomeObserver(Consumer<ConnectionResultStatus> observer) {
+        this.connectOutcomeObserver = observer;
+    }
+
+    void clearConnectOutcomeObserver() {
+        this.connectOutcomeObserver = null;
+    }
+
+    /** Reports the synchronous outcome of the connect() call currently running, if a request is watching. */
+    private void notifyConnectOutcome(ConnectionResultStatus status) {
+        Consumer<ConnectionResultStatus> observer = this.connectOutcomeObserver;
+        if (observer != null) {
+            try {
+                observer.accept(status);
+            } catch (Throwable t) {
+                this.getLogger().error("ConnectionRequest outcome observer threw", t);
+            }
+        }
+    }
+
+    /**
+     * Completes and removes every listener waiting for the terminal outcome of a dial to
+     * {@code targetServer}. Terminal for the target: exactly one status wins and no listener
+     * can be left pending.
+     */
+    private void notifyConnectResult(ServerInfo targetServer, ConnectionResultStatus status) {
+        if (targetServer == null) {
+            return;
+        }
+        Set<Consumer<ConnectionResultStatus>> listeners = this.connectionResultListeners.remove(targetServer);
+        if (listeners == null) {
+            return;
+        }
+        for (Consumer<ConnectionResultStatus> listener : listeners) {
+            try {
+                listener.accept(status);
+            } catch (Throwable t) {
+                this.getLogger().error("ConnectionRequest result listener threw", t);
+            }
+        }
+    }
+
+    /** Completes every pending request of this player as cancelled - called on disconnect. */
+    private void notifyAllConnectResultsCancelled() {
+        for (ServerInfo targetServer : List.copyOf(this.connectionResultListeners.keySet())) {
+            this.notifyConnectResult(targetServer, ConnectionResultStatus.CONNECTION_CANCELLED);
+        }
+    }
+
     private void connect0(ServerInfo targetServer, ClientConnection connection) {
         if (!this.isConnected()) {
             connection.disconnect();
@@ -431,10 +545,14 @@ public class ProxiedPlayer implements CommandSender {
             if (connection.isConnected()) {
                 connection.disconnect();
             }
+            this.notifyConnectResult(targetServer, ConnectionResultStatus.CONNECTION_CANCELLED);
             return;
         }
 
         this.setPendingConnection(connection);
+        // The proxy accepted the downstream connection (handshake done, StartGame follows);
+        // ConnectionRequests waiting on this dial settle here, matching Velocity semantics.
+        this.notifyConnectResult(targetServer, ConnectionResultStatus.SUCCESS);
         this.proxy.getScheduler().scheduleDelayed(() -> {
             if (this.getPendingConnection() == connection) {
                 this.getLogger().warning("[{}|{}] Downstream {} did not send StartGame within {}s",
@@ -466,6 +584,7 @@ public class ProxiedPlayer implements CommandSender {
     }
 
     private void connectFailure(ClientConnection connection, ServerInfo targetServer, Throwable error) {
+        this.notifyConnectResult(targetServer, ConnectionResultStatus.CONNECTION_FAILED);
         if (connection != null) {
             connection.disconnect();
         }
@@ -489,6 +608,9 @@ public class ProxiedPlayer implements CommandSender {
      * @param targetServer the server that could not be reached
      */
     public final void onTransferFailure(ClientConnection connection, ServerInfo targetServer, ReconnectReason reason, String message) {
+        // ConnectionRequests watching this target settle as failed no matter which recovery
+        // path (fallback, reconnect, kick) the failure handling picks below.
+        this.notifyConnectResult(targetServer, ConnectionResultStatus.CONNECTION_FAILED);
         TransferCallback transferCallback = this.rewriteData.getTransferCallback();
         if (connection != null && transferCallback != null && transferCallback.getConnection() == connection) {
             // The connection already claimed the transfer: past the recoverable window,
@@ -578,6 +700,10 @@ public class ProxiedPlayer implements CommandSender {
             return;
         }
 
+        // Every pending ConnectionRequest dies with the player: settle them as cancelled so
+        // their futures never wait for the (now unreachable) dial outcome.
+        this.notifyAllConnectResultsCancelled();
+
         this.disconnectReason = reason;
 
         PlayerDisconnectedEvent event = new PlayerDisconnectedEvent(this, reason);
@@ -640,6 +766,7 @@ public class ProxiedPlayer implements CommandSender {
      */
     public final void onDownstreamFailure(ClientConnection connection, ReconnectReason reason, String message) {
         Preconditions.checkNotNull(connection, "Connection can not be null!");
+        this.notifyConnectResult(connection.getServerInfo(), ConnectionResultStatus.CONNECTION_FAILED);
 
         // CLAIMED: mid-transfer target failure, the old downstream is already gone, fail the transfer.
         TransferCallback transferCallback = this.rewriteData.getTransferCallback();
@@ -697,6 +824,7 @@ public class ProxiedPlayer implements CommandSender {
     }
 
     public final void onDownstreamTimeout(ServerInfo serverInfo) {
+        this.notifyConnectResult(serverInfo, ConnectionResultStatus.CONNECTION_FAILED);
         TransferCallback transferCallback = this.rewriteData.getTransferCallback();
         if (transferCallback != null && transferCallback.getTargetServer() == serverInfo
                 && transferCallback.getPhase() != TransferCallback.TransferPhase.RESET) {

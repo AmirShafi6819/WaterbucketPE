@@ -43,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -79,6 +80,14 @@ class PluginCompatibilityTest {
         when(this.proxy.getPluginPath()).thenReturn(pluginsDir);
         when(this.proxy.getLogger()).thenReturn(mock(MainLogger.class));
         when(this.proxy.getScheduler()).thenReturn(scheduler);
+        // The example uses the Velocity-style TaskBuilder chain; stub the fluent builder to
+        // return itself so the enable path exercises the same call sequence as production.
+        dev.waterbucket.waterbucketpe.scheduler.TaskBuilder taskBuilder =
+                mock(dev.waterbucket.waterbucketpe.scheduler.TaskBuilder.class);
+        when(scheduler.buildTask(any(), any(Runnable.class))).thenReturn(taskBuilder);
+        when(taskBuilder.delay(anyLong(), any())).thenReturn(taskBuilder);
+        when(taskBuilder.repeat(anyLong(), any())).thenReturn(taskBuilder);
+        when(taskBuilder.schedule()).thenReturn(mock(dev.waterbucket.waterbucketpe.scheduler.ScheduledTask.class));
         when(this.proxy.getCommandMap()).thenReturn(commandMap);
         when(commandMap.registerCommand(any(Command.class))).thenAnswer(invocation -> {
             this.registeredCommands.add(invocation.getArgument(0));
@@ -147,9 +156,11 @@ class PluginCompatibilityTest {
         assertTrue(localManager.getPluginByName("ExampleJava").isEnabled());
         assertTrue(localManager.getPluginByName("ExamplePython").isEnabled());
 
-        // Both runtimes subscribed to the same event through the real pipeline
-        assertEquals(2, this.eventManager.subscriberCount(PlayerChatEvent.class),
-                "the java example and the python example each hold one subscription");
+        // All runtimes subscribed to the same event through the real pipeline: the java
+        // example holds two subscriptions (functional chat observer + @Subscribe listener),
+        // the python example one.
+        assertEquals(3, this.eventManager.subscriberCount(PlayerChatEvent.class),
+                "java example: functional + @Subscribe, python example: one subscription");
 
         // Both commands were registered under their documented names
         assertEquals(2, this.registeredCommands.size(), "pyhello and javahello must be registered");

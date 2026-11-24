@@ -149,7 +149,17 @@ public class PluginManager {
         if (!pluginFile.exists()) {
             return null;
         }
-        return this.pluginLoader.loadPluginData(pluginFile, yamlLoader);
+        PluginYAML config = this.pluginLoader.loadPluginData(pluginFile, yamlLoader);
+        if (config == null) {
+            // Velocity-style fallback: a jar without waterbucket.yml/plugin.yml may declare
+            // its descriptor through the @PluginDescriptor annotation on its main class.
+            config = this.pluginLoader.findAnnotatedDescriptor(pluginFile);
+            if (config == null) {
+                this.proxy.getLogger().warning("Jar file {} doesnt contain a waterbucket.yml, plugin.yml or @PluginDescriptor class!",
+                        pluginFile.getName());
+            }
+        }
+        return config;
     }
 
     /**

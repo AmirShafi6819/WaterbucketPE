@@ -92,6 +92,39 @@ depends: []
 
 نام پلاگین به نام پوشه داده‌ها و کلید مدیر تبدیل می‌شود، بنابراین فقط می‌تواند شامل حروف، اعداد، فاصله، نقطه، خط تیره و زیرخط باشد (حداکثر ۶۴ نویسه و بدون جداکننده مسیر). Descriptor با نام نامعتبر در زمان بارگذاری رد می‌شود.
 
+### جایگزین به سبک Velocity: انوتیشن @PluginDescriptor
+
+یک پلاگین Java می‌تواند Descriptor را مستقیماً روی کلاس اصلی تعریف کند، به‌جای قرار دادن فایل YAML درون Jar. این همان سبک Velocity است: کلاس انوتیشن‌شده خودِ کلاس اصلی است.
+
+~~~java
+import dev.waterbucket.waterbucketpe.plugin.Plugin;
+import dev.waterbucket.waterbucketpe.plugin.annotation.PluginDescriptor;
+
+@PluginDescriptor(
+        id = "greeter",              // اجباری، شناسه یکتا (نام پوشه داده و هدف depends)
+        name = "Greeter",            // اختیاری، نام نمایشی؛ پیش‌فرض همان id
+        version = "1.0.0",
+        authors = {"YourName"},
+        description = "Says hello",
+        dependencies = {"AnotherPlugin"}   // اختیاری؛ همان معنای وابستگی اجباری YAML
+)
+public class GreeterPlugin extends Plugin {
+    @Override
+    public void onEnable() {
+        getProxy().getLogger().info("Hello from " + getName());
+    }
+}
+~~~
+
+قوانین، هم‌راستا با Parser مخصوص YAML:
+
+- id اجباری است و از قوانین نام پلاگین پیروی می‌کند (حروف، اعداد، فاصله، نقطه، خط تیره و زیرخط). این id نام پوشه داده و هدف جست‌وجوی depends می‌شود.
+- اگر Jar هم waterbucket.yml یا plugin.yml داشته باشد، YAML برنده است و انوتیشن نادیده گرفته می‌شود؛ پس به‌روزرسانی یک پلاگین موجود نمی‌تواند تصادفی رفتار را تغییر دهد.
+- در هر Jar فقط یک کلاس انوتیشن‌شده مجاز است؛ کلاس‌های اضافی گزارش و رد می‌شوند.
+- اسکن فقط متادیتا را می‌خواند: static initializer پلاگین هنگام خواندن Descriptor اجرا نمی‌شود.
+
+پلاگین‌های Python تغییری نمی‌کنند و همچنان از waterbucket.yml استفاده می‌کنند.
+
 ## ۴. شروع سریع Java
 
 کلاس اصلی باید از کلاس زیر ارث‌بری کند:
@@ -289,6 +322,37 @@ getProxy().getEventManager().subscribe(
 ~~~
 
 اولویت‌ها به ترتیب **LOWEST**، **LOW**، **NORMAL**، **HIGH** و **HIGHEST** هستند. اگر اولویت مشخص نشود، NORMAL استفاده می‌شود.
+
+### Listener انوتیشنی در Java (@Subscribe)
+
+روش تعریفی به‌جای API تابعی بالا، آشنا برای کاربران Velocity: متدهای public را انوتیشن کنید و کل آبجکت Listener را یک‌جا ثبت کنید.
+
+~~~java
+import dev.waterbucket.waterbucketpe.event.Subscribe;
+import dev.waterbucket.waterbucketpe.event.defaults.PlayerLoginEvent;
+
+public class LoginListener {
+
+    @Subscribe(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onLogin(PlayerLoginEvent event) {
+        event.getPlayer().sendMessage("Welcome!");
+    }
+}
+
+// ثبت در onEnable:
+getProxy().getEventManager().registerListener(this, new LoginListener());
+~~~
+
+قوانین و تضمین‌ها:
+
+- متد معتبر باید public و غیر static باشد و دقیقاً یک پارامتر از نوع Event یا زیرکلاس آن بگیرد. امضای غلط با هشداری که نام متد را ذکر می‌کند رد می‌شود.
+- priority همان ترتیب LOWEST تا HIGHEST را استفاده می‌کند؛ ignoreCancelled = true یعنی اگر Event از قبل لغو شده باشد (فقط CancellableEvent)، متد اصلاً اجرا نمی‌شود.
+- Handler خراب دقیقاً مثل API تابعی ایزوله می‌شود: لاگ می‌شود، رد می‌شود و Pipeline ادامه پیدا می‌کند.
+- Listenerهای ثبت‌شده با مالکیت پلاگین هنگام Disable شدن پلاگین به‌طور خودکار جدا می‌شوند (حتی اگر onDisable خطا داده باشد). حذف دستی هر نمونه: unregisterListener(listenerObject)؛ حذف کل مالک: unregisterListeners(this).
+- ثبت دوباره همان آبجکت Listener بدون حذف قبلی، IllegalArgumentException می‌دهد؛ تحویل دوباره‌ی Event تقریباً هرگز مورد نظر نیست.
+- اشتراک تابعی و انوتیشنی را می‌توان آزادانه ترکیب کرد؛ هر دو همه Eventها را می‌بینند.
+
+پلاگین‌های Python همان Facade پایین را دارند؛ API انوتیشنی مخصوص Java است (انوتیشن قابلیت زبان Java است).
 
 ### ثبت Event در Python
 
@@ -514,6 +578,37 @@ plugin.schedule_repeating(check_status, 100)
 
 برای عملیات مسدودکننده فایل و شبکه از Task همگام استفاده نکنید.
 
+### زمان‌بندی مبتنی بر زمان واقعی (TaskBuilder به سبک Velocity)
+
+برای زمان‌بندی بر حسب زمان واقعی به‌جای Tick از Builder روان استفاده کنید. این Taskها روی Pool مخصوص زمان‌بند زمانی اجرا می‌شوند و ریتمشان مستقل از Tick Loop است:
+
+~~~java
+var scheduler = getProxy().getScheduler();
+
+// یک‌بار پس از ۱۰ ثانیه
+scheduler.buildTask(this, () -> announceEvent())
+        .delay(10, TimeUnit.SECONDS)
+        .schedule();
+
+// هر ۵۰۰ میلی‌ثانیه، اولین اجرا پس از ۲ ثانیه، لغو خودکار هنگام Disable پلاگین
+ScheduledTask task = scheduler.buildTask(this, () -> pingDownstreams())
+        .delay(2, TimeUnit.SECONDS)
+        .repeat(500, TimeUnit.MILLISECONDS)
+        .schedule();
+
+// توقف در هر لحظه:
+task.cancel();
+~~~
+
+معناشناسی:
+
+- repeat = 0 (پیش‌فرض) یعنی Task فقط یک‌بار پس از delay اجرا می‌شود؛ repeat > 0 از معناشناسی fixed-delay استفاده می‌کند: تکرار بعدی یک دوره‌ی کامل پس از پایان تکرار قبلی شروع می‌شود، پس Task کند روی خودش سوار نمی‌شود.
+- delay/repeat منفی و واحد زمانی null در همان فراخوانی Builder باعث IllegalArgumentException می‌شود.
+- Taskهای ساخته‌شده با پلاگین از همان قرارداد لغو خودکار Taskهای Tick پیروی می‌کنند: cancelTasks(this) روی هر دو API کار می‌کند.
+- Exception داخل Task با شماره Task و نام مالک لاگ می‌شود؛ زمان‌بندی باقی می‌ماند و Task تکرارشونده بی‌صدا نمی‌میرد.
+- این Taskها همیشه روی Pool زمان‌بند اجرا می‌شوند، هرگز روی Netty Event Loop یا Thread تیک؛ پس فقط از APIهای Thread-Safe پروکسی داخل آن‌ها استفاده کنید.
+- Aliasهای سمت ProxyServer: proxy.fire(event) معادل callEvent(event) و proxy.getAllPlayers() معادل getPlayers().values() است.
+
 ## ۱۰. کار با Proxy
 
 `getProxy()` نمونه ProxyServer را برمی‌گرداند (`ProxyServer.getInstance()` هم همین کار را می‌کند). این نقطه ورود به همه Managerها و رجیستری بازیکن/سرور است.
@@ -529,6 +624,41 @@ java.util.Map<java.util.UUID, ProxiedPlayer> online = getProxy().getPlayers();
 ~~~
 
 ProxiedPlayer این متدها را در اختیار می‌گذارد: `connect(ServerInfo)`، `sendMessage(String|TextContainer)`، `sendTranslation(...)`، `chat(String)`، `sendPopup`، `sendTip`، `sendTitle`، `sendToastMessage`، `disconnect(reason)`، `sendToFallback(...)`، متدهای Permission (`addPermission`، `hasPermission`، `removePermission`)، اطلاعات دستگاه/پروتکل (`getDevicePlatform`، `getDeviceModel`، `getDeviceId`، `getProtocol`)، شناسه‌ها (`getName`، `getUniqueId`، `getXuid`)، وضعیت شبکه (`getAddress`، `getPing`، `isConnected`، `getServerInfo`، `getDownstreamConnection`) و کنترل Resource Pack (`acceptResourcePacks`). هر بررسی Permission رویداد `PlayerPermissionCheckEvent` را اجرا می‌کند، پس پلاگین‌ها می‌توانند نتیجه را بازنویسی کنند.
+
+### درخواست اتصال به سبک Velocity (ConnectionRequest)
+
+به‌جای صدا زدن connect() و استنتاج نتیجه از Eventها، درخواست اتصال نتیجه‌ی واقعی را برمی‌گرداند:
+
+~~~java
+import dev.waterbucket.waterbucketpe.player.ConnectionRequest;
+import dev.waterbucket.waterbucketpe.player.ConnectionResult;
+import dev.waterbucket.waterbucketpe.player.ConnectionResultStatus;
+
+player.createConnectionRequest(getProxy().getServerInfo("minigames"))
+        .connectWithIndication()
+        .thenAccept((ConnectionResult result) -> {
+            switch (result.getStatus()) {
+                case SUCCESS -> { /* اتصال به سرور هدف برقرار شد */ }
+                case ALREADY_CONNECTED -> { }
+                case CONNECTION_IN_PROGRESS -> { }
+                case CONNECTION_CANCELLED -> { /* پلاگین دیگری رویداد Transfer را لغو کرده */ }
+                case CONNECTION_FAILED -> {
+                    String detail = result.getMessage();  // خطای dial، اعلان Timeout و ...
+                }
+            }
+        });
+
+// بدون مدیریت نتیجه:
+player.createConnectionRequest(getProxy().getServerInfo("lobby1")).fireAndForget();
+~~~
+
+قرارداد:
+
+- Future همیشه به‌صورت عادی با یک ConnectionResult تمام می‌شود؛ شکست‌ها Status هستند، نه Exception؛ حداکثر ظرف ConnectionRequest.REQUEST_TIMEOUT_SECONDS (۹۰ ثانیه).
+- SUCCESS یعنی پروکسی اتصال Downstream را پذیرفته است (Handshake کامل شده). شکست‌های بعدی سرور همچنان از طریق Eventهای Transfer و Fallback معمول گزارش می‌شوند؛ نتیجه‌ی درخواست فقط همان dial درخواستی را پوشش می‌دهد.
+- دقیقاً یک Status برنده می‌شود: درخواست دوم برای همان هدف هنگام در جریان بودن dial اول فوراً با CONNECTION_IN_PROGRESS تمام می‌شود؛ پس درخواست‌ها عملاً برای هر بازیکن سریالی هستند.
+- Future Thread فراخوان را مسدود نمی‌کند مگر اینکه خودتان .join() بزنید؛ ماشین درخواست چیزی روی مسیر داغ Packet لمس نمی‌کند.
+- ALREADY_CONNECTED و CONNECTION_IN_PROGRESS همان شرایطی را بازتاب می‌دهند که connect() خود پروکسی بررسی می‌کند؛ پس Status با کاری که پروکسی واقعاً کرده مطابقت دارد.
 
 ### سرورها
 
@@ -708,6 +838,7 @@ Secretها را در لاگ قرار ندهید و Token یا رمز عبور ر
 - نتیجه java.type را Cache کنید و در هر Event دوباره کلاس را Resolve نکنید.
 - Task تکرارشونده و Collection بدون محدودیت نسازید.
 - ایجاد Runtime و Context پایتون هزینه حافظه و Startup دارد؛ قابلیت Python هنگام نصب پلاگین Python رایگان نیست.
+- Executorهای داخلی پروکسی (زمان‌بند و Event) اکنون Pool محدود با Thread مقیم ثابت هستند؛ Thread اضافی برای هر Burst ساخته نمی‌شود، پس مصرف RAM و CPU ثابت و صاف می‌ماند. Taskهای خودتان را هم با الگوی همین API بسازید و از ساخت Thread آزاد خودداری کنید.
 
 ### محدودیت‌های فعلی چرخه عمر
 

@@ -23,6 +23,7 @@ import dev.waterbucket.waterbucketpe.command.DefaultCommandMap;
 import dev.waterbucket.waterbucketpe.command.SimpleCommandMap;
 import dev.waterbucket.waterbucketpe.command.utils.CommandUtils;
 import dev.waterbucket.waterbucketpe.console.TerminalConsole;
+import dev.waterbucket.waterbucketpe.event.Event;
 import dev.waterbucket.waterbucketpe.event.EventManager;
 import dev.waterbucket.waterbucketpe.event.defaults.DispatchCommandEvent;
 import dev.waterbucket.waterbucketpe.event.defaults.NetworkRegisterEvent;
@@ -79,6 +80,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -684,6 +686,24 @@ public class ProxyServer {
 
     public Map<UUID, ProxiedPlayer> getPlayers() {
         return this.playerManager.getPlayers();
+    }
+
+    /**
+     * Velocity-style view of every online player. Equivalent to
+     * {@code getPlayers().values()} - the live collection backing the registry, kept
+     * up-to-date by the manager.
+     */
+    public Collection<ProxiedPlayer> getAllPlayers() {
+        return this.playerManager.getPlayers().values();
+    }
+
+    /**
+     * Velocity-style alias for {@link EventManager#callEvent(Event)}: fires the event through
+     * the subscriber pipeline and returns the pipeline future for async events. Semantics,
+     * priorities and the async-completion contract are identical to callEvent.
+     */
+    public <T extends Event> CompletableFuture<T> fire(T event) {
+        return this.getEventManager().callEvent(event);
     }
 
     /**

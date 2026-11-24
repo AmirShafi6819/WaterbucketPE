@@ -70,6 +70,8 @@ class PluginLifecycleTest {
         // Plugin.setEnabled(false) hands its scheduled tasks to the scheduler; the mock keeps
         // the lifecycle path NPE-free (cancelTasks itself is covered by SchedulerPluginTasksTest)
         when(this.proxy.getScheduler()).thenReturn(mock(WaterbucketScheduler.class));
+        // setEnabled(false) now also detaches @Subscribe listeners through the event manager
+        when(this.proxy.getEventManager()).thenReturn(mock(dev.waterbucket.waterbucketpe.event.EventManager.class));
         // Scans the (empty) plugin folder; no plugins discovered
         this.manager = new PluginManager(this.proxy);
     }

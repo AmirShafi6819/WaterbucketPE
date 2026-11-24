@@ -92,6 +92,39 @@ The plugin name becomes the data-directory name and the manager key, so it is re
 
 Dependencies are hard dependencies. A missing dependency prevents the dependent plugin from enabling. Circular dependency chains (of any length) are detected and rejected without crashing the proxy. Use the exact registered plugin name in depends. There is no documented soft-dependency mechanism.
 
+### Velocity-style alternative: the @PluginDescriptor annotation
+
+A Java plugin jar may declare its descriptor directly on the main class instead of shipping a YAML file. This matches the Velocity workflow: the annotated class IS the main class.
+
+~~~java
+import dev.waterbucket.waterbucketpe.plugin.Plugin;
+import dev.waterbucket.waterbucketpe.plugin.annotation.PluginDescriptor;
+
+@PluginDescriptor(
+        id = "greeter",              // required, unique identity (data-folder name, depends target)
+        name = "Greeter",            // optional display name, defaults to the id
+        version = "1.0.0",
+        authors = {"YourName"},
+        description = "Says hello",
+        dependencies = {"AnotherPlugin"}   // optional, same hard-dependency semantics as YAML
+)
+public class GreeterPlugin extends Plugin {
+    @Override
+    public void onEnable() {
+        getProxy().getLogger().info("Hello from " + getName());
+    }
+}
+~~~
+
+Rules, identical in spirit to the YAML parser:
+
+- id is required and follows the plugin-name rules (letters, digits, spaces, dots, dashes, underscores). It becomes the data-directory name and the depends lookup target.
+- If the jar also contains waterbucket.yml or plugin.yml, the YAML wins and the annotation is ignored - updating an existing plugin can not change behavior by accident.
+- Exactly one annotated class per jar is expected; extra annotated classes are reported and skipped.
+- The scan reads metadata only: plugin static initializers never run while the descriptor is being read.
+
+Python plugins are unaffected: they keep using waterbucket.yml.
+
 ## 4. Java plugin quick start
 
 Create a class extending:
@@ -289,6 +322,37 @@ getProxy().getEventManager().subscribe(
 ~~~
 
 Priorities are **LOWEST**, **LOW**, **NORMAL**, **HIGH** and **HIGHEST**, in that order. If no priority is specified, NORMAL is used.
+
+### Java annotation listeners (@Subscribe)
+
+The declaration-style alternative to the functional API above, familiar from Velocity: annotate public methods on any listener object and register the whole object at once.
+
+~~~java
+import dev.waterbucket.waterbucketpe.event.Subscribe;
+import dev.waterbucket.waterbucketpe.event.defaults.PlayerLoginEvent;
+
+public class LoginListener {
+
+    @Subscribe(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onLogin(PlayerLoginEvent event) {
+        event.getPlayer().sendMessage("Welcome!");
+    }
+}
+
+// register (in onEnable):
+getProxy().getEventManager().registerListener(this, new LoginListener());
+~~~
+
+Rules and guarantees:
+
+- Valid listener methods are public, non-static and take exactly one parameter whose type is Event or a subclass of it. Wrong signatures are skipped with a warning naming the method.
+- priority uses the same LOWEST..HIGHEST ordering as the functional API; ignoreCancelled = true skips the method when the event is already cancelled (CancellableEvent only).
+- A handler that throws is isolated exactly like a functional handler: logged, skipped, pipeline continues.
+- Listeners registered with a Plugin owner are detached automatically when the plugin disables (even when onDisable threw). Manual per-instance removal: unregisterListener(listenerObject); owner-wide: unregisterListeners(this).
+- Registering the same listener object twice without unregistering in between throws IllegalArgumentException - double delivery is almost never intended.
+- Functional and annotation subscriptions can be mixed freely; both see every event.
+
+Python plugins keep the subscribe() facade described below; the annotation API is Java-only (annotations are a Java language feature).
 
 ### Python subscription
 
@@ -514,6 +578,37 @@ Python helper methods schedule their work asynchronously. Their current signatur
 
 Do not use synchronous tasks for blocking I/O or long-running calculations.
 
+### Time-based scheduling (Velocity-style TaskBuilder)
+
+For schedules expressed in real time instead of ticks, use the fluent builder. These tasks run on a dedicated time-scheduler pool, so their cadence is independent of the tick loop:
+
+~~~java
+var scheduler = getProxy().getScheduler();
+
+// One-shot after 10 seconds
+scheduler.buildTask(this, () -> announceEvent())
+        .delay(10, TimeUnit.SECONDS)
+        .schedule();
+
+// Every 500 milliseconds, first run after 2 seconds, auto-cancelled on plugin disable
+ScheduledTask task = scheduler.buildTask(this, () -> pingDownstreams())
+        .delay(2, TimeUnit.SECONDS)
+        .repeat(500, TimeUnit.MILLISECONDS)
+        .schedule();
+
+// Stop it any time:
+task.cancel();
+~~~
+
+Semantics:
+
+- repeat = 0 (the default) makes the task one-shot after the delay; repeat > 0 uses fixed-delay semantics - the next repetition starts a full period after the previous one finished, so a slow task backs up instead of overlapping itself.
+- Negative delay/repeat and null time units throw IllegalArgumentException at the builder call; schedule() then registers the task.
+- Tasks built with a Plugin owner join the same auto-cancel contract as tick tasks: cancelling the plugin cancels them, and scheduler.cancelTasks(this) works across both APIs.
+- Exceptions thrown by the task are logged with the task id and owner name; the schedule survives. A repeating task never dies silently.
+- The tasks always run on the time-scheduler pool, never on Netty event loops or the tick thread - use thread-safe proxy APIs inside them.
+- The ProxyServer-side aliases: proxy.fire(event) is callEvent(event), and proxy.getAllPlayers() is getPlayers().values().
+
 ## 10. Working with the proxy
 
 `getProxy()` returns the ProxyServer singleton (`ProxyServer.getInstance()` works too). This is the entry point to every manager and to the player/server registry.
@@ -529,6 +624,41 @@ java.util.Map<java.util.UUID, ProxiedPlayer> online = getProxy().getPlayers();
 ~~~
 
 ProxiedPlayer exposes, among others: `connect(ServerInfo)`, `sendMessage(String|TextContainer)`, `sendTranslation(...)`, `chat(String)`, `sendPopup`, `sendTip`, `sendTitle`, `sendToastMessage`, `disconnect(reason)`, `sendToFallback(...)`, `kick`, permission methods (`addPermission`, `hasPermission`, `removePermission`), device/protocol info (`getDevicePlatform`, `getDeviceModel`, `getDeviceId`, `getProtocol`), identity (`getName`, `getUniqueId`, `getXuid`), network state (`getAddress`, `getPing`, `isConnected`, `getServerInfo`, `getDownstreamConnection`) and resource-pack controls (`acceptResourcePacks`). Permission checks fire `PlayerPermissionCheckEvent`, so plugins can override the result.
+
+### Connection requests (Velocity-style)
+
+Instead of calling connect() and inferring the outcome from events, a connection request returns the actual result:
+
+~~~java
+import dev.waterbucket.waterbucketpe.player.ConnectionRequest;
+import dev.waterbucket.waterbucketpe.player.ConnectionResult;
+import dev.waterbucket.waterbucketpe.player.ConnectionResultStatus;
+
+player.createConnectionRequest(getProxy().getServerInfo("minigames"))
+        .connectWithIndication()
+        .thenAccept((ConnectionResult result) -> {
+            switch (result.getStatus()) {
+                case SUCCESS -> { /* the player is now connecting to / on the target */ }
+                case ALREADY_CONNECTED -> { }
+                case CONNECTION_IN_PROGRESS -> { }
+                case CONNECTION_CANCELLED -> { /* another plugin cancelled a transfer event */ }
+                case CONNECTION_FAILED -> {
+                    String detail = result.getMessage();  // dial error, timeout notice, ...
+                }
+            }
+        });
+
+// Or without the result handling:
+player.createConnectionRequest(getProxy().getServerInfo("lobby1")).fireAndForget();
+~~~
+
+Contract:
+
+- The future always completes **normally** with a ConnectionResult - failures are statuses, never exceptions - at the latest after ConnectionRequest.REQUEST_TIMEOUT_SECONDS (90s).
+- SUCCESS means the proxy accepted the downstream connection (handshake complete). Later downstream failures still surface through the transfer events and the normal fallback handling; the request result only covers the requested dial.
+- Exactly one status wins: a second request for the same target while one is dialing settles immediately with CONNECTION_IN_PROGRESS, so requests are effectively serialized per player.
+- The result never blocks the calling thread unless you call .join() yourself; the request machinery touches nothing on the packet hot path.
+- ALREADY_CONNECTED and CONNECTION_IN_PROGRESS reflect the same conditions the proxy's own connect() checks, so the status matches what the proxy actually did.
 
 ### Servers
 
@@ -708,6 +838,7 @@ Do not expose secrets in logs or commit API tokens/passwords to plugin folders. 
 - Cache Java class references (java.type results) rather than resolving them repeatedly.
 - Avoid unbounded repeating tasks and unbounded in-memory collections.
 - Remember that adding a Python runtime/context has memory and startup costs. The interpreter is not a zero-cost feature when Python plugins are installed.
+- The proxy's internal executors (scheduler and event dispatch) use fixed-resident bounded pools: no extra thread spawns per burst, so RAM and CPU stay flat instead of bouncing. Follow the same pattern in your plugin; do not create your own unbounded thread production.
 
 ### Lifecycle limitations to account for
 

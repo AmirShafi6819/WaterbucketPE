@@ -62,7 +62,8 @@ while true; do
         -Xms"$HEAP" -Xmx"$HEAP" \
         -XX:+UseG1GC \
         -XX:+UnlockExperimentalVMOptions \
-        -XX:MaxGCPauseMillis=200 \
+        -XX:MaxGCPauseMillis=120 \
+        -XX:InitiatingHeapOccupancyPercent=35 \
         -XX:G1NewSizePercent=30 \
         -XX:G1MaxNewSizePercent=40 \
         -XX:G1ReservePercent=20 \

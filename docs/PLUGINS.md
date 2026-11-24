@@ -9,6 +9,8 @@ Choose your language:
 
 Both guides describe the implementation in the current source tree. They intentionally distinguish implemented APIs from features that are not currently provided (such as plugin hot reload and Python task handles).
 
+The Java plugin API covers the full WaterdogPE surface (functional events, commands, tick scheduling, player/server management, runtime max players) plus the Velocity-style additions: `@PluginDescriptor` jar declaration, `@Subscribe` annotation listeners, the fluent `TaskBuilder` time scheduler, and `ConnectionRequest` with a real result future. See sections 3, 7, 9 and 10 of the guides.
+
 ## Runnable examples
 
 - [Python example plugin](../examples/plugins/python-example/)

@@ -15,6 +15,7 @@
 
 package dev.waterbucket.waterbucketpe.plugin;
 
+import dev.waterbucket.waterbucketpe.plugin.annotation.PluginDescriptor;
 import lombok.extern.log4j.Log4j2;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -23,7 +24,12 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 import java.io.File;
 import java.io.InputStream;
 import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import java.util.jar.JarEntry;
@@ -99,7 +105,9 @@ public class PluginLoader {
             }
 
             if (configEntry == null) {
-                log.warn("Jar file {} doesnt contain a waterbucket.yml or plugin.yml!", file.getName());
+                // Not an error by itself: the caller falls back to the @PluginDescriptor
+                // annotation scan before deciding the jar is unloadable.
+                log.debug("Jar file {} doesnt contain a waterbucket.yml or plugin.yml", file.getName());
                 return null;
             }
 
@@ -196,5 +204,121 @@ public class PluginLoader {
             depends.add(parsed);
         }
         return depends;
+    }
+
+    /**
+     * Constant pool of a class that actually uses {@link PluginDescriptor} contains the
+     * annotation's binary name; a cheap byte scan over the class file filters candidates so
+     * only jars that mention the annotation ever pay for class loading during the boot scan.
+     */
+    private static final byte[] DESCRIPTOR_MARKER =
+            "dev/waterbucket/waterbucketpe/plugin/annotation/PluginDescriptor".getBytes(StandardCharsets.US_ASCII);
+
+    static boolean containsDescriptorMarker(byte[] data) {
+        if (data == null || data.length < DESCRIPTOR_MARKER.length) {
+            return false;
+        }
+        outer:
+        for (int i = 0; i <= data.length - DESCRIPTOR_MARKER.length; i++) {
+            for (int j = 0; j < DESCRIPTOR_MARKER.length; j++) {
+                if (data[i + j] != DESCRIPTOR_MARKER[j]) {
+                    continue outer;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Velocity-style descriptor fallback: when a jar carries no YAML descriptor, look for a
+     * class annotated with {@link PluginDescriptor} and build the descriptor from it.
+     * <p>
+     * Safety contract, same spirit as the YAML parser: the scan runs for every jar before any
+     * plugin code executes, so candidate classes are loaded with {@code initialize=false} -
+     * no plugin static initializer runs while merely reading metadata - and the scanning
+     * class loader is a throwaway parent-delegating loader closed right after the scan.
+     *
+     * @return the descriptor built from the first valid annotated class, or null when the jar
+     * declares none
+     */
+    public PluginYAML findAnnotatedDescriptor(File pluginJar) {
+        try (JarFile jar = new JarFile(pluginJar)) {
+            List<String> candidates = new ArrayList<>();
+            Enumeration<JarEntry> entries = jar.entries();
+            while (entries.hasMoreElements()) {
+                JarEntry entry = entries.nextElement();
+                String entryName = entry.getName();
+                if (entry.isDirectory() || !entryName.endsWith(".class")) {
+                    continue;
+                }
+                if (containsDescriptorMarker(jar.getInputStream(entry).readAllBytes())) {
+                    candidates.add(entryName);
+                }
+            }
+            if (candidates.isEmpty()) {
+                return null;
+            }
+
+            try (URLClassLoader scanner = new URLClassLoader(new URL[]{pluginJar.toURI().toURL()},
+                    PluginLoader.class.getClassLoader())) {
+                PluginYAML found = null;
+                for (String entryName : candidates) {
+                    String className = entryName.substring(0, entryName.length() - ".class".length()).replace('/', '.');
+                    Class<?> clazz;
+                    try {
+                        clazz = Class.forName(className, false, scanner);
+                    } catch (Throwable t) {
+                        // ClassNotFoundException for nested/duplicate-marker classes and
+                        // LinkageError for exotic class files: both are just "not the plugin
+                        // main class", so scan continues instead of failing the jar.
+                        log.debug("Skipping descriptor candidate {} in {}: {}", entryName, pluginJar.getName(), t.toString());
+                        continue;
+                    }
+                    PluginDescriptor annotation = clazz.getAnnotation(PluginDescriptor.class);
+                    if (annotation == null) {
+                        // Mentions the annotation without using it (imported elsewhere).
+                        continue;
+                    }
+                    PluginYAML config = descriptorFromAnnotation(annotation, className, pluginJar.getName());
+                    if (config == null) {
+                        continue;
+                    }
+                    if (found != null) {
+                        log.warn("Jar {} declares more than one @PluginDescriptor class; using {} and ignoring {}",
+                                pluginJar.getName(), found.getMain(), className);
+                        break;
+                    }
+                    found = config;
+                }
+                return found;
+            }
+        } catch (Exception e) {
+            log.warn("Cannot scan {} for an @PluginDescriptor annotated plugin class", pluginJar.getPath(), e);
+            return null;
+        }
+    }
+
+    private static PluginYAML descriptorFromAnnotation(PluginDescriptor annotation, String className, String source) {
+        String id = annotation.id();
+        if (id == null || id.isBlank()) {
+            log.warn("@PluginDescriptor of {} declares a blank id - ignoring", source);
+            return null;
+        }
+        String name = annotation.name() == null || annotation.name().isBlank() ? id : annotation.name();
+        if (!isValidPluginName(name)) {
+            log.warn("Invalid plugin id '{}' from @PluginDescriptor of {}: names may only contain letters, digits, spaces, dots, dashes and underscores",
+                    name, source);
+            return null;
+        }
+        PluginYAML config = new PluginYAML();
+        config.name = name;
+        config.version = annotation.version() == null || annotation.version().isBlank() ? "1.0.0" : annotation.version();
+        config.author = annotation.authors() == null || annotation.authors().length == 0 ? null : String.join(", ", annotation.authors());
+        config.description = annotation.description() == null || annotation.description().isBlank() ? null : annotation.description();
+        config.depends = annotation.dependencies() == null || annotation.dependencies().length == 0
+                ? null : new ArrayList<>(List.of(annotation.dependencies()));
+        config.main = className;
+        return config;
     }
 }

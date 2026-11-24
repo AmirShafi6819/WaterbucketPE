@@ -74,6 +74,57 @@ The plugin module was audited against the upstream WaterdogPE plugin documentati
   player (and localhost testing) for 15s stretches. Transport-level IO errors no longer
   block IPs and log at debug instead of error with a stack trace.
 
+### Added — Velocity-style plugin API completion & memory stability (2026-11-24, shipped in the same release)
+
+Second plugin-API round, this time completing the surface with the Velocity features
+operators actually ask for, plus a targeted pass at the RAM/CPU sawtooth. The suite grew
+from 62 suites / 364 tests to **67 suites / 398 tests, all green**.
+
+- **`@PluginDescriptor` annotation** — a jar can now declare its plugin descriptor directly
+  on the main class (Velocity workflow) instead of shipping `waterbucket.yml`. The id is
+  required and follows the same name rules; YAML wins when both exist, so updating an
+  existing plugin can not change behavior by accident. The boot scan pre-filters jars by a
+  constant-pool marker scan and reads candidate classes with `initialize=false`, so plugin
+  static initializers never run while merely reading metadata.
+- **`@Subscribe` annotation listeners** — declaration-style event registration: public
+  methods with one `Event` parameter, `priority()` following the LOWEST..HIGHEST ordering and
+  `ignoreCancelled()` for the Velocity contract that cancelled events do not reach
+  uninterested handlers. `registerListener(plugin, listener)` / `unregisterListener(listener)`
+  / `unregisterListeners(plugin)`; listeners registered with an owner are detached
+  automatically when the plugin disables (even when onDisable threw), mirroring the
+  plugin-owned task contract. Wrong signatures are skipped with a warning naming the method;
+  handler exceptions stay isolated exactly like the functional API.
+- **Velocity-style `TaskBuilder` time scheduler** — `scheduler.buildTask(plugin, runnable)
+  .delay(2, TimeUnit.SECONDS).repeat(500, TimeUnit.MILLISECONDS).schedule()` returns a
+  `ScheduledTask` handle and runs on a dedicated fixed time-scheduler pool, independent of
+  the tick loop. Repeating tasks use fixed-delay semantics (a slow task backs up instead of
+  overlapping itself), exceptions are logged with task id + owner and never kill the
+  schedule, cancelled one-shots are purged from the queue, and plugin-owned time tasks join
+  the same auto-cancel-on-disable contract as tick tasks.
+- **Velocity-style `ConnectionRequest`** — `player.createConnectionRequest(server)
+  .connectWithIndication()` completes with the real outcome (`SUCCESS`, `ALREADY_CONNECTED`,
+  `CONNECTION_IN_PROGRESS`, `CONNECTION_CANCELLED`, `CONNECTION_FAILED`) instead of forcing
+  plugins to infer it from events; `fireAndForget()` for the rest. The future always
+  completes normally (failures are statuses, never exceptions), at the latest after 90s —
+  safely above the proxy's 60s StartGame timeout. Synchronous outcomes of `connect()`
+  (already connected, transfer cancelled, in flight) are reported per request through a
+  per-player observer slot, and player disconnect settles every pending request as
+  cancelled, so nothing leaks.
+- **ProxyServer aliases** — `fire(event)` (= `callEvent`) and `getAllPlayers()`
+  (= `getPlayers().values()`) for Velocity-familiar call sites.
+- **Flat RAM/CPU: bounded executors** — the scheduler and event-manager pools were
+  `ThreadPoolExecutor(core, Integer.MAX_VALUE, SynchronousQueue)`: every burst spawned fresh
+  threads that died 60s later, so RAM and CPU bounced up and down on join bursts and query
+  storms. Both now use a fixed resident core with a large bounded queue (8192) and a small
+  elastic head-room (2x core) — no per-task thread churn, flat idle memory, and a loud error
+  (not a silent drop, not a caller-thread stall) if the queue ever saturates.
+- **Smoother GC curve** — the start scripts now ask G1 for 120ms pause targets (was 200ms)
+  and start concurrent cycles earlier (`InitiatingHeapOccupancyPercent=35`), which lowers the
+  heap peaks the panel charts draw: smaller cycles, more of them, a flatter line.
+- **Docs in lockstep** — the plugin guide (EN + FA) gained the `@PluginDescriptor`,
+  `@Subscribe`, TaskBuilder and ConnectionRequest chapters plus a memory-stability note;
+  the Java example plugin demonstrates the new APIs.
+
 ### Changed
 - **Console rebrand** — new Water Bucket banner, default commands renamed `wd*` → `wb*`
   (old names stay as hidden aliases), branded interactive prompt (the library hardcoded
