@@ -64,6 +64,42 @@ public class ProxyConfigTest {
         assertTrue(Files.readString(file.toPath()).contains("\nconfig_version: " + ConfigMigrations.CURRENT + "\n"));
     }
 
+    @Test
+    public void shippedOnForwardingSwitchIsResetOnce() throws Exception {
+        // 1.5.6 and 1.6.0 shipped forward_client_ip on and wrote it true into every config they
+        // generated; strict server software such as PocketMine-MP rejects the forwarded login
+        // fields as a bad packet, so the migration resets the value once with a warning.
+        File file = newFile();
+        ProxyConfig config = migrate(file, """
+                # Waterbucket Main Configuration file
+                forward_client_ip: true
+                config_version: 3
+                """);
+
+        assertFalse(config.forwardClientIp());
+        assertTrue(Files.readString(file.toPath()).contains("\nforward_client_ip: false\n"));
+    }
+
+    @Test
+    public void reEnablingForwardingOnTheCurrentLayoutKeepsTheChoice() throws Exception {
+        // The reset happens only while upgrading: once the file is on the current layout, an
+        // operator setting forward_client_ip: true again for claim-aware backends (Nukkit-MOT,
+        // Geyser, login-extras plugins) keeps that choice.
+        File file = newFile();
+        migrate(file, """
+                # Waterbucket Main Configuration file
+                forward_client_ip: true
+                config_version: 3
+                """);
+        Files.writeString(file.toPath(),
+                Files.readString(file.toPath()).replace("\nforward_client_ip: false\n", "\nforward_client_ip: true\n"));
+
+        ProxyConfig reloaded = new ProxyConfig(file);
+        reloaded.init();
+
+        assertTrue(reloaded.forwardClientIp());
+    }
+
     /**
      * Loads a file of an older layout, then checks that running the migration again on the result
      * leaves it as it is.

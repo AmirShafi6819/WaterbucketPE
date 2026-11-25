@@ -17,6 +17,7 @@ package dev.waterbucket.waterbucketpe.network.protocol;
 
 import com.google.gson.JsonObject;
 import dev.waterbucket.waterbucketpe.network.protocol.user.HandshakeUtils;
+import dev.waterbucket.waterbucketpe.utils.config.proxy.ConfigMigrations;
 import dev.waterbucket.waterbucketpe.utils.config.proxy.ProxyConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -53,10 +54,19 @@ public class ForwardedClientIpTest {
     }
 
     @Test
-    public void forwardingIsOnForConfigsThatPredateTheKey() throws Exception {
-        // An existing config.yml has no forward_client_ip line; the field default must win,
-        // otherwise upgraded deployments keep showing 127.0.0.1 on downstream servers.
-        assertTrue(config("").forwardClientIp());
+    public void forwardingIsOffForConfigsThatPredateTheKey() throws Exception {
+        // A config.yml without forward_client_ip (fresh or upgraded from an older release) gets
+        // the field default: off. The forwarded fields are extra keys in the client data object,
+        // and strict server software such as PocketMine-MP rejects unknown keys as a bad packet,
+        // so a default-on switch must never come back.
+        assertFalse(config("").forwardClientIp());
+    }
+
+    @Test
+    public void forwardingCanBeTurnedOnExplicitly() throws Exception {
+        // On the current layout an operator's explicit switch binds as-is; only the upgrade
+        // step resets the shipped-on 1.5.x/1.6.0 value, so the file carries its version.
+        assertTrue(config("config_version: " + ConfigMigrations.CURRENT + "\nforward_client_ip: true\n").forwardClientIp());
     }
 
     @Test

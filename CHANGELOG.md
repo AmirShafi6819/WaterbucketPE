@@ -3,6 +3,20 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
+## [1.6.1] - 2026-11-26
+
+### Fixed
+
+- **Logins to PocketMine-MP backends**: `forward_client_ip` shipped on by default in 1.5.6 and
+  1.6.0, and the forwarded fields (Waterdog_IP, Waterbucket_IP, Waterbucket_Port) are extra keys
+  in the client data object of the login packet. Strict server software - PocketMine-MP and its
+  forks - rejects unknown keys with `JSON property "Waterdog_IP" does not exist in object of type
+  ...ClientData` and drops the login as a bad packet, so every install pointed at such a backend
+  could not accept logins at all. The switch is now off by default, and a config upgrade step
+  resets a carried-over `true` once with a warning that names the way back: set
+  `forward_client_ip: true` for claim-aware backends (Nukkit-MOT, Geyser, or a login-extras
+  plugin); `use_login_extras` still implies forwarding.
+
 ## [1.6.0] - 2026-11-26
 
 ### Added — World View (the proxy sees the real worlds)

@@ -31,21 +31,27 @@ import java.util.function.Consumer;
  * A step is needed when a pushed layout renames, moves or removes an option. Adding an option needs
  * none, since the loader writes new options back by itself and an older proxy still reads the file.
  * Changed defaults are left alone, as the file holds every option and an old default cannot be told
- * apart from a choice.
+ * apart from a choice. Step 4 breaks that rule once on purpose: the shipped-on forwarding default
+ * rejected logins on strict server software outright, which is worse than resetting a value that
+ * could not have been relied on unless it was set deliberately - the warning log names the way back.
  * <p>
  * Note {@link ConfigSection#get} and {@link ConfigSection#set} create every section on the way, so a
  * path is checked with {@link ConfigSection#has} first.
  */
 @Log4j2
-final class ConfigMigrations {
+public final class ConfigMigrations {
 
     private static final List<Consumer<ConfigSection>> STEPS = List.of(
             ConfigMigrations::netherNetLayout,
             ConfigMigrations::proxyProtocolWhitelist,
-            ConfigMigrations::proxyProtocolSwitch
+            ConfigMigrations::proxyProtocolSwitch,
+            ConfigMigrations::forwardingClaimOptIn
     );
 
-    static final int CURRENT = STEPS.size();
+    /**
+     * The layout version this build reads and writes, kept in config_version.
+     */
+    public static final int CURRENT = STEPS.size();
 
     private ConfigMigrations() {
     }
@@ -148,6 +154,25 @@ final class ConfigMigrations {
                     + "this update filled from network_settings.proxy_protocol_whitelisted_ips: forward webrtc_port "
                     + "through them with PROXY v2 headers and name them in nethernet.signaling.advertise_addresses, or "
                     + "empty it if players reach webrtc_port directly");
+        }
+    }
+
+    /**
+     * Step 4: forward_client_ip becomes opt-in. 1.5.6 and 1.6.0 shipped it on and wrote
+     * {@code forward_client_ip: true} into every config they generated, but the forwarded fields
+     * are extra keys in the client data object, and strict server software - PocketMine-MP and
+     * its forks - rejects unknown keys as a bad packet on the LoginPacket, which broke every
+     * login to such a server. A carried-over true is reset once, with a warning that names the
+     * way back for claim-aware backends.
+     */
+    private static void forwardingClaimOptIn(ConfigSection root) {
+        String switchPath = "forward_client_ip";
+        if (root.has(switchPath) && isTrue(root, switchPath)) {
+            root.set(switchPath, false);
+            log.warn("forward_client_ip is now off by default and its value was reset: the forwarded login fields are "
+                    + "unknown keys to strict server software such as PocketMine-MP, which rejected them as a bad packet "
+                    + "and dropped the login. If your downstream servers read the forwarding fields (Nukkit-MOT, Geyser, "
+                    + "or a login-extras plugin), set forward_client_ip: true again; use_login_extras keeps implying it");
         }
     }
 
