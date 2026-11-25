@@ -1,5 +1,6 @@
 name: ExamplePython
 version: 1.0.0
+api-version: "1.6.0"
 author: WaterbucketPE
 main: main.py
 depends: []

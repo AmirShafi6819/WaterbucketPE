@@ -1,5 +1,6 @@
 name: ExamplePHP
 version: 1.0.0
+api-version: "1.6.0"
 author: WaterbucketPE
 description: PHP plugin example for WaterbucketPE (Quercus runtime)
 main: main.php

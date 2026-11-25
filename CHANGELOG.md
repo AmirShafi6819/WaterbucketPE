@@ -3,7 +3,63 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.6.0] - 2026-11-26
+
+### Added — World View (the proxy sees the real worlds)
+
+- **`world_view` config section**: the proxy learns the worlds of every downstream server
+  from the packets the clients receive - chunks with real block data, block entities,
+  entities, players, inventories, world identity (name, seed, spawn), time, difficulty,
+  game rules and weather. Nothing is guessed: the model is exactly what the clients were
+  shown, kept live with a retention janitor and an LRU cap.
+- **Go runtime sidecar**: the world model and the plugin loader run in compiled Go,
+  embedded in the release jar and spawned at boot (Unix domain socket bridge, TCP loopback
+  fallback). The sidecar auto-restarts with a budget; losing it only disables world
+  queries, never the proxy network.
+
+### Added — Go plugin loader
+
+- **Plugins in Go** load from `plugins-go/` as plain source folders (`plugin.yml` +
+  `main.go`) interpreted by the sidecar - no Go toolchain needed by users. The compiled
+  `pluginapi` surface covers worlds, chunks, blocks, block entities, entities, players,
+  inventories and 43 event types with real cancel semantics; observation events stay
+  non-cancellable because the proxy cannot undo what a downstream server already decided.
+- **Example Go plugins** ship in `examples/plugins/go/` and load through the real host in
+  tests; the end-to-end test drives the actual sidecar from a real chunk blob to a plugin
+  cancel verdict.
+
+### Added — compat world events and the world API (every language)
+
+- **43 new compatibility events** across world (init/unload, chunks, time, weather,
+  difficulty, game rules, spawn position), block (break, place, start break, update, sign
+  change), entity (spawn, despawn, move, motion, effect, health change, damage, health
+  regain, data update, teleport), player (interact, item held, drop item, toggles,
+  animation, death, respawn, gamemode, dimension change, form respond, entity interact,
+  mouse over, bed enter/leave) and inventory (open, close, update, craft, transaction).
+- **Real cancellation**: cancelling an action event drops the client packet - the break,
+  place, sign edit, item drop, animation, form response or bed entry genuinely never
+  happens; a cancelled craft is answered with a proper stack-request rejection.
+- **Derived events carry real data**: damage and health regain come from actual health
+  attribute deltas; block updates resolve their old name from the live model.
+- **World queries**: `World`, `Chunk`, `Block`, `BlockEntity`, `Item`, `Inventory`,
+  `Entity` and `Player` views over the live model - block lookups, entity snapshots,
+  inventories, entities near, world meta - exposed through `compat.world()` for Python,
+  PHP and Go alike, with a short-TTL cache for hot block lookups.
+
+### Added — plugin api-version
+
+- **`api-version` gate in every loader** (Java jar + annotation, Python, PHP, Go):
+  `1.6.0` is this build's generation; `1.0.0` is the legacy wildcard that loads on every
+  generation; anything else is rejected before any plugin code runs with the exact reason
+  in the log. Missing declarations normalize to the legacy wildcard.
+
+### Performance
+
+- Chunk blobs stay packed in the model (lazy index unpacking per query), deltas ride a
+  bounded drop-on-full queue so the sidecar can never stall a Netty event loop, and
+  cancellable verdicts fail open after a bounded 8ms wait. The bridge speaks a compact
+  binary protocol pinned by golden-vector conformance tests on both sides.
+
 
 ### Added — Persian Fix (display-ready Persian text)
 

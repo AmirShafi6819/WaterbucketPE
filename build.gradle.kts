@@ -23,7 +23,7 @@ plugins {
 }
 
 group = "dev.waterbucket.waterbucketpe"
-version = "1.5.6"
+version = "1.6.0"
 description = "A fast and memory-efficient Minecraft: Bedrock Edition proxy, forked from the well-known WaterdogPE proxy"
 
 java {
@@ -107,6 +107,16 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+// The Go runtime sidecar binaries (built by build-go.sh) ship inside the jar
+// so the proxy is self-contained: boot extracts the platform binary and runs
+// it. Without the binaries the proxy still works - world queries answer
+// unloaded and only the Java-side events fire.
+tasks.processResources {
+    from(layout.projectDirectory.dir("build/go-runtime")) {
+        into("runtime/go")
+    }
 }
 
 gitProperties {

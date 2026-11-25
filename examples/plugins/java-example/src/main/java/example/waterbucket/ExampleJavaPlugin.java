@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
  * and declare itself with @PluginDescriptor on this class (Velocity style):
  *
  *   @PluginDescriptor(id = "example-java", name = "ExampleJava", version = "1.0.0",
- *                     authors = {"WaterbucketPE"}, dependencies = {})
+ *                     authors = {"WaterbucketPE"}, dependencies = {}, apiVersion = "1.6.0")
  */
 public final class ExampleJavaPlugin extends Plugin {
 

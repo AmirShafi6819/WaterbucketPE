@@ -1,4 +1,5 @@
 name: EconomyAPI
 version: 1.0.0
+api-version: "1.6.0"
 author: WaterbucketTEAM
 main: example.waterbucket.EconomyApiPlugin
