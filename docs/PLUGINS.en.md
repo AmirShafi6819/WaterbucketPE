@@ -93,12 +93,13 @@ depends: []
 |---|---:|---|
 | name | Yes | Plugin name used by the manager and dependency references |
 | main | Yes | Fully qualified Java class name, or a relative .py path for Python |
+| api-version | Recommended | Plugin API generation the plugin targets: `1.6.0` for this build, or `1.0.0` as the legacy wildcard that loads on every generation. A missing field counts as `1.0.0`; anything else is rejected at load with an error naming the supported versions |
 | version | Recommended | Display/version metadata |
 | author | Recommended | Display/author metadata |
 | description | Optional | Human-readable summary shown by `wbplugins verbose` |
 | depends | Optional | List of plugin names that must be enabled first |
 
-The descriptor model currently contains only these fields. Do not rely on Bukkit/Paper fields such as api-version, softdepend, load, permissions or website; they are not implemented by this descriptor.
+These are all the fields the descriptor reads. Do not rely on other Bukkit/Paper fields such as softdepend, load, permissions or website; they are not implemented by this descriptor.
 
 The plugin name becomes the data-directory name and the manager key, so it is restricted to letters, digits, spaces, dots, dashes and underscores (maximum 64 characters, no path separators). Descriptors with an invalid name are rejected at load.
 

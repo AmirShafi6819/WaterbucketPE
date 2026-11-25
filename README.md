@@ -158,7 +158,7 @@ start.bat
 
 Download the jar (and the start scripts + plugin examples) from the
 [Releases](https://github.com/AmirShafi6819/WaterbucketPE/releases) page, or build from source
-(below). The first start writes `configs/config.txt` (servers, priorities, compression,
+(below). The first start writes `config.yml` (servers, priorities, compression,
 panel), creates `ingame-messages.yml`, prints the web panel token location, and binds RakNet
 on port `19132`. Point your Bedrock clients at the proxy and register downstream servers
 under `servers:`.
@@ -240,7 +240,7 @@ Full walkthrough in the file's header comment.
 | `only_proxy_join.enable` / `proxy_port` | `false` / `19132` | block direct public access to downstream ports; the proxy port stays the only way in |
 | `restart.script_path` / `use_script` | *(auto)* / `true` | the relaunch script `/restart` uses; wrappers like systemd keep working with `false` |
 
-The full configuration lives in `configs/config.txt` with inline comments.
+The full configuration lives in `config.yml` with inline comments.
 
 ## Plugins
 
