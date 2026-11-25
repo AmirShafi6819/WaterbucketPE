@@ -19,6 +19,7 @@ import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.plugin.Plugin;
 import dev.waterbucket.waterbucketpe.plugin.PluginLoader;
 import dev.waterbucket.waterbucketpe.plugin.PluginYAML;
+import dev.waterbucket.waterbucketpe.plugin.pmmp.PmmpApi;
 import dev.waterbucket.waterbucketpe.scheduler.TaskHandler;
 import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.env.ArrayValue;
@@ -131,6 +132,9 @@ public class PhpPlugin extends Plugin {
             this.env.setGlobalValue("plugin", this.env.wrapJava(this));
             this.env.setGlobalValue("proxy", this.env.wrapJava(this.proxy));
             this.env.setGlobalValue("logger", this.env.wrapJava(this.getLogger()));
+            // The compatibility plugin surface: $pmmp->getServer(), ->playerJoinEvent(), ... like
+            // the Java package exposes them.
+            this.env.setGlobalValue("pmmp", this.env.wrapJava(new PmmpApi()));
 
             // Registry, then the plugin script itself, then the lifecycle scan - the scan must
             // run after the script so function_exists sees what the script defined.
@@ -319,13 +323,22 @@ public class PhpPlugin extends Plugin {
     private Class<? extends dev.waterbucket.waterbucketpe.event.Event> resolveEventClass(String name) {
         String candidate = name;
         if (name.indexOf('.') < 0) {
+            // Simple names resolve against the proxy's own events first, then the compatibility
+            // events, so scripts can subscribe with the short form in both worlds.
             candidate = "dev.waterbucket.waterbucketpe.event.defaults." + name;
         }
         Class<?> resolved = null;
         try {
             resolved = Class.forName(candidate);
         } catch (ClassNotFoundException ignored) {
-            // Fall through to the plugin class loader scan
+            // Fall through to the compatibility package and the plugin class loader scan
+        }
+        if (resolved == null && name.indexOf('.') < 0) {
+            try {
+                resolved = Class.forName("dev.waterbucket.waterbucketpe.plugin.pmmp.event." + name);
+            } catch (ClassNotFoundException ignored) {
+                // Fall through to the plugin class loader scan
+            }
         }
         if (resolved == null && this.proxy.getPluginManager() != null) {
             resolved = this.proxy.getPluginManager().getClassFromCache(name);

@@ -34,6 +34,33 @@ versioning follows [semantic versioning](https://semver.org/).
   packet re-encodes alone. 63 tests cover the engine vectors, the toggle matrix, the
   never-fix-twice guard, sign wrapping, form JSON and the hot path.
 
+### Added — compatibility plugin API for the original server software's plugins
+
+- **`pmmp` compatibility surface, native in the proxy** (`dev.waterbucket.waterbucketpe.plugin.pmmp`):
+  the plugin API of the well-known Bedrock server software is mirrored onto the proxy with its
+  own syntax - `Server`, `Player`, `Config`, `Scheduler`, plugin manager - every method backed
+  by a real proxy operation (player lookups, broadcasts, message/tip/popup/actionbar/title/
+  toast/forms, chat dispatch, kick with its own cancellable event, permissions, motd, command
+  dispatch, the scheduler). World-touching calls of the original software have no meaning on a
+  proxy and are not faked. The surface lives next to the proxy's own API; nothing existing
+  changed.
+- **Compatibility events raised on real proxy moments**: `PlayerLoginEvent` (cancelling
+  refuses the login), `PlayerJoinEvent` / `PlayerQuitEvent` (join and quit messages broadcast
+  like the original), `PlayerChatEvent` (cancel + edit flow back into the proxy pipeline
+  synchronously), `PlayerCommandPreprocessEvent` and `PlayerKickEvent` (fires on the compat
+  `kick()`, veto keeps the player online). Proxy-native handlers run first; compatibility
+  plugins see the same moment afterwards.
+- **All three plugin languages**: Java plugins import the package; Python and PHP plugins get
+  a `pmmp` global (`pmmp.getServer()`, `pmmp.playerChatEvent()`, `pmmp.newConfig(...)`) bound
+  next to `plugin`/`proxy`/`logger`, with snake_case aliases. PHP event names now resolve the
+  compatibility package by simple name too.
+- **Economy plugin rebuilt and tested end to end**: the classic economy plugin re-implemented
+  purely on the compatibility surface (Config persistence, join-event auto accounts,
+  `/money`, `/pay`, `/eco`) runs green against the proxy in the test suite, and ships as the
+  `examples/plugins/java-economy` example. 22 new tests cover the facades, the event bridge
+  (cancellation and edits included), the config utility, the scheduler, and the Python and
+  PHP runtimes using the same surface.
+
 ## [1.5.6] - 2026-11-25
 
 ### Added — Velocity-style duplicate login handling
