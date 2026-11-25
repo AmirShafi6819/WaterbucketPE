@@ -170,6 +170,15 @@ public class ProxyConfig extends YamlConfig {
     })
     private PersianFixSettings persianFixSettings = new PersianFixSettings();
 
+    @Path("world_view")
+    @Comments({
+            "World View: the proxy watches the real worlds of the downstream servers - chunks,",
+            "blocks, block entities, entities, players and inventories - through the embedded Go",
+            "runtime. Plugins read live world data and react to block, entity, world and",
+            "inventory events with real cancel semantics."
+    })
+    private WorldViewSettings worldViewSettings = new WorldViewSettings();
+
 
     @Path("permissions")
     @Comment("Case-Sensitive permission list for players (empty using {})")

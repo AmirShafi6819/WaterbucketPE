@@ -55,6 +55,7 @@ import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfoMap;
 import dev.waterbucket.waterbucketpe.packs.PackManager;
 import dev.waterbucket.waterbucketpe.panel.PanelServer;
 import dev.waterbucket.waterbucketpe.ping.PingPassthroughManager;
+import dev.waterbucket.waterbucketpe.network.goruntime.WorldViewManager;
 import dev.waterbucket.waterbucketpe.plugin.compat.CompatEventBridge;
 import dev.waterbucket.waterbucketpe.player.PlayerManager;
 import dev.waterbucket.waterbucketpe.onlyproxy.OnlyProxyJoinManager;
@@ -160,6 +161,8 @@ public class ProxyServer {
     private final PingPassthroughManager pingPassthroughManager;
     @Getter
     private final CommandRateLimiter commandRateLimiter;
+    @Getter
+    private WorldViewManager worldViewManager;
     @Getter
     private final ErrorReporting errorReporting;
     private PanelServer panelServer;
@@ -292,6 +295,10 @@ public class ProxyServer {
         // The compatibility plugin surface (events, Server/Player facades) before plugins load,
         // so every language sees it from the first lifecycle hook on.
         CompatEventBridge.register(this);
+
+        // World view: the Go runtime sidecar, world queries and the packet
+        // recorders. Boots before plugins so every language sees worlds.
+        this.worldViewManager = WorldViewManager.init(this);
 
         this.pluginManager.loadAllPlugins();
         this.configurationManager.loadServerInfos(this.serverInfoMap);
@@ -512,6 +519,9 @@ public class ProxyServer {
     }
 
     public void shutdown() {
+        if (this.worldViewManager != null) {
+            this.worldViewManager.shutdown();
+        }
         this.shutdown(0);
     }
 

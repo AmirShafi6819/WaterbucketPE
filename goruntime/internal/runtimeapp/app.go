@@ -61,6 +61,8 @@ type App struct {
 
 	// asyncEvents delivers observation events to a small worker pool.
 	asyncEvents chan pluginapi.Event
+	// syncEvents carries cancellable dispatches to the verdict pool.
+	syncEvents chan pendingEvent
 	// droppedEvents counts observations shed under pressure.
 	droppedEvents atomic.Int64
 
@@ -90,10 +92,11 @@ func NewApp(cfg *Config, logFn func(level int, msg string)) *App {
 		registry:    reg,
 		logFn:       logFn,
 		asyncEvents: make(chan pluginapi.Event, 4096),
+		syncEvents:  make(chan pendingEvent, 256),
 		rpcPending:  make(map[uint32]chan *bridge.Reader),
 	}
 	app.api = &pluginapi.API{
-		Worlds: &worldAccess{reg: reg, app: app},
+		Worlds: &worldAccess{staleReg: reg, app: app},
 		Proxy:  &proxyAccess{app: app},
 		Log:    logger,
 	}
@@ -123,6 +126,8 @@ func (a *App) Run(address string, stop <-chan struct{}) {
 	for i := 0; i < 2; i++ {
 		go a.eventWorker()
 	}
+	// Four verdict workers answer cancellable dispatches off the reader.
+	a.startSyncPool(4)
 	stopJanitor := make(chan struct{})
 	a.registry.StartJanitor(stopJanitor)
 	defer close(stopJanitor)
@@ -427,7 +432,8 @@ func (a *App) handleDelta(body []byte) error {
 		}
 		blobCopy := make([]byte, len(blob))
 		copy(blobCopy, blob)
-		a.registry.ApplyChunk(key, dim, cx, cz, blobCopy)
+		applied := a.registry.ApplyChunk(key, dim, cx, cz, blobCopy)
+		a.log(LogInfo, fmt.Sprintf("chunk (%d,%d) in %s applied=%v (%d bytes)", cx, cz, key, applied, len(blob)))
 
 	case bridge.DeltaBlockUpdate:
 		key, err := r.String()
@@ -963,7 +969,10 @@ func (a *App) eventWorker() {
 	}
 }
 
-// handleEventSync answers a cancellable event dispatch.
+// handleEventSync queues a cancellable event for the sync dispatch pool. The
+// verdict is answered by a worker, never on the reader goroutine: plugins
+// calling back into the proxy (RPC) need the reader free or the bridge
+// deadlocks.
 func (a *App) handleEventSync(body []byte) error {
 	r := bridge.NewReader(body)
 	callID, err := r.Uint32()
@@ -978,16 +987,54 @@ func (a *App) handleEventSync(body []byte) error {
 	if err != nil {
 		return err
 	}
-	event := a.buildEvent(eventID, fields)
-	cancelled := false
-	if event != nil {
-		cancelled = a.host.Dispatch(event)
+	select {
+	case a.syncEvents <- pendingEvent{callID: callID, eventID: eventID, fields: fields}:
+	default:
+		// Pool saturated: answer "not cancelled" immediately (fail-open) so
+		// the proxy never waits on us.
+		w := bridge.NewWriter(32)
+		w.Byte(bridge.OpEventResult)
+		w.Uint32(callID)
+		w.Bool(false)
+		return a.writeFrame(w.Buf)
 	}
-	w := bridge.NewWriter(32)
-	w.Byte(bridge.OpEventResult)
-	w.Uint32(callID)
-	w.Bool(cancelled)
-	return a.writeFrame(w.Buf)
+	return nil
+}
+
+// pendingEvent is one cancellable dispatch waiting for a worker.
+type pendingEvent struct {
+	callID  uint32
+	eventID uint16
+	fields  []bridge.Field
+}
+
+// syncDispatchPool computes event verdicts off the reader.
+func (a *App) startSyncPool(workers int) {
+	for i := 0; i < workers; i++ {
+		go func() {
+			for a.running.Load() {
+				select {
+				case pending := <-a.syncEvents:
+					event := a.buildEvent(pending.eventID, pending.fields)
+					cancelled := false
+					if event != nil {
+						cancelled = a.host.Dispatch(event)
+						a.log(LogInfo, fmt.Sprintf("event %d (%s) dispatched, cancelled=%v", pending.eventID, event.EventName(), cancelled))
+					} else {
+						a.log(LogInfo, fmt.Sprintf("event %d has no plugin mapping", pending.eventID))
+					}
+					w := bridge.NewWriter(32)
+					w.Byte(bridge.OpEventResult)
+					w.Uint32(pending.callID)
+					w.Bool(cancelled)
+					if err := a.writeFrame(w.Buf); err != nil {
+						a.log(LogWarn, fmt.Sprintf("event verdict write failed: %v", err))
+					}
+				case <-time.After(500 * time.Millisecond):
+				}
+			}
+		}()
+	}
 }
 
 // handleEventAsync queues an observation event.
@@ -1362,15 +1409,16 @@ func (a *App) handleQuery(body []byte) error {
 	w.Uint32(callID)
 
 	key := fStr(fields, 0)
+	a.log(LogInfo, fmt.Sprintf("query type=%d key=%q fields=%d", queryType, key, len(fields)))
 	switch queryType {
 	case QueryGetBlock:
 		dim := fI32(fields, 1)
 		pos := fPos(fields, 2)
 		entry, loaded := a.registry.BlockQuery(key, dim, pos.X, pos.Y, pos.Z)
-		w.Byte(bridge.QueryOK)
 		if !loaded {
 			w.Byte(bridge.QueryNotFound)
 		} else {
+			w.Byte(bridge.QueryOK)
 			w.Field(bridge.Field{Type: bridge.TypeStr, Str: entry.Name})
 			w.Field(bridge.Field{Type: bridge.TypeStr, Str: propsJSON(entry.States)})
 		}
@@ -1379,31 +1427,47 @@ func (a *App) handleQuery(body []byte) error {
 		w.Byte(bridge.QueryOK)
 		w.Field(bridge.Field{Type: bridge.TypeBool, Bool: loaded})
 	case QueryChunkInfo:
-		subs, entities, ok := a.registry.ChunkStats(key, fI32(fields, 1), fI32(fields, 2), fI32(fields, 3))
-		w.Byte(bridge.QueryOK)
+		dim := fI32(fields, 1)
+		cx, cz := fI32(fields, 2), fI32(fields, 3)
+		subs, entities, ok := a.registry.ChunkStats(key, dim, cx, cz)
 		if !ok {
 			w.Byte(bridge.QueryNotFound)
 		} else {
+			w.Byte(bridge.QueryOK)
 			w.Field(bridge.Field{Type: bridge.TypeI32, I32: int32(subs)})
 			w.Field(bridge.Field{Type: bridge.TypeI32, I32: int32(entities)})
+			// Block entities as JSON for the Java view layer.
+			var list strings.Builder
+			list.WriteString("[")
+			first := true
+			a.registry.ForEachBlockEntity(key, dim, cx, cz, func(pos world.BlockPos, be *world.BlockEntityData) {
+				if !first {
+					list.WriteString(",")
+				}
+				first = false
+				list.WriteString(fmt.Sprintf(`{"x":%d,"y":%d,"z":%d,"type":%q,"nbt":%s}`,
+					pos.X, pos.Y, pos.Z, be.Type, mapJSON(be.NBT)))
+			})
+			list.WriteString("]")
+			w.Field(bridge.Field{Type: bridge.TypeStr, Str: list.String()})
 		}
 	case QueryBlockEntity:
 		dim := fI32(fields, 1)
 		pos := fPos(fields, 2)
 		be, ok := a.registry.BlockEntityQuery(key, dim, pos.X, pos.Y, pos.Z)
-		w.Byte(bridge.QueryOK)
 		if !ok || be == nil {
 			w.Byte(bridge.QueryNotFound)
 		} else {
+			w.Byte(bridge.QueryOK)
 			w.Field(bridge.Field{Type: bridge.TypeStr, Str: be.Type})
 			w.Field(bridge.Field{Type: bridge.TypeStr, Str: mapJSON(be.NBT)})
 		}
 	case QueryEntity:
 		e, ok := a.registry.EntityQuery(key, fI64(fields, 1))
-		w.Byte(bridge.QueryOK)
 		if !ok {
 			w.Byte(bridge.QueryNotFound)
 		} else {
+			w.Byte(bridge.QueryOK)
 			w.Field(bridge.Field{Type: bridge.TypeStr, Str: entityJSON(e, nil)})
 		}
 	case QueryEntitiesNear:
@@ -1417,18 +1481,18 @@ func (a *App) handleQuery(body []byte) error {
 		w.Field(bridge.Field{Type: bridge.TypeStr, Str: "[" + strings.Join(list, ",") + "]"})
 	case QueryPlayer:
 		p, ok := a.registry.PlayerQuery(key, fI64(fields, 1))
-		w.Byte(bridge.QueryOK)
 		if !ok {
 			w.Byte(bridge.QueryNotFound)
 		} else {
+			w.Byte(bridge.QueryOK)
 			w.Field(bridge.Field{Type: bridge.TypeStr, Str: playerJSON(p, key)})
 		}
 	case QueryInventory:
 		items, ok := a.registry.InventoryQuery(key, fI64(fields, 1), fI32(fields, 2))
-		w.Byte(bridge.QueryOK)
 		if !ok {
 			w.Byte(bridge.QueryNotFound)
 		} else {
+			w.Byte(bridge.QueryOK)
 			encoded := make([]string, 0, len(items))
 			for _, item := range items {
 				encoded = append(encoded, itemJSON(item))
@@ -1442,10 +1506,10 @@ func (a *App) handleQuery(body []byte) error {
 		w.Field(bridge.Field{Type: bridge.TypeStr, Str: string(data)})
 	case QueryWorldMeta:
 		worldRef := a.registry.World(key)
-		w.Byte(bridge.QueryOK)
 		if worldRef == nil {
 			w.Byte(bridge.QueryNotFound)
 		} else {
+			w.Byte(bridge.QueryOK)
 			w.Field(bridge.Field{Type: bridge.TypeStr, Str: worldMetaJSON(worldRef)})
 		}
 	default:

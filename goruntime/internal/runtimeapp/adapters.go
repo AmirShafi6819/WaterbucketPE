@@ -14,12 +14,23 @@ import (
 // plugin query lands here and reads the live model directly (no RPC hop -
 // plugins run inside the runtime process).
 type worldAccess struct {
-	reg *world.Registry
-	app *App
+	// staleReg is the registry captured at construction; after the handshake
+	// the app rebuilds its registry with the negotiated bounds, so every read
+	// resolves through the app to always see the live model.
+	staleReg *world.Registry
+	app      *App
+}
+
+// reg returns the app's live registry.
+func (w *worldAccess) reg() *world.Registry {
+	if w.app != nil && w.app.registry != nil {
+		return w.app.registry
+	}
+	return w.staleReg
 }
 
 func (w *worldAccess) ListWorlds() []pluginapi.World {
-	summaries := w.reg.WorldList()
+	summaries := w.reg().WorldList()
 	out := make([]pluginapi.World, 0, len(summaries))
 	for _, s := range summaries {
 		out = append(out, w.toWorld(s))
@@ -28,7 +39,7 @@ func (w *worldAccess) ListWorlds() []pluginapi.World {
 }
 
 func (w *worldAccess) toWorld(s world.WorldSummary) pluginapi.World {
-	worldRef := w.reg.World(s.Key)
+	worldRef := w.reg().World(s.Key)
 	out := pluginapi.World{
 		Key:        s.Key,
 		Name:       s.Name,
@@ -50,7 +61,7 @@ func (w *worldAccess) toWorld(s world.WorldSummary) pluginapi.World {
 }
 
 func (w *worldAccess) GetWorld(key string) *pluginapi.World {
-	for _, s := range w.reg.WorldList() {
+	for _, s := range w.reg().WorldList() {
 		if s.Key == key {
 			out := w.toWorld(s)
 			return &out
@@ -60,7 +71,7 @@ func (w *worldAccess) GetWorld(key string) *pluginapi.World {
 }
 
 func (w *worldAccess) GetBlock(serverKey string, dim int32, x, y, z int32) pluginapi.Block {
-	entry, loaded := w.reg.BlockQuery(serverKey, dim, x, y, z)
+	entry, loaded := w.reg().BlockQuery(serverKey, dim, x, y, z)
 	out := pluginapi.Block{
 		Name:       entry.Name,
 		RuntimeID:  -1,
@@ -74,11 +85,11 @@ func (w *worldAccess) GetBlock(serverKey string, dim int32, x, y, z int32) plugi
 }
 
 func (w *worldAccess) IsChunkLoaded(serverKey string, dim, cx, cz int32) bool {
-	return w.reg.ChunkLoaded(serverKey, dim, cx, cz)
+	return w.reg().ChunkLoaded(serverKey, dim, cx, cz)
 }
 
 func (w *worldAccess) GetChunk(serverKey string, dim, cx, cz int32) (*pluginapi.Chunk, bool) {
-	subs, entityCount, ok := w.reg.ChunkStats(serverKey, dim, cx, cz)
+	subs, entityCount, ok := w.reg().ChunkStats(serverKey, dim, cx, cz)
 	if !ok {
 		return nil, false
 	}
@@ -88,7 +99,7 @@ func (w *worldAccess) GetChunk(serverKey string, dim, cx, cz int32) (*pluginapi.
 		Subchunks:     subs,
 		BlockEntities: map[pluginapi.PosI]pluginapi.BlockEntity{},
 	}
-	w.reg.ForEachBlockEntity(serverKey, dim, cx, cz, func(pos world.BlockPos, be *world.BlockEntityData) {
+	w.reg().ForEachBlockEntity(serverKey, dim, cx, cz, func(pos world.BlockPos, be *world.BlockEntityData) {
 		chunk.BlockEntities[pluginapi.PosI{X: pos.X, Y: pos.Y, Z: pos.Z}] = pluginapi.BlockEntity{
 			Type: be.Type, Position: pluginapi.PosI{X: pos.X, Y: pos.Y, Z: pos.Z}, NBT: be.NBT,
 		}
@@ -98,7 +109,7 @@ func (w *worldAccess) GetChunk(serverKey string, dim, cx, cz int32) (*pluginapi.
 }
 
 func (w *worldAccess) GetBlockEntity(serverKey string, dim int32, x, y, z int32) (*pluginapi.BlockEntity, bool) {
-	be, ok := w.reg.BlockEntityQuery(serverKey, dim, x, y, z)
+	be, ok := w.reg().BlockEntityQuery(serverKey, dim, x, y, z)
 	if !ok || be == nil {
 		return nil, false
 	}
@@ -110,7 +121,7 @@ func (w *worldAccess) GetBlockEntity(serverKey string, dim int32, x, y, z int32)
 }
 
 func (w *worldAccess) GetEntity(serverKey string, eid int64) (*pluginapi.Entity, bool) {
-	e, ok := w.reg.EntityQuery(serverKey, eid)
+	e, ok := w.reg().EntityQuery(serverKey, eid)
 	if !ok {
 		return nil, false
 	}
@@ -118,7 +129,7 @@ func (w *worldAccess) GetEntity(serverKey string, eid int64) (*pluginapi.Entity,
 }
 
 func (w *worldAccess) GetEntitiesNear(serverKey string, dim int32, x, y, z, radius float32, limit int) []*pluginapi.Entity {
-	entities := w.reg.EntitiesNear(serverKey, dim, x, y, z, radius, limit)
+	entities := w.reg().EntitiesNear(serverKey, dim, x, y, z, radius, limit)
 	out := make([]*pluginapi.Entity, 0, len(entities))
 	for _, e := range entities {
 		out = append(out, w.app.toAPIEntity(e))
@@ -127,7 +138,7 @@ func (w *worldAccess) GetEntitiesNear(serverKey string, dim int32, x, y, z, radi
 }
 
 func (w *worldAccess) GetPlayer(serverKey string, eid int64) (*pluginapi.Player, bool) {
-	p, ok := w.reg.PlayerQuery(serverKey, eid)
+	p, ok := w.reg().PlayerQuery(serverKey, eid)
 	if !ok {
 		return nil, false
 	}
@@ -135,7 +146,7 @@ func (w *worldAccess) GetPlayer(serverKey string, eid int64) (*pluginapi.Player,
 }
 
 func (w *worldAccess) GetPlayerByName(serverKey, name string) (*pluginapi.Player, bool) {
-	p, ok := w.reg.PlayerByName(serverKey, name)
+	p, ok := w.reg().PlayerByName(serverKey, name)
 	if !ok {
 		return nil, false
 	}
@@ -143,7 +154,7 @@ func (w *worldAccess) GetPlayerByName(serverKey, name string) (*pluginapi.Player
 }
 
 func (w *worldAccess) GetInventory(serverKey string, eid int64, windowID int32) ([]pluginapi.Item, bool) {
-	items, ok := w.reg.InventoryQuery(serverKey, eid, windowID)
+	items, ok := w.reg().InventoryQuery(serverKey, eid, windowID)
 	if !ok {
 		return nil, false
 	}
