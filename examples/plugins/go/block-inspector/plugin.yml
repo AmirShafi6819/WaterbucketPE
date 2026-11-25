@@ -1,0 +1,6 @@
+name: BlockInspector
+version: 1.0.0
+api-version: 1.6.0
+main: main.go
+author: WaterbucketTEAM
+description: Announces the block a player interacts with, straight from the live world model

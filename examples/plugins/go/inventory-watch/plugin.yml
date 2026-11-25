@@ -1,0 +1,6 @@
+name: InventoryWatch
+version: 1.0.0
+api-version: 1.6.0
+main: main.go
+author: WaterbucketTEAM
+description: Logs held items and tracks inventories from the live model
