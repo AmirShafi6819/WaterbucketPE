@@ -1,0 +1,6 @@
+name: TestGuard
+version: 1.0.0
+api-version: 1.6.0
+main: main.go
+author: WaterbucketTEAM
+description: Test plugin for the loader

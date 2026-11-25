@@ -1,0 +1,4 @@
+name: BadApi
+version: 9.9.9
+api-version: 2.0.0
+main: main.go
