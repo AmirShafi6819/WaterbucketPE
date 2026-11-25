@@ -16,6 +16,8 @@
 package dev.waterbucket.waterbucketpe.network.protocol.handler.downstream;
 
 import dev.waterbucket.waterbucketpe.command.Command;
+import dev.waterbucket.waterbucketpe.persianfix.PersianFixManager;
+import dev.waterbucket.waterbucketpe.utils.config.proxy.PersianFixSettings;
 import it.unimi.dsi.fastutil.objects.Object2ObjectMap;
 import dev.waterbucket.waterbucketpe.network.connection.client.ClientConnection;
 import dev.waterbucket.waterbucketpe.network.protocol.ProtocolVersion;
@@ -29,6 +31,7 @@ import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.network.protocol.Signals;
 import org.cloudburstmc.protocol.bedrock.codec.BedrockCodecHelper;
 import org.cloudburstmc.protocol.bedrock.data.AttributeData;
+import org.cloudburstmc.protocol.bedrock.data.ScoreInfo;
 import org.cloudburstmc.protocol.bedrock.data.camera.CameraPreset;
 import org.cloudburstmc.protocol.bedrock.data.command.CommandData;
 import org.cloudburstmc.protocol.bedrock.data.command.CommandEnumConstraint;
@@ -140,6 +143,169 @@ public abstract class AbstractDownstreamHandler implements ProxyPacketHandler {
         player.setAcceptItemComponentPacket(false);
         if (this.player.getProtocol().isAfterOrEqual(ProtocolVersion.MINECRAFT_PE_1_21_60)) {
             setItemDefinitions(packet.getItems());
+        }
+        return PacketSignal.UNHANDLED;
+    }
+
+    // ---- Persian Fix: display-ready Arabic-script text on every downstream software ----
+    // Each handler fixes only the text surfaces the persian_fix section enables, and returns
+    // UNHANDLED (no re-encode, zero cost beyond one scan) when nothing changed.
+
+    @Override
+    public PacketSignal handle(TextPacket packet) {
+        PersianFixSettings persianFix = this.player.getProxy().getConfiguration().getPersianFixSettings();
+        boolean changed = false;
+
+        String message = packet.getMessage();
+        if (message != null) {
+            String fixed = PersianFixManager.fixMessage(persianFix, message);
+            if (fixed != message) {
+                packet.setMessage(fixed);
+                changed = true;
+            }
+        }
+        String filtered = packet.getFilteredMessage();
+        if (filtered != null) {
+            String fixed = PersianFixManager.fixMessage(persianFix, filtered);
+            if (fixed != filtered) {
+                packet.setFilteredMessage(fixed);
+                changed = true;
+            }
+        }
+        List<String> parameters = packet.getParameters();
+        if (parameters != null && !parameters.isEmpty()) {
+            List<String> fixedParameters = null;
+            for (int i = 0; i < parameters.size(); i++) {
+                String parameter = parameters.get(i);
+                String fixedParameter = PersianFixManager.fixMessage(persianFix, parameter);
+                if (fixedParameter != parameter) {
+                    if (fixedParameters == null) {
+                        fixedParameters = new ArrayList<>(parameters);
+                    }
+                    fixedParameters.set(i, fixedParameter);
+                }
+            }
+            if (fixedParameters != null) {
+                packet.setParameters(fixedParameters);
+                changed = true;
+            }
+        }
+        return changed ? PacketSignal.HANDLED : PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(SetTitlePacket packet) {
+        PersianFixSettings persianFix = this.player.getProxy().getConfiguration().getPersianFixSettings();
+        boolean changed = false;
+
+        String text = packet.getText();
+        if (text != null) {
+            String fixed = PersianFixManager.fixTitle(persianFix, text);
+            if (fixed != text) {
+                packet.setText(fixed);
+                changed = true;
+            }
+        }
+        String filtered = packet.getFilteredTitleText();
+        if (filtered != null) {
+            String fixed = PersianFixManager.fixTitle(persianFix, filtered);
+            if (fixed != filtered) {
+                packet.setFilteredTitleText(fixed);
+                changed = true;
+            }
+        }
+        return changed ? PacketSignal.HANDLED : PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(BossEventPacket packet) {
+        PersianFixSettings persianFix = this.player.getProxy().getConfiguration().getPersianFixSettings();
+        boolean changed = false;
+
+        String title = packet.getTitle();
+        if (title != null) {
+            String fixed = PersianFixManager.fixBossBar(persianFix, title);
+            if (fixed != title) {
+                packet.setTitle(fixed);
+                changed = true;
+            }
+        }
+        String filtered = packet.getFilteredTitle();
+        if (filtered != null) {
+            String fixed = PersianFixManager.fixBossBar(persianFix, filtered);
+            if (fixed != filtered) {
+                packet.setFilteredTitle(fixed);
+                changed = true;
+            }
+        }
+        return changed ? PacketSignal.HANDLED : PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(ModalFormRequestPacket packet) {
+        PersianFixSettings persianFix = this.player.getProxy().getConfiguration().getPersianFixSettings();
+        String formData = packet.getFormData();
+        String fixed = PersianFixManager.fixFormJson(persianFix, formData);
+        if (fixed != formData) {
+            packet.setFormData(fixed);
+            return PacketSignal.HANDLED;
+        }
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(SetDisplayObjectivePacket packet) {
+        PersianFixSettings persianFix = this.player.getProxy().getConfiguration().getPersianFixSettings();
+        String displayName = packet.getDisplayName();
+        String fixed = PersianFixManager.fixScoreboardText(persianFix, displayName);
+        if (fixed != displayName) {
+            packet.setDisplayName(fixed);
+            return PacketSignal.HANDLED;
+        }
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(SetScorePacket packet) {
+        PersianFixSettings persianFix = this.player.getProxy().getConfiguration().getPersianFixSettings();
+        List<ScoreInfo> infos = packet.getInfos();
+        if (infos == null || infos.isEmpty()) {
+            return PacketSignal.UNHANDLED;
+        }
+
+        List<ScoreInfo> fixedInfos = null;
+        for (int i = 0; i < infos.size(); i++) {
+            ScoreInfo info = infos.get(i);
+            String name = info.getName();
+            // Only fake-player entries carry a literal name the client draws; entity scores are
+            // resolved by the client from the entity itself and their entries stay untouched.
+            if (name == null || info.getType() != ScoreInfo.ScorerType.FAKE) {
+                continue;
+            }
+            String fixed = PersianFixManager.fixScoreboardText(persianFix, name);
+            if (fixed != name) {
+                if (fixedInfos == null) {
+                    fixedInfos = new ArrayList<>(infos);
+                }
+                fixedInfos.set(i, new ScoreInfo(info.getScoreboardId(), info.getObjectiveId(), info.getScore(), fixed));
+            }
+        }
+        if (fixedInfos != null) {
+            packet.setInfos(fixedInfos);
+            return PacketSignal.HANDLED;
+        }
+        return PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(BlockEntityDataPacket packet) {
+        // Sign updates a server sends back to the client (dynamic sign text): the same wrap and
+        // shape as the client's own sign edits.
+        PersianFixSettings persianFix = this.player.getProxy().getConfiguration().getPersianFixSettings();
+        org.cloudburstmc.nbt.NbtMap fixed = PersianFixManager.fixSignNbt(persianFix, packet.getData());
+        if (fixed != packet.getData()) {
+            packet.setData(fixed);
+            return PacketSignal.HANDLED;
         }
         return PacketSignal.UNHANDLED;
     }

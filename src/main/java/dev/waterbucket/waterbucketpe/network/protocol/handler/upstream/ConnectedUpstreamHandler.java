@@ -28,8 +28,11 @@ import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.event.defaults.PlayerChatEvent;
 import dev.waterbucket.waterbucketpe.network.protocol.ProtocolVersion;
 import dev.waterbucket.waterbucketpe.network.protocol.handler.TransferCallback;
+import dev.waterbucket.waterbucketpe.persianfix.PersianFixManager;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.network.protocol.Signals;
+import dev.waterbucket.waterbucketpe.utils.config.proxy.PersianFixSettings;
+import org.cloudburstmc.nbt.NbtMap;
 import org.cloudburstmc.protocol.common.PacketSignal;
 
 import static dev.waterbucket.waterbucketpe.network.protocol.user.PlayerRewriteUtils.injectAirSubChunkResponse;
@@ -109,6 +112,14 @@ public class ConnectedUpstreamHandler extends AbstractUpstreamHandler implements
 
     @Override
     public final PacketSignal handle(TextPacket packet) {
+        // Persian Fix shapes the line first, so plugins see (and can override) the exact text
+        // the downstream server and the other clients will receive.
+        PersianFixSettings persianFix = this.player.getProxy().getConfiguration().getPersianFixSettings();
+        String fixed = PersianFixManager.fixChat(persianFix, packet.getMessage());
+        if (fixed != packet.getMessage()) {
+            packet.setMessage(fixed);
+        }
+
         PlayerChatEvent event = new PlayerChatEvent(this.player, packet.getMessage());
         ProxyServer.getInstance().getEventManager().callEvent(event);
 
@@ -118,6 +129,19 @@ public class ConnectedUpstreamHandler extends AbstractUpstreamHandler implements
 
         if (event.isChanged()) {
             packet.setMessage(event.getMessage());
+            return PacketSignal.HANDLED;
+        }
+        return fixed != packet.getMessage() ? PacketSignal.HANDLED : PacketSignal.UNHANDLED;
+    }
+
+    @Override
+    public PacketSignal handle(BlockEntityDataPacket packet) {
+        // A sign edit arrives as block entity NBT from the client; the fix wraps long lines and
+        // shapes them exactly like the original plugin's sign handler.
+        PersianFixSettings persianFix = this.player.getProxy().getConfiguration().getPersianFixSettings();
+        NbtMap fixed = PersianFixManager.fixSignNbt(persianFix, packet.getData());
+        if (fixed != packet.getData()) {
+            packet.setData(fixed);
             return PacketSignal.HANDLED;
         }
         return PacketSignal.UNHANDLED;

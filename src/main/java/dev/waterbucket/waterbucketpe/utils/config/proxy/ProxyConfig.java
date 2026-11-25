@@ -161,6 +161,16 @@ public class ProxyConfig extends YamlConfig {
     })
     private SleepModeSettings sleepModeSettings = new SleepModeSettings();
 
+    @Path("persian_fix")
+    @Comments({
+            "Persian Fix: display-ready Persian (and every other Arabic-script language) on the",
+            "client - joined letters and right-to-left order, exactly like the well-known Persian",
+            "server plugin, but done once in the proxy so it works with every downstream server",
+            "software. Off by default; the areas below pick where the fix applies."
+    })
+    private PersianFixSettings persianFixSettings = new PersianFixSettings();
+
+
     @Path("permissions")
     @Comment("Case-Sensitive permission list for players (empty using {})")
     // Empty by default: shipping permissions for specific usernames let anyone registering

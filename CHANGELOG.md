@@ -3,6 +3,37 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added — Persian Fix (display-ready Persian text)
+
+- **`persian_fix` config section (off by default)**: Persian (and every other Arabic-script
+  language) becomes display-ready for the client - joined letters, correct right-to-left
+  order - computed once inside the proxy, so it works with every downstream server software
+  without any server-side plugin. The engine is a faithful port of the well-known Persian
+  server fix plugin family: letters map to their exact Arabic presentation forms
+  (isolated/initial/medial/final, lam-alef ligature included) and the line is reordered into
+  visual order while Latin words, numbers, bracketed groups, `§` color codes and leading
+  `><[]` markers stay readable. Verified against the complete vector set of the original
+  engine's own test suite (49 vectors, byte for byte).
+- **Per-area toggles** under the section: `chat` (player chat before it reaches the server
+  and other clients), `messages` (system messages, popups, tips, whispers), `sign` (sign
+  edits and server-driven sign updates, with the original 14-character wrap-to-four-lines
+  rule), `title` (titles and subtitles), `boss_bar`, `scoreboard` (display names and
+  fake-player score entries) and `forms` (every text field inside form JSON - titles,
+  content, buttons, labels, dropdown options). Each defaults to on; the master `enable` key
+  defaults to false.
+- **Never fixes twice**: text that already carries presentation forms (the proxy's own chat
+  echo coming back downstream, or a server that ships the same fix server-side) passes
+  through untouched, so both directions can be fixed at once safely.
+- **The bundled Persian font pack is offered automatically** while the fix is enabled and the
+  proxy's resource pack pipeline is active, so clients render the shaped glyphs exactly like
+  the original plugin offering its pack.
+- **Zero cost where it matters**: pure Latin traffic is rejected by a single O(n) scan and
+  returns the original string instance - no allocation, no packet re-encode; a changed
+  packet re-encodes alone. 63 tests cover the engine vectors, the toggle matrix, the
+  never-fix-twice guard, sign wrapping, form JSON and the hot path.
+
 ## [1.5.6] - 2026-11-25
 
 ### Added — Velocity-style duplicate login handling

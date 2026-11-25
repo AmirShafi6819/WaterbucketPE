@@ -32,6 +32,12 @@ java {
     }
 }
 
+// Sources carry Persian literals (the Persian Fix engine tables and its test vectors); a bare
+// javac falls back to the platform encoding, so pin UTF-8 explicitly.
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+}
+
 repositories {
     mavenLocal() // locally built protocol/raknet snapshots take priority, like with Maven
     mavenCentral()

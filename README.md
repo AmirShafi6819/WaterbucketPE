@@ -74,6 +74,12 @@ answer as aliases of the rebranded `wb*` ones. The Python front-end is purely ad
   of the proxy's own socket (127.0.0.1 with a random port on co-located hosts). Servers that
   understand the Waterdog login fields display it natively: Nukkit-MOT, Geyser, and PMMP with
   a proxy login-extras plugin.
+- **Persian Fix** — with `persian_fix.enable: true` the proxy makes Persian (and every other
+  Arabic-script language) display-ready on the client: joined letters, correct right-to-left
+  order, mixed Latin and numbers intact. Runs inside the proxy on the packets themselves, so
+  it works with every downstream server software; chat, messages, signs, titles, boss bars,
+  scoreboards and forms each have their own toggle, and the bundled font pack is offered to
+  joining clients automatically. Off by default.
 - **Only Proxy Join** — one config switch keeps host firewall rules that block direct public
   access to every downstream server's UDP port (loopback stays open for the proxy itself), so
   players can only enter through the proxy port you picked.

@@ -21,6 +21,7 @@ import dev.waterbucket.waterbucketpe.command.CommandRateLimiter;
 import dev.waterbucket.waterbucketpe.command.CommandSender;
 import dev.waterbucket.waterbucketpe.command.ConsoleCommandSender;
 import dev.waterbucket.waterbucketpe.command.DefaultCommandMap;
+import dev.waterbucket.waterbucketpe.persianfix.PersianFixManager;
 import dev.waterbucket.waterbucketpe.command.SimpleCommandMap;
 import dev.waterbucket.waterbucketpe.command.utils.CommandUtils;
 import dev.waterbucket.waterbucketpe.console.TerminalConsole;
@@ -343,6 +344,10 @@ public class ProxyServer {
         if (this.getConfiguration().enableResourcePacks()) {
             this.packManager.loadPacks(this.packsPath);
         }
+
+        // Persian Fix registers its bundled font pack through the pipeline above (when the fix
+        // is enabled), so joining clients can render the shaped glyphs.
+        PersianFixManager.installFontPack(this);
 
         InetSocketAddress bindAddress = this.getConfiguration().getBindAddress();
         bindAddress = new InetSocketAddress(bindAddress.getHostString(), bindAddress.getPort());
