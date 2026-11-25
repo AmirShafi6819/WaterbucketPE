@@ -126,4 +126,32 @@ public class ForwardedClientIpTest {
         assertFalse(clientData.has("Waterdog_XUID"));
         assertFalse(clientData.has("Waterbucket_XUID"));
     }
+
+    @Test
+    public void unresolvedAddressesForwardTheHostTextInsteadOfThrowing() {
+        // A session address without a resolved IP must not blow up the login path with an NPE;
+        // the literal host text is forwarded so downstream still sees a useful value.
+        JsonObject clientData = new JsonObject();
+        InetSocketAddress unresolved = InetSocketAddress.createUnresolved("real-host.example", 51234);
+
+        HandshakeUtils.addForwardingClaims(clientData, unresolved, true, false);
+
+        assertEquals("real-host.example", clientData.get("Waterdog_IP").getAsString());
+        assertEquals("real-host.example", clientData.get("Waterbucket_IP").getAsString());
+        assertEquals(51234, clientData.get("Waterbucket_Port").getAsInt());
+    }
+
+    @Test
+    public void foreignOrMissingAddressTypesForwardNothingInsteadOfThrowing() {
+        // Whatever the transport hands over, claim injection must never throw into the login
+        // catch-all (which would kick the player with a generic "Login failed").
+        JsonObject clientData = new JsonObject();
+
+        HandshakeUtils.addForwardingClaims(clientData, null, true, false);
+        assertFalse(clientData.has("Waterdog_IP"));
+
+        HandshakeUtils.addForwardingClaims(clientData, new java.net.SocketAddress() { }, true, false);
+        assertFalse(clientData.has("Waterdog_IP"));
+        assertFalse(clientData.has("Waterbucket_Port"));
+    }
 }

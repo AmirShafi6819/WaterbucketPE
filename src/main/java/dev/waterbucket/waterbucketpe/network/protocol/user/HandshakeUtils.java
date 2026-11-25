@@ -199,8 +199,16 @@ public class HandshakeUtils {
         if (!forwardClientIp && !useLoginExtras) {
             return;
         }
+        // Never let forwarding break the login: an unexpected address type (or an unresolved
+        // one) simply skips the claims instead of throwing into the login catch-all, which
+        // would disconnect the player with a generic "Login failed".
+        if (!(address instanceof InetSocketAddress)) {
+            return;
+        }
         InetSocketAddress inet = (InetSocketAddress) address;
-        String ip = inet.getAddress().getHostAddress();
+        // getHostAddress() is null for an unresolved address; getHostString() then returns the
+        // literal host text without a reverse DNS lookup, so forwarding still carries something.
+        String ip = inet.getAddress() == null ? inet.getHostString() : inet.getAddress().getHostAddress();
         clientData.addProperty("Waterdog_IP", ip);
         clientData.addProperty("Waterbucket_IP", ip);
         clientData.addProperty("Waterbucket_Port", inet.getPort());
