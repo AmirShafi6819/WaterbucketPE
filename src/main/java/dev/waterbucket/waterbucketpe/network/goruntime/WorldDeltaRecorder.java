@@ -800,7 +800,6 @@ public final class WorldDeltaRecorder implements PluginPacketHandler {
             switch (p.getAction()) {
                 case START_SLEEP -> {
                     Vector3i pos = p.getBlockPosition();
-                    BlockEventsDummy();
                     return fireSyncCancellable(
                             new PlayerEvents.BedEnter(compatPlayer(), key, dimension(),
                                     new BlockPos(pos.getX(), pos.getY(), pos.getZ())),
@@ -1028,10 +1027,6 @@ public final class WorldDeltaRecorder implements PluginPacketHandler {
         boolean cancelled = fireSyncCancellable(interact, BridgeCodec.EVENT_PLAYER_INTERACT, fields);
         boolean cancelledPlace = cancelled || fireSyncCancellable(place, BridgeCodec.EVENT_BLOCK_PLACE, fields);
         return cancelledPlace ? PacketSignal.HANDLED : PacketSignal.UNHANDLED;
-    }
-
-    private void BlockEventsDummy() {
-        // placeholder kept for symmetry with legacy sleep handling
     }
 
     private List<BridgeCodec.Field> blockActionFields(String key, Vector3i pos, int face) {
