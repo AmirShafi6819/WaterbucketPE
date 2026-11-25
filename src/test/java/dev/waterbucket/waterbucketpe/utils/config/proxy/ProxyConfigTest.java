@@ -100,6 +100,22 @@ public class ProxyConfigTest {
         assertTrue(reloaded.forwardClientIp());
     }
 
+    @Test
+    public void shippedSleepModeSectionIsRemoved() throws Exception {
+        // The sleep mode feature is gone in every form, so a file it shipped with loses the
+        // whole section on upgrade.
+        File file = newFile();
+        migrate(file, """
+                # Waterbucket Main Configuration file
+                sleep_mode:
+                  enable: true
+                  after_minutes: 5
+                config_version: 4
+                """);
+
+        assertFalse(Files.readString(file.toPath()).contains("sleep_mode"));
+    }
+
     /**
      * Loads a file of an older layout, then checks that running the migration again on the result
      * leaves it as it is.

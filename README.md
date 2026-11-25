@@ -52,7 +52,7 @@ additive.
 |---|---|
 | **Smooth joins** | the login crypto, zlib codec, packet classes and the downstream dial path all warm up at boot, so the first player of the day doesn't pay for JIT and class loading in front of everyone |
 | **Honest numbers** | every comparison is measured by one harness on one machine, re-measured whenever the harness itself has a bug, adverse panels reported as ties |
-| **Operator surface** | Liquid Glass panel (dark/light, fa/en), editable layout, per-server management, colored console, `/restart`, server offline toggle, sleep mode |
+| **Operator surface** | Liquid Glass panel (dark/light, fa/en), editable layout, per-server management, colored console, `/restart`, server offline toggle |
 | **Customizable messages** | every player-visible text — kick reasons, transfer errors, the shutdown notice — lives in one `ingame-messages.yml` with § color codes |
 
 ## Features
@@ -84,9 +84,6 @@ additive.
 - **Only Proxy Join** — one config switch keeps host firewall rules that block direct public
   access to every downstream server's UDP port (loopback stays open for the proxy itself), so
   players can only enter through the proxy port you picked.
-- **Sleep mode** — an empty proxy falls asleep after the idle window: one GC pass trims the
-  heap and the probe cycle pauses, while the listener, tick loop and every connection path
-  stay fully alive. The first ping, login, panel hit or console command wakes it instantly.
 - **Professional `/restart`** — a managed sequence (cancellable `ProxyRestartEvent`, notice
   broadcast, graceful kick, plugin disable, relaunch script, clean shutdown) that brings the
   process back with newly added plugins, packs and config values in place. Concurrent
@@ -191,7 +188,6 @@ Rebranded `wb*`; the old `wd*` names keep working as hidden aliases.
 | `/wbplugins [verbose]` | plugins list; `verbose` adds description + author |
 | `/restart` | managed restart: notice, graceful kick, plugin disable, relaunch with new plugins/packs/config in place |
 | `/wbserveroffline <server> [on\|off]` | stop sending players to a server that keeps running (persists) |
-| `/wbsleep [status\|sleep\|wake]` | inspect or force the sleep-mode transition |
 | `/wbonlyproxy [status\|apply\|remove]` | inspect or manage the Only Proxy Join firewall rules |
 | `/wbreloadpacks`, `/end` | packs, shutdown |
 
@@ -241,7 +237,6 @@ Full walkthrough in the file's header comment.
 | `ping_passthrough` | `disabled` | show the priority server's real MOTD (`description`) plus counts/game type (`all`) |
 | `show_max_players` | `true` | `false` shows the live player count as the maximum, so the proxy never looks full |
 | `command_rate_limit` | `20` | max commands per player per second; `0` disables |
-| `sleep_mode.enable` / `after_minutes` | `true` / `5` | trim an idle proxy's heap until the next contact wakes it |
 | `only_proxy_join.enable` / `proxy_port` | `false` / `19132` | block direct public access to downstream ports; the proxy port stays the only way in |
 | `restart.script_path` / `use_script` | *(auto)* / `true` | the relaunch script `/restart` uses; wrappers like systemd keep working with `false` |
 

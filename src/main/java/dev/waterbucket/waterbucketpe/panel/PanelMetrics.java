@@ -119,11 +119,6 @@ public class PanelMetrics {
         if (!this.running) {
             return;
         }
-        // Sleeping proxy with no players: the probes only burn CPU on servers nobody can
-        // join right now; the last states stay on the dashboard until wake refreshes them.
-        if (this.proxy.getSleepModeManager().isSleeping()) {
-            return;
-        }
         for (ServerInfo server : this.proxy.getServerInfoMap().values()) {
             this.probeServer(server.getServerName(), server);
         }
@@ -237,7 +232,6 @@ public class PanelMetrics {
         status.put("systemLoadAverage", this.os.getSystemLoadAverage());
         status.put("threads", Thread.activeCount());
         status.put("tick", this.proxy.getCurrentTick());
-        status.put("sleeping", this.proxy.getSleepModeManager().isSleeping());
 
         List<Map<String, Object>> servers = new ArrayList<>();
         for (ServerInfo server : this.proxy.getServerInfoMap().values()) {

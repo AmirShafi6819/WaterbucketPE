@@ -124,10 +124,6 @@ public class PingPassthroughManager {
         if (this.mode() == ProxyConfig.PingPassthrough.DISABLED) {
             return;
         }
-        // An asleep proxy is idle on purpose: skip the probe and keep serving the snapshot.
-        if (this.proxy.getSleepModeManager().isSleeping()) {
-            return;
-        }
         if (!this.refreshing.compareAndSet(false, true)) {
             return;
         }

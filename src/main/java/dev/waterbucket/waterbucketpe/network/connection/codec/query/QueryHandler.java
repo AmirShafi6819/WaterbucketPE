@@ -101,8 +101,6 @@ public class QueryHandler extends SimpleChannelInboundHandler<DatagramPacket> {
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, DatagramPacket packet) {
-        // A query request is contact: an asleep proxy wakes before answering
-        this.proxy.getSleepModeManager().onActivity();
         try {
             ByteBuf buf = packet.content();
             this.onQuery(packet.sender(), buf.skipBytes(2), ctx, (InetSocketAddress) ctx.channel().localAddress());

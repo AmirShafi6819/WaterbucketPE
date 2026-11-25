@@ -34,6 +34,7 @@ import java.util.function.Consumer;
  * apart from a choice. Step 4 breaks that rule once on purpose: the shipped-on forwarding default
  * rejected logins on strict server software outright, which is worse than resetting a value that
  * could not have been relied on unless it was set deliberately - the warning log names the way back.
+ * Step 5 removes a whole section, for a feature that no longer exists in any form.
  * <p>
  * Note {@link ConfigSection#get} and {@link ConfigSection#set} create every section on the way, so a
  * path is checked with {@link ConfigSection#has} first.
@@ -45,7 +46,8 @@ public final class ConfigMigrations {
             ConfigMigrations::netherNetLayout,
             ConfigMigrations::proxyProtocolWhitelist,
             ConfigMigrations::proxyProtocolSwitch,
-            ConfigMigrations::forwardingClaimOptIn
+            ConfigMigrations::forwardingClaimOptIn,
+            ConfigMigrations::removeSleepMode
     );
 
     /**
@@ -173,6 +175,17 @@ public final class ConfigMigrations {
                     + "unknown keys to strict server software such as PocketMine-MP, which rejected them as a bad packet "
                     + "and dropped the login. If your downstream servers read the forwarding fields (Nukkit-MOT, Geyser, "
                     + "or a login-extras plugin), set forward_client_ip: true again; use_login_extras keeps implying it");
+        }
+    }
+
+    /**
+     * Step 5: the sleep mode feature is gone. It paused two probes that only run behind niche
+     * options and forced a garbage collection on an idle proxy, which saves nothing the JVM does
+     * not save on its own - so the section leaves every file that still carries it.
+     */
+    private static void removeSleepMode(ConfigSection root) {
+        if (root.has("sleep_mode")) {
+            root.remove("sleep_mode");
         }
     }
 

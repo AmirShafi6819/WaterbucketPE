@@ -3,6 +3,18 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Removed — sleep mode
+
+- The `sleep_mode` feature, its config section, the `/wbsleep` command, the panel badge and
+  the `sleeping` status field are gone. An idle proxy already sits at a flat CPU floor - the
+  only real work the mode ever paused were two probes behind niche options, and its one
+  concrete action, forcing a garbage collection on an idle JVM, saves nothing the JVM does
+  not save on its own. A config upgrade step removes the section from every existing file.
+  Sleep mode shipped in 1.6.0; the removal keeps the proxy honest: nothing in the config
+  that the operator cannot explain the purpose of.
+
 ## [1.6.1] - 2026-11-26
 
 ### Fixed

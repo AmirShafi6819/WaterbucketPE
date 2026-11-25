@@ -60,7 +60,6 @@ import dev.waterbucket.waterbucketpe.plugin.compat.CompatEventBridge;
 import dev.waterbucket.waterbucketpe.player.PlayerManager;
 import dev.waterbucket.waterbucketpe.onlyproxy.OnlyProxyJoinManager;
 import dev.waterbucket.waterbucketpe.restart.RestartManager;
-import dev.waterbucket.waterbucketpe.sleep.SleepModeManager;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.plugin.PluginManager;
 import dev.waterbucket.waterbucketpe.scheduler.WaterbucketScheduler;
@@ -153,8 +152,6 @@ public class ProxyServer {
     private final SecurityManager securityManager;
     @Getter
     private final RestartManager restartManager;
-    @Getter
-    private final SleepModeManager sleepModeManager;
     @Getter
     private final OnlyProxyJoinManager onlyProxyJoinManager;
     @Getter
@@ -284,7 +281,6 @@ public class ProxyServer {
         this.packManager = new PackManager(this);
         this.securityManager = new SecurityManager(this);
         this.restartManager = new RestartManager(this);
-        this.sleepModeManager = new SleepModeManager(this);
         this.onlyProxyJoinManager = new OnlyProxyJoinManager(this);
         this.pingPassthroughManager = new PingPassthroughManager(this);
         this.commandRateLimiter = new CommandRateLimiter(this);
@@ -424,9 +420,6 @@ public class ProxyServer {
         // Periodically evict ghost registrations whose disconnect event was never processed;
         // they would otherwise stay registered forever and block reconnects for that identity.
         this.scheduler.scheduleRepeating(this.playerManager::sweepDisconnectedPlayers, GHOST_SWEEP_PERIOD_TICKS, true);
-
-        // Sleep mode heartbeat: once a second, decides when an empty proxy falls asleep
-        this.scheduler.scheduleRepeating(this.sleepModeManager::tick, SleepModeManager.HEARTBEAT_TICKS, true);
 
         // Only Proxy Join: apply the firewall rules once (idempotent) and re-check them every
         // minute so a firewall flush on the host heals itself without operator action.
@@ -649,9 +642,6 @@ public class ProxyServer {
         if (message.trim().isEmpty()) {
             return false;
         }
-        // A console/panel command is contact: an asleep proxy wakes before executing it
-        this.sleepModeManager.onActivity();
-
         String[] args = message.split(" ");
         Command command = this.commandMap.getCommand(args[0]);
 
@@ -720,8 +710,6 @@ public class ProxyServer {
      * @param address The client asking, or null when none did, as for the NXS listing
      */
     public ProxyPingEvent callPingEvent(InetSocketAddress address) {
-        // A server-list ping is contact: an asleep proxy must wake before answering
-        this.sleepModeManager.onActivity();
         ProxyConfig config = this.getConfiguration();
         // show_max_players=false shows the live player count as the maximum, so the proxy
         // never looks full; plugins can still override either number below.

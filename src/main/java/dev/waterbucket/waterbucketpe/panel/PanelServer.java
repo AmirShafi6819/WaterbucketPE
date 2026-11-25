@@ -354,8 +354,6 @@ public class PanelServer {
                     ? address.getAddress().getHostAddress() : "unknown";
 
             if (path.startsWith("/api/")) {
-                // A panel request is contact: an asleep proxy wakes before answering
-                PanelServer.this.proxy.getSleepModeManager().onActivity();
                 if (PanelServer.this.rateLimited(ip)) {
                     PanelServer.this.respondError(ctx, request, HttpResponseStatus.TOO_MANY_REQUESTS, "Rate limit exceeded");
                     return;

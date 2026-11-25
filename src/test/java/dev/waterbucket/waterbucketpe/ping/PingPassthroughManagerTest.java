@@ -188,18 +188,4 @@ class PingPassthroughManagerTest {
 
         assertNull(this.manager.resolvePassthroughServer());
     }
-
-    @Test
-    void refreshIsSkippedWhileSleeping() {
-        when(this.config.getPingPassthrough()).thenReturn(ProxyConfig.PingPassthrough.DESCRIPTION);
-        when(this.proxy.getSleepModeManager()).thenReturn(mock(dev.waterbucket.waterbucketpe.sleep.SleepModeManager.class));
-        when(this.proxy.getSleepModeManager().isSleeping()).thenReturn(true);
-        when(this.proxy.getServerInfoMap()).thenReturn(new ServerInfoMap());
-        when(this.config.getPriorities()).thenReturn(List.of());
-
-        // Must not throw and must not wipe the (absent) snapshot: a sleeping proxy keeps
-        // serving whatever it had.
-        this.manager.refresh();
-        assertNull(this.manager.resolvePassthroughServer());
-    }
 }

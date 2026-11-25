@@ -153,14 +153,6 @@ public class ProxyConfig extends YamlConfig {
     })
     private OnlyProxyJoinSettings onlyProxyJoinSettings = new OnlyProxyJoinSettings();
 
-    @Path("sleep_mode")
-    @Comments({
-            "Idle resource saver: with zero players the proxy trims its heap and pauses periodic",
-            "downstream probes after the configured idle time, and wakes instantly on the first",
-            "ping, query, login, panel request or command. The listener stays bound the whole time."
-    })
-    private SleepModeSettings sleepModeSettings = new SleepModeSettings();
-
     @Path("persian_fix")
     @Comments({
             "Persian Fix: display-ready Persian (and every other Arabic-script language) on the",
