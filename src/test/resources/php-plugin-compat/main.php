@@ -14,13 +14,13 @@ function wb_pmmp_state() {
 }
 
 function on_startup($plugin) {
-    global $state, $pmmp;
+    global $state, $compat;
     $state['startup'] = true;
     // The facade is live from the first hook; simple event names resolve the compat package too
-    $server = $pmmp->getServer();
+    $server = $compat->getServer();
     $state['server_name'] = $server->getName();
     $state['api_version'] = $server->getApiVersion();
-    $plugin->subscribe('dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerChatEvent', function ($event) {
+    $plugin->subscribe('dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerChatEvent', function ($event) {
         global $state;
         $state['chat_seen'] = $event->getMessage();
         $event->getPlayer()->sendMessage('seen: ' . $state['chat_seen']);

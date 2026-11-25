@@ -11,10 +11,10 @@ state.put("player_msg", False)
 def on_startup(plugin):
     state.put("startup", True)
     # The compatibility facade is live from the first hook
-    server = pmmp.getServer()
+    server = compat.getServer()
     state.put("server_name", server.getName())
     state.put("api_version", server.getApiVersion())
-    plugin.subscribe(pmmp.playerChatEvent(), handle_compat_chat)
+    plugin.subscribe(compat.playerChatEvent(), handle_compat_chat)
 
 
 def handle_compat_chat(event):

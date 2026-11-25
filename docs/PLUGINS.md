@@ -9,7 +9,7 @@ Choose your language:
 
 Both guides describe the implementation in the current source tree. They intentionally distinguish implemented APIs from features that are not currently provided (such as plugin hot reload and Python task handles).
 
-The Java plugin API covers the full WaterdogPE surface (functional events, commands, tick scheduling, player/server management, runtime max players) plus the Velocity-style additions: `@PluginDescriptor` jar declaration, `@Subscribe` annotation listeners, the fluent `TaskBuilder` time scheduler, and `ConnectionRequest` with a real result future. See sections 3, 7, 9 and 10 of the guides.
+The Java plugin API covers the full upstream surface (functional events, commands, tick scheduling, player/server management, runtime max players) plus the declarative additions: `@PluginDescriptor` jar declaration, `@Subscribe` annotation listeners, the fluent `TaskBuilder` time scheduler, and `ConnectionRequest` with a real result future. See sections 3, 7, 9 and 10 of the guides.
 
 Script plugins (Python and PHP) run on embedded interpreters shipped inside the proxy - no system Python or PHP installation is required - and expose the same lifecycle hooks, event subscriptions, commands and scheduling helpers through their facades. See sections 5 and 12 of the guides.
 

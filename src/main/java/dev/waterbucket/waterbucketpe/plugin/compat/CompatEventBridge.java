@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp;
+package dev.waterbucket.waterbucketpe.plugin.compat;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.event.EventManager;
@@ -21,8 +21,8 @@ import dev.waterbucket.waterbucketpe.event.defaults.PlayerChatEvent;
 import dev.waterbucket.waterbucketpe.event.defaults.PlayerCommandEvent;
 import dev.waterbucket.waterbucketpe.event.defaults.PlayerDisconnectedEvent;
 import dev.waterbucket.waterbucketpe.event.defaults.PlayerLoginEvent;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerJoinEvent;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerQuitEvent;
+import dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerJoinEvent;
+import dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerQuitEvent;
 import lombok.extern.log4j.Log4j2;
 
 /**
@@ -33,9 +33,9 @@ import lombok.extern.log4j.Log4j2;
  * synchronously, so cancelling a compatibility chat really stops the line at the pipeline.
  */
 @Log4j2
-public final class PmmpEventBridge {
+public final class CompatEventBridge {
 
-    private PmmpEventBridge() {
+    private CompatEventBridge() {
     }
 
     /**
@@ -50,8 +50,8 @@ public final class PmmpEventBridge {
         // their say about the login.
         events.subscribe(PlayerLoginEvent.class, event -> {
             Player player = new Player(event.getPlayer());
-            dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerLoginEvent compat =
-                    new dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerLoginEvent(player,
+            dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerLoginEvent compat =
+                    new dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerLoginEvent(player,
                             "§cYou are not allowed to join this server.");
             events.callEvent(compat);
             if (compat.isCancelled()) {
@@ -82,8 +82,8 @@ public final class PmmpEventBridge {
         // proxy event before the pipeline continues.
         events.subscribe(PlayerChatEvent.class, event -> {
             Player player = new Player(event.getPlayer());
-            dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerChatEvent compat =
-                    new dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerChatEvent(player, event.getMessage());
+            dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerChatEvent compat =
+                    new dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerChatEvent(player, event.getMessage());
             events.callEvent(compat);
             if (compat.isCancelled()) {
                 event.setCancelled(true);
@@ -97,8 +97,8 @@ public final class PmmpEventBridge {
         // Commands: the raw line including the leading slash.
         events.subscribe(PlayerCommandEvent.class, event -> {
             Player player = new Player(event.getPlayer());
-            dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerCommandPreprocessEvent compat =
-                    new dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerCommandPreprocessEvent(player,
+            dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerCommandPreprocessEvent compat =
+                    new dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerCommandPreprocessEvent(player,
                             event.getCommand());
             events.callEvent(compat);
             if (compat.isCancelled()) {

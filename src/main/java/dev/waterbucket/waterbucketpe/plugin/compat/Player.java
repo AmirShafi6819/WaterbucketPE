@@ -13,12 +13,12 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp;
+package dev.waterbucket.waterbucketpe.plugin.compat;
 
 import dev.waterbucket.waterbucketpe.event.defaults.PlayerChatEvent;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerKickEvent;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerLoginEvent;
+import dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerKickEvent;
+import dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerLoginEvent;
 import lombok.Getter;
 
 /**

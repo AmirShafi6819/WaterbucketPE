@@ -13,10 +13,10 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp.event;
+package dev.waterbucket.waterbucketpe.plugin.compat.event;
 
 import dev.waterbucket.waterbucketpe.event.CancellableEvent;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.Player;
+import dev.waterbucket.waterbucketpe.plugin.compat.Player;
 
 /**
  * Fired when a player sends a chat line. Cancelling the event stops the line before the
@@ -24,7 +24,7 @@ import dev.waterbucket.waterbucketpe.plugin.pmmp.Player;
  * same path. The proxy's own handlers run first, so compatibility plugins see the text as the
  * proxy already shaped it.
  */
-public class PlayerChatEvent extends PmmpPlayerEvent implements CancellableEvent {
+public class PlayerChatEvent extends CompatPlayerEvent implements CancellableEvent {
 
     private String message;
     private boolean cancelled;

@@ -36,8 +36,8 @@ versioning follows [semantic versioning](https://semver.org/).
 
 ### Added — compatibility plugin API for the original server software's plugins
 
-- **`pmmp` compatibility surface, native in the proxy** (`dev.waterbucket.waterbucketpe.plugin.pmmp`):
-  the plugin API of the well-known Bedrock server software is mirrored onto the proxy with its
+- **compatibility plugin surface, native in the proxy** (`dev.waterbucket.waterbucketpe.plugin.compat`):
+  the plugin API shape of the well-known Bedrock server software is mirrored onto the proxy with its
   own syntax - `Server`, `Player`, `Config`, `Scheduler`, plugin manager - every method backed
   by a real proxy operation (player lookups, broadcasts, message/tip/popup/actionbar/title/
   toast/forms, chat dispatch, kick with its own cancellable event, permissions, motd, command
@@ -51,7 +51,7 @@ versioning follows [semantic versioning](https://semver.org/).
   `kick()`, veto keeps the player online). Proxy-native handlers run first; compatibility
   plugins see the same moment afterwards.
 - **All three plugin languages**: Java plugins import the package; Python and PHP plugins get
-  a `pmmp` global (`pmmp.getServer()`, `pmmp.playerChatEvent()`, `pmmp.newConfig(...)`) bound
+  a `compat` global (`compat.getServer()`, `compat.playerChatEvent()`, `compat.newConfig(...)`) bound
   next to `plugin`/`proxy`/`logger`, with snake_case aliases. PHP event names now resolve the
   compatibility package by simple name too.
 - **Economy plugin rebuilt and tested end to end**: the classic economy plugin re-implemented
@@ -63,9 +63,9 @@ versioning follows [semantic versioning](https://semver.org/).
 
 ## [1.5.6] - 2026-11-25
 
-### Added — Velocity-style duplicate login handling
+### Added — duplicate login handling
 
-- **`kick_existing_players` config key (default off, Velocity parity)**: when enabled, a new
+- **`kick_existing_players` config key (default off)**: when enabled, a new
   login whose display name matches an online session of a different identity closes the older
   session with a clean notice (`waterbucket.duplicate-login.kick-old`, overridable in
   `ingame-messages.yml`) and takes over the name; the closed session leaves the registry
@@ -81,8 +81,8 @@ versioning follows [semantic versioning](https://semver.org/).
   address and source port are embedded into the client data JWT that is re-signed and sent
   to every downstream server, so servers stop logging joins as `127.0.0.1` with a random
   port (the proxy's own dial socket) and can show the player's true IP. The `Waterdog_IP`
-  field is the de-facto claim the ecosystem already reads — Nukkit-MOT (`ClientChainData`),
-  Geyser (`BedrockClientData`) and the PMMP proxy login-extras plugins — and the fork adds
+  field is the de-facto claim the ecosystem already reads — modern Bedrock server software
+  and the proxy login-extras plugins all check it — and the fork adds
   `Waterbucket_IP` / `Waterbucket_Port` under its own namespace.
 - **Works on existing installs without touching config.yml**: the new key is missing from
   older files, so the field default (enabled) applies and the key is appended on the next
@@ -221,10 +221,11 @@ versioning follows [semantic versioning](https://semver.org/).
   PHP quick start, facade reference, troubleshooting rows and source references.
   68 suites / 406 tests green (8 new end-to-end PHP bridge tests).
 
-### Added — Velocity features, reverse engineered
+### Added — familiar proxy features, reverse engineered
 
-Three stable, battle-tested Velocity listener features were reimplemented natively for the
-Bedrock proxy, with the same config names and semantics so operators coming from Velocity
+Three stable, battle-tested proxy listener features were reimplemented natively for the
+Bedrock proxy, with the same config names and semantics so operators migrating from other
+proxies
 feel at home.
 
 - **`listener.ping_passthrough`** (`disabled` / `description` / `all`, default `disabled`):
@@ -253,8 +254,7 @@ round at the end of the release brought the suite to 62 suites / 364 tests.
 
 ### Added — complete plugin API (2026-11-24, shipped in the same release)
 
-The plugin module was audited against the upstream WaterdogPE plugin documentation
-(docs.waterdog.dev/plugins) and rounded out to a full surface. 62 suites / 364 tests green.
+The plugin module was audited against the upstream plugin documentation and rounded out to a full surface. 62 suites / 364 tests green.
 
 - **`PlayerCommandEvent`** — a new cancellable event fired for every command a player types,
   before the proxy decides whether the command belongs to it or to the downstream server.
@@ -315,34 +315,34 @@ The plugin module was audited against the upstream WaterdogPE plugin documentati
   player (and localhost testing) for 15s stretches. Transport-level IO errors no longer
   block IPs and log at debug instead of error with a stack trace.
 
-### Added — Velocity-style plugin API completion & memory stability (2026-11-24, shipped in the same release)
+### Added — plugin API completion & memory stability (2026-11-24, shipped in the same release)
 
-Second plugin-API round, this time completing the surface with the Velocity features
+Second plugin-API round, this time completing the surface with the declarative additions
 operators actually ask for, plus a targeted pass at the RAM/CPU sawtooth. The suite grew
 from 62 suites / 364 tests to **67 suites / 398 tests, all green**.
 
 - **`@PluginDescriptor` annotation** — a jar can now declare its plugin descriptor directly
-  on the main class (Velocity workflow) instead of shipping `waterbucket.yml`. The id is
+  on the main class (declarative workflow) instead of shipping `waterbucket.yml`. The id is
   required and follows the same name rules; YAML wins when both exist, so updating an
   existing plugin can not change behavior by accident. The boot scan pre-filters jars by a
   constant-pool marker scan and reads candidate classes with `initialize=false`, so plugin
   static initializers never run while merely reading metadata.
 - **`@Subscribe` annotation listeners** — declaration-style event registration: public
   methods with one `Event` parameter, `priority()` following the LOWEST..HIGHEST ordering and
-  `ignoreCancelled()` for the Velocity contract that cancelled events do not reach
+  `ignoreCancelled()` for the contract that cancelled events do not reach
   uninterested handlers. `registerListener(plugin, listener)` / `unregisterListener(listener)`
   / `unregisterListeners(plugin)`; listeners registered with an owner are detached
   automatically when the plugin disables (even when onDisable threw), mirroring the
   plugin-owned task contract. Wrong signatures are skipped with a warning naming the method;
   handler exceptions stay isolated exactly like the functional API.
-- **Velocity-style `TaskBuilder` time scheduler** — `scheduler.buildTask(plugin, runnable)
+- **The fluent `TaskBuilder` time scheduler** — `scheduler.buildTask(plugin, runnable)
   .delay(2, TimeUnit.SECONDS).repeat(500, TimeUnit.MILLISECONDS).schedule()` returns a
   `ScheduledTask` handle and runs on a dedicated fixed time-scheduler pool, independent of
   the tick loop. Repeating tasks use fixed-delay semantics (a slow task backs up instead of
   overlapping itself), exceptions are logged with task id + owner and never kill the
   schedule, cancelled one-shots are purged from the queue, and plugin-owned time tasks join
   the same auto-cancel-on-disable contract as tick tasks.
-- **Velocity-style `ConnectionRequest`** — `player.createConnectionRequest(server)
+- **`ConnectionRequest` with a real result future** — `player.createConnectionRequest(server)
   .connectWithIndication()` completes with the real outcome (`SUCCESS`, `ALREADY_CONNECTED`,
   `CONNECTION_IN_PROGRESS`, `CONNECTION_CANCELLED`, `CONNECTION_FAILED`) instead of forcing
   plugins to infer it from events; `fireAndForget()` for the rest. The future always
@@ -352,7 +352,7 @@ from 62 suites / 364 tests to **67 suites / 398 tests, all green**.
   per-player observer slot, and player disconnect settles every pending request as
   cancelled, so nothing leaks.
 - **ProxyServer aliases** — `fire(event)` (= `callEvent`) and `getAllPlayers()`
-  (= `getPlayers().values()`) for Velocity-familiar call sites.
+  (= `getPlayers().values()`) for familiar call sites.
 - **Flat RAM/CPU: bounded executors** — the scheduler and event-manager pools were
   `ThreadPoolExecutor(core, Integer.MAX_VALUE, SynchronousQueue)`: every burst spawned fresh
   threads that died 60s later, so RAM and CPU bounced up and down on join bursts and query
@@ -453,7 +453,7 @@ from 62 suites / 364 tests to **67 suites / 398 tests, all green**.
 
 The performance release. A post-1.4.0 audit pass with eight regression-tested
 bug fixes, two measured headless-efficiency optimizations, and a re-measured
-WaterdogPE comparison whose harness bugs (stdin EOF console spin, JIT
+comparison against the fork base whose harness bugs (stdin EOF console spin, JIT
 compilation races inside sampled windows) were fixed for both proxies alike.
 
 ### Fixed
@@ -495,7 +495,7 @@ compilation races inside sampled windows) were fixed for both proxies alike.
   freed buffers return to the pool instead of parking per event loop.
 
 ### Measured
-- **WaterdogPE comparison re-measured, no panel favors upstream anymore**
+- **Comparison re-measured, no panel favors upstream anymore**
   (same 2-core VM, identical flags, fixed harness with open stdin, JIT
   warm-up, pooled handshakes and median-of-three held-session rounds):
   idle memory −10.5% (216.6 → 193.8 MB), cold startup −39.7%, ping RTT median
@@ -515,7 +515,7 @@ The final engineering pass. Two full rounds since 1.3.0 — a plugin-engine
 audit-and-hardening round (Phase 3 + Phase 5, 13 commits) and a proxy-wide
 stability hardening round (14 commits) — plus the final-phase benchmarking
 and scale-validation tooling. Everything is evidence-backed: 328 tests green
-on the release build, and the WaterdogPE comparison was re-measured on the
+on the release build, and the fork-base comparison was re-measured on the
 same VM with the same harness and JVM flags.
 
 ### Added
@@ -527,7 +527,7 @@ same VM with the same harness and JVM flags.
   (hold until killed) for cumulative populations. The partial run in this
   environment is recorded verbatim (`results-scale.json`); the 500-session
   milestone remains covered by `bench_final.py` (`scale_held=500`).
-- **WaterdogPE comparison, like-for-like** (`benchmarks/results.json`): same
+- **Fork-base comparison, like-for-like** (`benchmarks/results.json`): same
   VM, same harness, same flags — startup, idle RSS/CPU, ping RTT, handshake
   churn, 200 held sessions, ~500 held sessions, churn-leak probes on both
   proxies. Full context and caveats in `benchmarks/METHODOLOGY.md`.
@@ -620,7 +620,7 @@ harness (`benchmarks/results-phase2.json`, `benchmarks/benchmark-phase2.png`).
   still leave as one batch and idle connections are never woken. The queue is bounded
   (4096 packets) with the same overflow handling as the transfer queue - previously it
   grew without limit - and its write promises complete at enqueue time.
-- **Velocity techniques evaluated** (see `docs/PHASE2_BASELINE.md`): flush consolidation,
+- **Techniques from other proxies evaluated** (see `docs/PHASE2_BASELINE.md`): flush consolidation,
   fast paths for untouched batches, composite-buffer framing and lazy downstream decode
   were already present; cross-leg `setAutoRead` backpressure was rejected with reasons
   (RakNet legs stop ACKing when reads pause, which trades a slow queue for session
@@ -739,7 +739,7 @@ harness (`benchmarks/results-phase2.json`, `benchmarks/benchmark-phase2.png`).
 - Event pipeline thread safety: concurrent event calls plus late subscriptions could corrupt
   the handler map (fastutil) or throw `ConcurrentModificationException` (EnumMap+ArrayList);
   now concurrent map + atomic immutable snapshots, with a concurrency test suite.
-- Ghost players (upstream WaterdogPE #266): stale registrations whose disconnect event was
+- Ghost players (upstream issue #266): stale registrations whose disconnect event was
   lost are evicted by a 15-second sweep; a re-registered fresh session stays untouched.
 - Query handler reverse-DNS on the event loop (`getHostName()` → `getHostString()`).
 - `TranslationContainer.getTranslated()` no longer crashes when the proxy instance does not
@@ -748,12 +748,12 @@ harness (`benchmarks/results-phase2.json`, `benchmarks/benchmark-phase2.png`).
 ### Changed
 - Compression: the configured zlib level is applied per connection leg (upstream vs
   downstream); previously both legs inherited the upstream level.
-- Flush consolidation on both network legs (Velocity's approach, 256 explicit flushes).
+- Flush consolidation on both network legs (the approach used by other proxies, 256 explicit flushes).
 
 ## [1.0.0] - 2026-11-21
 
 ### Added
-- Rebrand of WaterdogPE to WaterbucketPE (code, resources, terminal banner).
+- Rebrand of the fork base to WaterbucketPE (code, resources, terminal banner).
 - Terminal improvements: branded ASCII banner, persistent console history, log pattern fix.
 - Benchmark harness (`benchmarks/`): real-UDP pings, real RakNet handshakes, RSS/CPU tracking.
 

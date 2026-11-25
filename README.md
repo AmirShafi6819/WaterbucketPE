@@ -9,7 +9,7 @@
 
 <p align="center">
   <strong>The Bedrock proxy that stays smooth when players show up.</strong><br>
-  A drop-in WaterdogPE replacement with a rebuilt networking core, a Liquid Glass web panel,
+  A WaterdogPE fork, rebuilt end to end: a fresh networking core, a Liquid Glass web panel,
   plugins in Java, Python <em>and</em> PHP, and benchmarks we publish even when they hurt.
 </p>
 
@@ -19,7 +19,6 @@
   <a href="https://adoptium.net/"><img alt="Java" src="https://img.shields.io/badge/Java-17%2B-orange"></a>
   <a href="https://www.minecraft.net/"><img alt="Platform" src="https://img.shields.io/badge/platform-Bedrock%20Edition-62B47A"></a>
   <a href="https://github.com/AmirShafi6819/WaterbucketPE/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/AmirShafi6819/WaterbucketPE/build.yml?branch=master&label=build"></a>
-  <a href="https://github.com/WaterdogPE/WaterdogPE"><img alt="Upstream" src="https://img.shields.io/badge/upstream-WaterdogPE-5B6B8C"></a>
 </p>
 
 <p align="center">
@@ -38,20 +37,21 @@
 
 ## About
 
-WaterBucketPE is what WaterdogPE would be if it were rebuilt around one question: *what does
-an operator actually feel?* Smooth joins instead of CPU spikes, a panel you can read at a
-glance in two languages, messages you can reword without touching code, and a benchmark chart
-that shows upstream winning whenever it actually does.
+WaterBucketPE takes the fork base and rebuilds it around one question: *what does an operator
+actually feel?* Smooth joins instead of CPU spikes, a panel you can read at a glance in two
+languages, messages you can reword without touching code, and a benchmark chart that shows
+the honest numbers even when they hurt.
 
-Everything WaterdogPE offers still works here: the same protocol behavior, the same plugin
-API, the same configuration format. **Existing WaterdogPE jar plugins run unchanged** —
-configs, transfers, forwarding and the event API are preserved, and the old `wd*` commands
-answer as aliases of the rebranded `wb*` ones. The Python front-end is purely additive.
+Everything the upstream fork base offers still works here: the same protocol behavior, the
+same plugin API, the same configuration format. **Existing upstream jar plugins run
+unchanged** — configs, transfers, forwarding and the event API are preserved, and the old
+`wd*` commands answer as aliases of the rebranded `wb*` ones. The Python front-end is purely
+additive.
 
 | | |
 |---|---|
 | **Smooth joins** | the login crypto, zlib codec, packet classes and the downstream dial path all warm up at boot, so the first player of the day doesn't pay for JIT and class loading in front of everyone |
-| **Honest numbers** | the WaterdogPE comparison is measured by one harness on one machine, re-measured whenever the harness itself has a bug, adverse panels reported as ties |
+| **Honest numbers** | every comparison is measured by one harness on one machine, re-measured whenever the harness itself has a bug, adverse panels reported as ties |
 | **Operator surface** | Liquid Glass panel (dark/light, fa/en), editable layout, per-server management, colored console, `/restart`, server offline toggle, sleep mode |
 | **Customizable messages** | every player-visible text — kick reasons, transfer errors, the shutdown notice — lives in one `ingame-messages.yml` with § color codes |
 
@@ -64,16 +64,16 @@ answer as aliases of the rebranded `wb*` ones. The Python front-end is purely ad
   right-sized event loops and pooled allocators, adaptive packet-batch drain, O(1) player
   lookups, async events that skip the executor when nobody is listening, and a warm dial
   path so joins cost network time and nothing else.
-- **Velocity features, reverse engineered** — `ping_passthrough` serves the priority
+- **Familiar listener features, reverse engineered** — `ping_passthrough` serves the priority
   server's real MOTD (and optionally its player counts and game type) on the server list,
   `show_max_players` can hide the maximum so the proxy never looks full, `command_rate_limit`
   floods back at the configured rate per player, and `kick_existing_players` closes the older
   session when a duplicate login with the same name arrives so the newcomer takes over.
 - **Real IP forwarding** — the player's real address and port travel inside the login data
   (`forward_client_ip`, on by default), so downstream servers log the player's true IP instead
-  of the proxy's own socket (127.0.0.1 with a random port on co-located hosts). Servers that
-  understand the Waterdog login fields display it natively: Nukkit-MOT, Geyser, and PMMP with
-  a proxy login-extras plugin.
+  of the proxy's own socket (127.0.0.1 with a random port on co-located hosts). Server
+  software that reads the de-facto shared forwarding fields shows it natively, and a
+  login-extras plugin covers the rest.
 - **Persian Fix** — with `persian_fix.enable: true` the proxy makes Persian (and every other
   Arabic-script language) display-ready on the client: joined letters, correct right-to-left
   order, mixed Latin and numbers intact. Runs inside the proxy on the packets themselves, so
@@ -96,7 +96,7 @@ answer as aliases of the rebranded `wb*` ones. The Python front-end is purely ad
 - **Web panel built in** — token-secured, served by the proxy itself, no external services:
   live charts, players, per-server management with real pings, a command console with colored
   output, and a drag-and-drop layout editor. Persian and English, dark and light.
-- **A complete plugin API in three languages** — every event from the upstream WaterdogPE
+- **A complete plugin API in three languages** — every event from the upstream fork base
   docs (plus `PlayerCommandEvent`), runtime max players (`setMaxPlayers`), player lookups,
   broadcasting, plugin-owned scheduler tasks that auto-cancel on disable, runtime
   `disablePlugin`, the `description` descriptor field and `reloadConfig()`. Java jars stay
@@ -121,7 +121,7 @@ Light theme, Persian (RTL) and four accent colors are one click away in the pane
 
 ## Benchmark
 
-Measured comparison against upstream WaterdogPE — same 2-core VM, identical JVM flags, real
+Measured comparison against the upstream fork base — same 2-core VM, identical JVM flags, real
 RakNet pings and handshakes, the same harness driving both proxies (re-measured 2026-11-23).
 Held-session memory/CPU figures are medians of three counted rounds after an uncounted
 calibration round; handshakes pool 900 connects after a 120-connect JIT warm-up — the same
@@ -130,7 +130,7 @@ protocol for both proxies.
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/benchmark-comparison.png">
-    <img alt="WaterbucketPE vs WaterdogPE benchmark" src=".github/benchmark-comparison.png" width="900">
+    <img alt="WaterbucketPE benchmark comparison" src=".github/benchmark-comparison.png" width="900">
   </picture>
 </p>
 
@@ -314,8 +314,8 @@ regression test, and backwards compatibility is a contract, not a wish. PR templ
 
 ## Acknowledgments
 
-Forked from [WaterdogPE](https://github.com/WaterdogPE/WaterdogPE) — the clean base that made
-this fork possible. Built on [CloudburstMC protocol](https://github.com/CloudburstMC/Protocol),
+The fork base this project started from gave it a clean, well-tested foundation; the proxy is
+built on the [CloudburstMC protocol](https://github.com/CloudburstMC/Protocol) and
 Netty, and [GraalPy](https://github.com/oracle/graalpython).
 
 ## License

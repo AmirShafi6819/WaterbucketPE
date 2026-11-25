@@ -104,9 +104,9 @@ depends: []
 
 نام پلاگین به نام پوشه داده‌ها و کلید مدیر تبدیل می‌شود، بنابراین فقط می‌تواند شامل حروف، اعداد، فاصله، نقطه، خط تیره و زیرخط باشد (حداکثر ۶۴ نویسه و بدون جداکننده مسیر). Descriptor با نام نامعتبر در زمان بارگذاری رد می‌شود.
 
-### جایگزین به سبک Velocity: انوتیشن @PluginDescriptor
+### روش اعلانی (declarative): انوتیشن @PluginDescriptor
 
-یک پلاگین Java می‌تواند Descriptor را مستقیماً روی کلاس اصلی تعریف کند، به‌جای قرار دادن فایل YAML درون Jar. این همان سبک Velocity است: کلاس انوتیشن‌شده خودِ کلاس اصلی است.
+یک پلاگین Java می‌تواند Descriptor را مستقیماً روی کلاس اصلی تعریف کند، به‌جای قرار دادن فایل YAML درون Jar. این همان جریان اعلانی است: کلاس انوتیشن‌شده خودِ کلاس اصلی است.
 
 ~~~java
 import dev.waterbucket.waterbucketpe.plugin.Plugin;
@@ -406,7 +406,7 @@ getProxy().getEventManager().subscribe(
 
 ### Listener انوتیشنی در Java (@Subscribe)
 
-روش تعریفی به‌جای API تابعی بالا، آشنا برای کاربران Velocity: متدهای public را انوتیشن کنید و کل آبجکت Listener را یک‌جا ثبت کنید.
+روش تعریفی به‌جای API تابعی بالا: متدهای public را انوتیشن کنید و کل آبجکت Listener را یک‌جا ثبت کنید.
 
 ~~~java
 import dev.waterbucket.waterbucketpe.event.Subscribe;
@@ -659,7 +659,7 @@ plugin.schedule_repeating(check_status, 100)
 
 برای عملیات مسدودکننده فایل و شبکه از Task همگام استفاده نکنید.
 
-### زمان‌بندی مبتنی بر زمان واقعی (TaskBuilder به سبک Velocity)
+### زمان‌بندی مبتنی بر زمان واقعی (TaskBuilder روان)
 
 برای زمان‌بندی بر حسب زمان واقعی به‌جای Tick از Builder روان استفاده کنید. این Taskها روی Pool مخصوص زمان‌بند زمانی اجرا می‌شوند و ریتمشان مستقل از Tick Loop است:
 
@@ -706,7 +706,7 @@ java.util.Map<java.util.UUID, ProxiedPlayer> online = getProxy().getPlayers();
 
 ProxiedPlayer این متدها را در اختیار می‌گذارد: `connect(ServerInfo)`، `sendMessage(String|TextContainer)`، `sendTranslation(...)`، `chat(String)`، `sendPopup`، `sendTip`، `sendTitle`، `sendToastMessage`، `disconnect(reason)`، `sendToFallback(...)`، متدهای Permission (`addPermission`، `hasPermission`، `removePermission`)، اطلاعات دستگاه/پروتکل (`getDevicePlatform`، `getDeviceModel`، `getDeviceId`، `getProtocol`)، شناسه‌ها (`getName`، `getUniqueId`، `getXuid`)، وضعیت شبکه (`getAddress`، `getPing`، `isConnected`، `getServerInfo`، `getDownstreamConnection`) و کنترل Resource Pack (`acceptResourcePacks`). هر بررسی Permission رویداد `PlayerPermissionCheckEvent` را اجرا می‌کند، پس پلاگین‌ها می‌توانند نتیجه را بازنویسی کنند.
 
-### درخواست اتصال به سبک Velocity (ConnectionRequest)
+### درخواست اتصال با نتیجه واقعی (ConnectionRequest)
 
 به‌جای صدا زدن connect() و استنتاج نتیجه از Eventها، درخواست اتصال نتیجه‌ی واقعی را برمی‌گرداند:
 
@@ -898,7 +898,7 @@ Facade پایتون افزوده‌ای بر API Java است، نه جایگزی
 
 - پلاگین Java باید از کلاس Plugin مربوط به WaterbucketPE ارث‌بری کند و در برابر API نسخه مقصد کامپایل شود.
 - Package فعلی **dev.waterbucket.waterbucketpe** است. پلاگینی که در برابر Namespace متفاوتی کامپایل شده ممکن است به تغییر سورس و کامپایل مجدد نیاز داشته باشد.
-- سازگاری با WaterdogPE برای تمام Binaryهای شخص ثالث تضمین‌شده نیست. هر پلاگین و وابستگی‌هایش را با نسخه فعلی تست کنید.
+- سازگاری با پلاگین‌های Jar نسخه پایه برای تمام Binaryهای شخص ثالث تضمین‌شده نیست. هر پلاگین و وابستگی‌هایش را با نسخه فعلی تست کنید.
 - Descriptor از **depends** پشتیبانی می‌کند، نه تمام Schema مربوط به Bukkit/Paper.
 - API پایتون در حال توسعه است؛ API شبیه Bukkit را بدون وجود پیاده‌سازی فرض نکنید.
 

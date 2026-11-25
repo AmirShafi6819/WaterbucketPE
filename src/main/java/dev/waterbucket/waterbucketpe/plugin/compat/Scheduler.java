@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp;
+package dev.waterbucket.waterbucketpe.plugin.compat;
 
 import dev.waterbucket.waterbucketpe.plugin.Plugin;
 import dev.waterbucket.waterbucketpe.scheduler.WaterbucketScheduler;

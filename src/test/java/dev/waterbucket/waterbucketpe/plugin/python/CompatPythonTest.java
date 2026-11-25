@@ -21,9 +21,9 @@ import dev.waterbucket.waterbucketpe.command.CommandMap;
 import dev.waterbucket.waterbucketpe.event.EventManager;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.plugin.PluginYAML;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.PmmpApi;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.Server;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerChatEvent;
+import dev.waterbucket.waterbucketpe.plugin.compat.CompatApi;
+import dev.waterbucket.waterbucketpe.plugin.compat.Server;
+import dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerChatEvent;
 import dev.waterbucket.waterbucketpe.scheduler.WaterbucketScheduler;
 import dev.waterbucket.waterbucketpe.utils.config.proxy.ProxyConfig;
 import org.junit.jupiter.api.AfterEach;
@@ -49,7 +49,7 @@ import static org.mockito.Mockito.when;
  * {@code pmmp} global, subscribing the compatibility chat event and driving the compatibility
  * {@code Player} wrapper - with the message edit flowing back to the proxy pipeline.
  */
-class PmmpPythonTest {
+class CompatPythonTest {
 
     @TempDir
     Path tempDir;
@@ -86,9 +86,9 @@ class PmmpPythonTest {
         when(this.rawPlayer.getServerInfo()).thenReturn(null);
         doAnswer(invocation -> null).when(this.rawPlayer).sendMessage(anyString());
 
-        Path pluginDir = this.tempDir.resolve("plugins").resolve("PmmpPy");
+        Path pluginDir = this.tempDir.resolve("plugins").resolve("CompatPy");
         Files.createDirectories(pluginDir);
-        Files.walk(Path.of("src/test/resources/python-plugin-pmmp"), 1)
+        Files.walk(Path.of("src/test/resources/python-plugin-compat"), 1)
                 .forEach(source -> {
                     if (Files.isRegularFile(source)) {
                         try {
@@ -99,7 +99,7 @@ class PmmpPythonTest {
                 });
 
         PluginYAML descriptor = new PluginYAML();
-        descriptor.name = "PmmpPy";
+        descriptor.name = "CompatPy";
         descriptor.version = "1.0.0";
         descriptor.author = "Test";
         descriptor.main = "main.py";
@@ -135,7 +135,7 @@ class PmmpPythonTest {
 
         // fire the compatibility chat event: the Python handler sees it, messages the player
         // through the compat wrapper and edits the message back
-        PlayerChatEvent event = new PlayerChatEvent(new dev.waterbucket.waterbucketpe.plugin.pmmp.Player(this.rawPlayer), "salam world");
+        PlayerChatEvent event = new PlayerChatEvent(new dev.waterbucket.waterbucketpe.plugin.compat.Player(this.rawPlayer), "salam world");
         this.eventManager.callEvent(event);
 
         assertEquals("salam world", state.get("chat_seen"));

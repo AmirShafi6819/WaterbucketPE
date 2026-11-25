@@ -13,16 +13,16 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp.event;
+package dev.waterbucket.waterbucketpe.plugin.compat.event;
 
 import dev.waterbucket.waterbucketpe.event.CancellableEvent;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.Player;
+import dev.waterbucket.waterbucketpe.plugin.compat.Player;
 
 /**
  * Fired when a player reaches the proxy login flow. Cancelling refuses the login: the player
  * is disconnected with the cancel reason before any downstream server is dialed.
  */
-public class PlayerLoginEvent extends PmmpPlayerEvent implements CancellableEvent {
+public class PlayerLoginEvent extends CompatPlayerEvent implements CancellableEvent {
 
     private String kickMessage;
     private boolean cancelled;

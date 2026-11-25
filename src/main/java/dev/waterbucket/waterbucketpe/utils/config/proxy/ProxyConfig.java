@@ -212,7 +212,7 @@ public class ProxyConfig extends YamlConfig {
 
     @Path("forward_client_ip")
     @Accessors(fluent = true)
-    @Comment("If enabled, the proxy embeds the player's real IP and port into the login data sent to every downstream server, so servers stop logging joins from the proxy's own socket (e.g. 127.0.0.1 with a random port) and show the player's real address. Servers that understand the Waterdog login fields display it natively: Nukkit-MOT, Geyser, and PMMP with a proxy login-extras plugin")
+    @Comment("If enabled, the proxy embeds the player's real IP and port into the login data sent to every downstream server, so servers stop logging joins from the proxy's own socket (e.g. 127.0.0.1 with a random port) and show the player's real address. Server software that reads the de-facto shared forwarding fields shows it natively, and a proxy login-extras plugin covers the rest")
     private boolean forwardClientIp = true;
 
     @Path("replace_username_spaces")

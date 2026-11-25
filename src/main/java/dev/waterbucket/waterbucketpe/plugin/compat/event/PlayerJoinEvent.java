@@ -13,16 +13,16 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp.event;
+package dev.waterbucket.waterbucketpe.plugin.compat.event;
 
-import dev.waterbucket.waterbucketpe.plugin.pmmp.Player;
+import dev.waterbucket.waterbucketpe.plugin.compat.Player;
 
 /**
  * Fired when a player finishes the proxy login: the player is registered, address and identity
  * are known, and the first downstream server is being connected. Exactly the moment the
  * original server software raises its join event.
  */
-public class PlayerJoinEvent extends PmmpPlayerEvent {
+public class PlayerJoinEvent extends CompatPlayerEvent {
 
     /**
      * The message broadcast to every online player after the event; null broadcasts nothing.

@@ -19,7 +19,7 @@ import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.plugin.Plugin;
 import dev.waterbucket.waterbucketpe.plugin.PluginLoader;
 import dev.waterbucket.waterbucketpe.plugin.PluginYAML;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.PmmpApi;
+import dev.waterbucket.waterbucketpe.plugin.compat.CompatApi;
 import dev.waterbucket.waterbucketpe.scheduler.TaskHandler;
 import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.env.ArrayValue;
@@ -132,9 +132,9 @@ public class PhpPlugin extends Plugin {
             this.env.setGlobalValue("plugin", this.env.wrapJava(this));
             this.env.setGlobalValue("proxy", this.env.wrapJava(this.proxy));
             this.env.setGlobalValue("logger", this.env.wrapJava(this.getLogger()));
-            // The compatibility plugin surface: $pmmp->getServer(), ->playerJoinEvent(), ... like
+            // The compatibility plugin surface: $compat->getServer(), ->playerJoinEvent(), ... like
             // the Java package exposes them.
-            this.env.setGlobalValue("pmmp", this.env.wrapJava(new PmmpApi()));
+            this.env.setGlobalValue("compat", this.env.wrapJava(new CompatApi()));
 
             // Registry, then the plugin script itself, then the lifecycle scan - the scan must
             // run after the script so function_exists sees what the script defined.
@@ -335,7 +335,7 @@ public class PhpPlugin extends Plugin {
         }
         if (resolved == null && name.indexOf('.') < 0) {
             try {
-                resolved = Class.forName("dev.waterbucket.waterbucketpe.plugin.pmmp.event." + name);
+                resolved = Class.forName("dev.waterbucket.waterbucketpe.plugin.compat.event." + name);
             } catch (ClassNotFoundException ignored) {
                 // Fall through to the plugin class loader scan
             }

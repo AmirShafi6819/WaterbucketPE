@@ -16,7 +16,7 @@
 
 ## Checklist
 
-- [ ] The change is backwards-compatible for WaterdogPE jar plugins and configs
+- [ ] The change is backwards-compatible for upstream jar plugins and configs
 - [ ] Bug fixes come with a regression test next to them (`src/test/java/dev/waterbucket/waterbucketpe/`)
 - [ ] `./gradlew test` passes locally with zero failures
 - [ ] Documentation (README / docs/) was updated if behavior changed

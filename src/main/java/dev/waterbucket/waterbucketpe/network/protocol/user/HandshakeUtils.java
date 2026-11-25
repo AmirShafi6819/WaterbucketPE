@@ -103,7 +103,7 @@ public class HandshakeUtils {
         dataChain.addProperty("mid", minecraftId);
         dataChain.addProperty("ap", 7);
         dataChain.addProperty("iss", "self");
-        // PMMP seem to require this, but CloudburstMC/Protocol does not.
+        // Some downstream server software seems to require this, but the protocol library does not.
         dataChain.addProperty("aud", "api://auth-minecraft-services/multiplayer");
         // Normally "xid" is sent as empty string for self-signed certificates, but we include it anyway
         dataChain.addProperty("xid", xuid);
@@ -188,8 +188,8 @@ public class HandshakeUtils {
      * Claims every downstream server can read to learn where the player really connects from.
      * The address a server sees on its socket is the proxy's own dial address (loopback on
      * co-located hosts), so the real client address travels inside the client data JWT instead.
-     * Waterdog_IP is the de-facto field the ecosystem reads - Nukkit-MOT's ClientChainData,
-     * Geyser's BedrockClientData and the PMMP proxy login-extras plugins; the Waterbucket_*
+     * Waterdog_IP is the de-facto field the ecosystem reads - modern Bedrock server software
+     * and the proxy login-extras plugins all check it; the Waterbucket_*
      * fields mirror it under the fork's own namespace and add the client's source port.
      * <p>
      * The legacy use_login_extras switch keeps its old meaning and still implies this, so

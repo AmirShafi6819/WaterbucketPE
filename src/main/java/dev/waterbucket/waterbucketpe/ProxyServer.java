@@ -55,7 +55,7 @@ import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfoMap;
 import dev.waterbucket.waterbucketpe.packs.PackManager;
 import dev.waterbucket.waterbucketpe.panel.PanelServer;
 import dev.waterbucket.waterbucketpe.ping.PingPassthroughManager;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.PmmpEventBridge;
+import dev.waterbucket.waterbucketpe.plugin.compat.CompatEventBridge;
 import dev.waterbucket.waterbucketpe.player.PlayerManager;
 import dev.waterbucket.waterbucketpe.onlyproxy.OnlyProxyJoinManager;
 import dev.waterbucket.waterbucketpe.restart.RestartManager;
@@ -291,7 +291,7 @@ public class ProxyServer {
 
         // The compatibility plugin surface (events, Server/Player facades) before plugins load,
         // so every language sees it from the first lifecycle hook on.
-        PmmpEventBridge.register(this);
+        CompatEventBridge.register(this);
 
         this.pluginManager.loadAllPlugins();
         this.configurationManager.loadServerInfos(this.serverInfoMap);

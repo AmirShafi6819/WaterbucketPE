@@ -13,32 +13,38 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp.event;
+package dev.waterbucket.waterbucketpe.plugin.compat.event;
 
 import dev.waterbucket.waterbucketpe.event.CancellableEvent;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.Player;
+import dev.waterbucket.waterbucketpe.plugin.compat.Player;
 
 /**
- * Fired when a player submits a command line (leading slash included, exactly as typed).
- * Cancelling stops the command from reaching the downstream server and the proxy command map;
- * editing the message rewrites what is executed.
+ * Fired before a compatibility {@link dev.waterbucket.waterbucketpe.plugin.compat.Player#kick}
+ * disconnects the player. Cancelling keeps the player online. The quit message is what the
+ * other clients see when the kick goes through.
  */
-public class PlayerCommandPreprocessEvent extends PmmpPlayerEvent implements CancellableEvent {
+public class PlayerKickEvent extends CompatPlayerEvent implements CancellableEvent {
 
-    private String message;
+    private final String reason;
+    private String quitMessage;
     private boolean cancelled;
 
-    public PlayerCommandPreprocessEvent(Player player, String message) {
+    public PlayerKickEvent(Player player, String reason, String quitMessage) {
         super(player);
-        this.message = message;
+        this.reason = reason;
+        this.quitMessage = quitMessage;
     }
 
-    public String getMessage() {
-        return this.message;
+    public String getReason() {
+        return this.reason;
     }
 
-    public void setMessage(String message) {
-        this.message = message;
+    public String getQuitMessage() {
+        return this.quitMessage;
+    }
+
+    public void setQuitMessage(String quitMessage) {
+        this.quitMessage = quitMessage;
     }
 
     @Override

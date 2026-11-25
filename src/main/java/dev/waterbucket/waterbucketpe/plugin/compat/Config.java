@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp;
+package dev.waterbucket.waterbucketpe.plugin.compat;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

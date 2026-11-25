@@ -17,7 +17,7 @@ package dev.waterbucket.waterbucketpe.plugin.python;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.plugin.Plugin;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.PmmpApi;
+import dev.waterbucket.waterbucketpe.plugin.compat.CompatApi;
 import dev.waterbucket.waterbucketpe.plugin.PluginYAML;
 import dev.waterbucket.waterbucketpe.scheduler.TaskHandler;
 import lombok.extern.log4j.Log4j2;
@@ -120,8 +120,8 @@ public class PythonPlugin extends Plugin {
             bindings.putMember("plugin", this);
             bindings.putMember("proxy", this.proxy);
             bindings.putMember("logger", this.getLogger());
-            // The compatibility plugin surface: pmmp.getServer(), pmmp.playerJoinEvent(), ...
-            bindings.putMember("pmmp", new PmmpApi());
+            // The compatibility plugin surface: compat.getServer(), compat.playerJoinEvent(), ...
+            bindings.putMember("compat", new CompatApi());
             // The plugin folder joins sys.path through a bindings member: the previous source-
             // text interpolation broke on paths containing quotes or backslashes.
             bindings.putMember("_wb_plugin_dir", this.getPluginFile().getAbsolutePath());

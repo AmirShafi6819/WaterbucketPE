@@ -13,16 +13,16 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp.event;
+package dev.waterbucket.waterbucketpe.plugin.compat.event;
 
-import dev.waterbucket.waterbucketpe.plugin.pmmp.Player;
+import dev.waterbucket.waterbucketpe.plugin.compat.Player;
 
 /**
  * Fired when a player's upstream connection is gone, whatever the cause (kick, client quit,
  * network loss). The reason string is the disconnect text the proxy saw; a quit message set
  * with {@link #setQuitMessage(String)} is broadcast to the remaining players (null = silent).
  */
-public class PlayerQuitEvent extends PmmpPlayerEvent {
+public class PlayerQuitEvent extends CompatPlayerEvent {
 
     private final String reason;
     private String quitMessage;

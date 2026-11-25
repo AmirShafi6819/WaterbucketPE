@@ -21,8 +21,8 @@ import dev.waterbucket.waterbucketpe.command.CommandMap;
 import dev.waterbucket.waterbucketpe.event.EventManager;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.plugin.PluginYAML;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.Server;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerChatEvent;
+import dev.waterbucket.waterbucketpe.plugin.compat.Server;
+import dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerChatEvent;
 import dev.waterbucket.waterbucketpe.scheduler.WaterbucketScheduler;
 import dev.waterbucket.waterbucketpe.utils.config.proxy.ProxyConfig;
 import org.junit.jupiter.api.AfterEach;
@@ -50,7 +50,7 @@ import static org.mockito.Mockito.when;
  * driving the compatibility {@code Player} wrapper from PHP - with the message edit flowing
  * back to the proxy pipeline.
  */
-class PmmpPhpTest {
+class CompatPhpTest {
 
     @TempDir
     Path tempDir;
@@ -93,9 +93,9 @@ class PmmpPhpTest {
         when(this.rawPlayer.getServerInfo()).thenReturn(null);
         doAnswer(invocation -> null).when(this.rawPlayer).sendMessage(anyString());
 
-        Path pluginDir = this.tempDir.resolve("plugins").resolve("PmmpPhp");
+        Path pluginDir = this.tempDir.resolve("plugins").resolve("CompatPhp");
         Files.createDirectories(pluginDir);
-        Files.walk(Path.of("src/test/resources/php-plugin-pmmp"), 1)
+        Files.walk(Path.of("src/test/resources/php-plugin-compat"), 1)
                 .forEach(source -> {
                     if (Files.isRegularFile(source)) {
                         try {
@@ -106,7 +106,7 @@ class PmmpPhpTest {
                 });
 
         PluginYAML descriptor = new PluginYAML();
-        descriptor.name = "PmmpPhp";
+        descriptor.name = "CompatPhp";
         descriptor.version = "1.0.0";
         descriptor.author = "Test";
         descriptor.main = "main.php";
@@ -142,7 +142,7 @@ class PmmpPhpTest {
         // fire the compatibility chat event: the PHP handler sees it, messages the player
         // through the compat wrapper and edits the message back
         PlayerChatEvent event = new PlayerChatEvent(
-                new dev.waterbucket.waterbucketpe.plugin.pmmp.Player(this.rawPlayer), "salam world");
+                new dev.waterbucket.waterbucketpe.plugin.compat.Player(this.rawPlayer), "salam world");
         this.eventManager.callEvent(event);
 
         state = this.state();

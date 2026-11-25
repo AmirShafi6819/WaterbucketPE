@@ -65,7 +65,7 @@ import java.util.function.Supplier;
 @Log4j2
 public class NetherNetProvider implements AutoCloseable {
 
-    /** NetherNet's own files, next to config.yml, as Geyser keeps them. */
+    /** NetherNet's own files, next to config.yml, in the established layout. */
     static final String DATA_FOLDER = "nethernet";
     /**
      * Holds the provider's link for the operator, in {@link #DATA_FOLDER}.
@@ -172,7 +172,7 @@ public class NetherNetProvider implements AutoCloseable {
     }
 
     /**
-     * What the provider runtime is configured with, named like Geyser's options. The proxy reports
+     * What the provider runtime is configured with, under the established option names. The proxy reports
      * game outcomes itself.
      *
      * @param dataPath The proxy's folder, which a file: token is read relative to like every other

@@ -104,9 +104,9 @@ The plugin name becomes the data-directory name and the manager key, so it is re
 
 Dependencies are hard dependencies. A missing dependency prevents the dependent plugin from enabling. Circular dependency chains (of any length) are detected and rejected without crashing the proxy. Use the exact registered plugin name in depends. There is no documented soft-dependency mechanism.
 
-### Velocity-style alternative: the @PluginDescriptor annotation
+### The declarative alternative: the @PluginDescriptor annotation
 
-A Java plugin jar may declare its descriptor directly on the main class instead of shipping a YAML file. This matches the Velocity workflow: the annotated class IS the main class.
+A Java plugin jar may declare its descriptor directly on the main class instead of shipping a YAML file. This is the declarative workflow: the annotated class IS the main class.
 
 ~~~java
 import dev.waterbucket.waterbucketpe.plugin.Plugin;
@@ -406,7 +406,7 @@ Priorities are **LOWEST**, **LOW**, **NORMAL**, **HIGH** and **HIGHEST**, in tha
 
 ### Java annotation listeners (@Subscribe)
 
-The declaration-style alternative to the functional API above, familiar from Velocity: annotate public methods on any listener object and register the whole object at once.
+The declaration-style alternative to the functional API above: annotate public methods on any listener object and register the whole object at once.
 
 ~~~java
 import dev.waterbucket.waterbucketpe.event.Subscribe;
@@ -659,7 +659,7 @@ Python helper methods schedule their work asynchronously. Their current signatur
 
 Do not use synchronous tasks for blocking I/O or long-running calculations.
 
-### Time-based scheduling (Velocity-style TaskBuilder)
+### Time-based scheduling (the fluent TaskBuilder)
 
 For schedules expressed in real time instead of ticks, use the fluent builder. These tasks run on a dedicated time-scheduler pool, so their cadence is independent of the tick loop:
 
@@ -706,7 +706,7 @@ java.util.Map<java.util.UUID, ProxiedPlayer> online = getProxy().getPlayers();
 
 ProxiedPlayer exposes, among others: `connect(ServerInfo)`, `sendMessage(String|TextContainer)`, `sendTranslation(...)`, `chat(String)`, `sendPopup`, `sendTip`, `sendTitle`, `sendToastMessage`, `disconnect(reason)`, `sendToFallback(...)`, `kick`, permission methods (`addPermission`, `hasPermission`, `removePermission`), device/protocol info (`getDevicePlatform`, `getDeviceModel`, `getDeviceId`, `getProtocol`), identity (`getName`, `getUniqueId`, `getXuid`), network state (`getAddress`, `getPing`, `isConnected`, `getServerInfo`, `getDownstreamConnection`) and resource-pack controls (`acceptResourcePacks`). Permission checks fire `PlayerPermissionCheckEvent`, so plugins can override the result.
 
-### Connection requests (Velocity-style)
+### Connection requests with a real result future
 
 Instead of calling connect() and inferring the outcome from events, a connection request returns the actual result:
 
@@ -898,7 +898,7 @@ The Python facade is additive; it does not replace the Java API. Python can call
 
 - Java plugins must extend the WaterbucketPE Plugin class and compile against the API available to the target proxy version.
 - The source package is **dev.waterbucket.waterbucketpe**. A plugin compiled against a different package namespace may need source changes and recompilation.
-- WaterdogPE compatibility is not a blanket guarantee for every third-party binary. Validate each plugin against the current release and its dependencies.
+- Compatibility with upstream jar plugins is not a blanket guarantee for every third-party binary. Validate each plugin against the current release and its dependencies.
 - The descriptor supports **depends**, not the full metadata schema of Bukkit/Paper.
 - Python plugin API is evolving; use the methods documented above rather than assuming a Bukkit-style API.
 

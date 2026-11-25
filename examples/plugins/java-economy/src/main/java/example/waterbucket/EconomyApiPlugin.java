@@ -19,7 +19,7 @@ import dev.waterbucket.waterbucketpe.command.Command;
 import dev.waterbucket.waterbucketpe.command.CommandSender;
 import dev.waterbucket.waterbucketpe.command.CommandSettings;
 import dev.waterbucket.waterbucketpe.plugin.Plugin;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerJoinEvent;
+import dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerJoinEvent;
 
 import java.util.Locale;
 import java.util.Map;

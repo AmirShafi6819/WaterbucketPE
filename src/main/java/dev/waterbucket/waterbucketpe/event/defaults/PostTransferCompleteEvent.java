@@ -23,7 +23,7 @@ import lombok.Getter;
 /**
  * Called when PlayStatusPacket with PLAYER_SPAWN from downstream server is received.
  * At this point player is really connected to downstream server. Some downstream servers have different handlers per login stage.
- * To signalize last stage of login, we can use this event. For example applies on PMMP4 downstream servers.
+ * To signalize last stage of login, we can use this event. For example applies on downstream servers of the original Bedrock software generation.
  */
 @Getter
 @AsyncEvent

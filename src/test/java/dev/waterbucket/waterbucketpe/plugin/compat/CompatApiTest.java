@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp;
+package dev.waterbucket.waterbucketpe.plugin.compat;
 
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.command.Command;
@@ -28,8 +28,8 @@ import dev.waterbucket.waterbucketpe.event.defaults.PlayerLoginEvent;
 import dev.waterbucket.waterbucketpe.player.PlayerManager;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
 import dev.waterbucket.waterbucketpe.plugin.PluginManager;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerJoinEvent;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerQuitEvent;
+import dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerJoinEvent;
+import dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerQuitEvent;
 import dev.waterbucket.waterbucketpe.scheduler.WaterbucketScheduler;
 import dev.waterbucket.waterbucketpe.utils.config.proxy.ProxyConfig;
 import org.junit.jupiter.api.AfterEach;
@@ -67,7 +67,7 @@ import static org.mockito.Mockito.when;
  * the Config utility, the scheduler facade and the rebuilt economy plugin running through all
  * of it - the same calls a plugin of the original server software makes.
  */
-public class PmmpCompatTest {
+public class CompatApiTest {
 
     @TempDir
     Path tempDir;
@@ -108,7 +108,7 @@ public class PmmpCompatTest {
         when(this.proxy.getEventManager()).thenReturn(this.eventManager);
 
         // The bridge under test registers itself and initializes the Server facade
-        PmmpEventBridge.register(this.proxy);
+        CompatEventBridge.register(this.proxy);
         assertTrue(Server.isAvailable(), "the bridge must initialize the Server facade");
 
         UUID playerUuid = UUID.randomUUID();
@@ -247,7 +247,7 @@ public class PmmpCompatTest {
     @Test
     public void cancelledKickKeepsThePlayerOnline() {
         // a plugin vetoes every kick of this name
-        this.eventManager.subscribe(dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerKickEvent.class,
+        this.eventManager.subscribe(dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerKickEvent.class,
                 event -> event.setCancelled());
         Player player = Server.getInstance().getPlayer("TestPlayer");
         assertFalse(player.kick("kick attempt"));
@@ -273,7 +273,7 @@ public class PmmpCompatTest {
 
     @Test
     public void cancelledCompatLoginCancelsTheProxyLogin() {
-        this.eventManager.subscribe(dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerLoginEvent.class,
+        this.eventManager.subscribe(dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerLoginEvent.class,
                 event -> {
                     event.setCancelled();
                     event.setKickMessage("§cMaintenance");
@@ -289,7 +289,7 @@ public class PmmpCompatTest {
     @Test
     public void chatEventEditsAndCancellationsPropagate() {
         // edit
-        this.eventManager.subscribe(dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerChatEvent.class,
+        this.eventManager.subscribe(dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerChatEvent.class,
                 event -> event.setMessage(event.getMessage().replace("bad", "good")));
         PlayerChatEvent chat = new PlayerChatEvent(this.rawPlayer, "this is bad text");
         this.eventManager.callEvent(chat);
@@ -297,8 +297,8 @@ public class PmmpCompatTest {
         assertEquals("this is good text", chat.getMessage());
 
         // cancel
-        this.eventManager.subscribe(dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerChatEvent.class,
-                dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerChatEvent::setCancelled);
+        this.eventManager.subscribe(dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerChatEvent.class,
+                dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerChatEvent::setCancelled);
         PlayerChatEvent second = new PlayerChatEvent(this.rawPlayer, "swear words");
         this.eventManager.callEvent(second);
         assertTrue(second.isCancelled());
@@ -307,7 +307,7 @@ public class PmmpCompatTest {
     @Test
     public void commandPreprocessEventCarriesTheSlashLine() {
         List<String> seen = new CopyOnWriteArrayList<>();
-        this.eventManager.subscribe(dev.waterbucket.waterbucketpe.plugin.pmmp.event.PlayerCommandPreprocessEvent.class,
+        this.eventManager.subscribe(dev.waterbucket.waterbucketpe.plugin.compat.event.PlayerCommandPreprocessEvent.class,
                 event -> seen.add(event.getMessage()));
 
         PlayerCommandEvent command = new PlayerCommandEvent(this.rawPlayer, "/money");

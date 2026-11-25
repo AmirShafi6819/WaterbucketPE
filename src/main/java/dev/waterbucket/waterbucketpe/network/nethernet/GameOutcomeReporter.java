@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntPredicate;
 
 /**
- * Game outcomes for players the provider admitted, reported as Geyser reports them: joined once the
+ * Game outcomes for players the provider admitted, reported the way Bedrock tooling reports them: joined once the
  * client has loaded into its first server, rejected when the proxy disconnects it before that.
  */
 public final class GameOutcomeReporter {

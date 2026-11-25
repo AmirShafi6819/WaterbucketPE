@@ -13,11 +13,11 @@
  * limitations under the License.
  */
 
-package dev.waterbucket.waterbucketpe.plugin.pmmp.event;
+package dev.waterbucket.waterbucketpe.plugin.compat.event;
 
 import dev.waterbucket.waterbucketpe.event.Event;
 import dev.waterbucket.waterbucketpe.player.ProxiedPlayer;
-import dev.waterbucket.waterbucketpe.plugin.pmmp.Player;
+import dev.waterbucket.waterbucketpe.plugin.compat.Player;
 
 /**
  * Base of the compatibility player events: the events of the well-known PocketMine server
@@ -25,11 +25,11 @@ import dev.waterbucket.waterbucketpe.plugin.pmmp.Player;
  * {@link Player} wrapper (its methods are the documented plugin surface); the raw proxy player
  * stays reachable with {@link #getProxiedPlayer()} for anything advanced.
  */
-public abstract class PmmpPlayerEvent extends Event {
+public abstract class CompatPlayerEvent extends Event {
 
     private final Player player;
 
-    protected PmmpPlayerEvent(Player player) {
+    protected CompatPlayerEvent(Player player) {
         this.player = player;
     }
 
