@@ -17,7 +17,7 @@ package dev.waterbucket.waterbucketpe.plugin.compat;
 
 /**
  * The facade object the interpreted plugin languages (Python, PHP) receive as their
- * {@code pmmp} global: one entry to the compatibility server, its event classes and the
+ * {@code compat} global: one entry to the compatibility server, its event classes and the
  * compatibility config utility. Java plugins reach everything directly through this package
  * instead.
  * <p>
