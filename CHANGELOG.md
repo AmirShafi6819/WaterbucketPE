@@ -3,7 +3,7 @@
 All notable changes are documented here. Format based on Keep a Changelog,
 versioning follows [semantic versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.5.6] - 2026-11-25
 
 ### Added — Velocity-style duplicate login handling
 
@@ -34,6 +34,10 @@ versioning follows [semantic versioning](https://semver.org/).
   fields and continues to imply IP forwarding, so setups that relied on it behave exactly
   as before. Claim injection is split into tested helpers (`addForwardingClaims`,
   `addLoginExtras`) covering both switches, IPv6 addresses and the off/off case.
+- **Forwarding can never break a login**: an unusual session address (a non-socket type,
+  an unresolved host without an IP) now skips the claims or falls back to the host text
+  instead of throwing into the login catch-all and disconnecting the player with a generic
+  "Login failed". Covered by two dedicated edge-case tests (76 suites / 463 tests green).
 
 ## [1.5.5] - 2026-11-24
 
