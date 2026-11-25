@@ -29,6 +29,12 @@ public class PluginYAML {
     public String author;
     public String main;
     /**
+     * The plugin API generation the plugin targets: 1.6.0 (current) or 1.0.0
+     * (legacy wildcard that loads on every generation). Missing counts as the
+     * legacy wildcard.
+     */
+    public String apiVersion;
+    /**
      * Optional human-readable summary shown by the panel plugin list and /wbplugins verbose output.
      */
     public String description;

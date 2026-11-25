@@ -78,6 +78,12 @@ public @interface PluginDescriptor {
      *
      * @return the author names
      */
+    /**
+     * The plugin API generation the plugin targets. 1.6.0 is the current
+     * generation; 1.0.0 declares the legacy surface and loads everywhere.
+     */
+    String apiVersion() default "1.0.0";
+
     String[] authors() default {};
 
     /**

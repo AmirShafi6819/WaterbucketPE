@@ -131,6 +131,9 @@ public class PluginManager {
                 if (config == null) {
                     return;
                 }
+                if (!this.apiVersionAllowed(config)) {
+                    return;
+                }
                 if (this.getPluginByName(config.getName()) != null) {
                     this.proxy.getLogger().warning("Plugin is already loaded: {}", config.getName());
                     return;
@@ -144,6 +147,9 @@ public class PluginManager {
             stream.filter(path -> !path.equals(folderPath)).filter(this.phpLoader::isPhpPlugin).forEach(dir -> {
                 PluginYAML config = this.phpLoader.loadDescriptor(dir);
                 if (config == null) {
+                    return;
+                }
+                if (!this.apiVersionAllowed(config)) {
                     return;
                 }
                 if (this.getPluginByName(config.getName()) != null) {
@@ -177,7 +183,24 @@ public class PluginManager {
                         pluginFile.getName());
             }
         }
-        return config;
+        return this.apiVersionAllowed(config) ? config : null;
+    }
+
+    /**
+     * The plugin API version gate: only plugins declaring the current
+     * generation (1.6.0) or the 1.0.0 legacy wildcard load; anything else is
+     * rejected before any plugin code runs, with the exact reason.
+     */
+    private boolean apiVersionAllowed(PluginYAML config) {
+        if (config == null) {
+            return false;
+        }
+        String error = CompatApiVersion.check(config.getApiVersion());
+        if (error != null) {
+            this.proxy.getLogger().warning("Plugin {} rejected: {}", config.getName(), error);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -244,6 +267,9 @@ public class PluginManager {
 
     public Plugin loadPlugin(PluginYAML config, Path path) {
         File pluginFile = path.toFile();
+        if (!this.apiVersionAllowed(config)) {
+            return null;
+        }
         if (this.getPluginByName(config.getName()) != null) {
             this.proxy.getLogger().warning("Plugin is already loaded: {}", config.getName());
             return null;

@@ -148,6 +148,8 @@ public class PluginLoader {
             config.version = scalarString(fields.get("version"), "version", source);
             config.author = scalarString(fields.get("author"), "author", source);
             config.main = requiredString(fields.get("main"), "main", source);
+            Object apiVersion = fields.get("api-version") != null ? fields.get("api-version") : fields.get("api");
+            config.apiVersion = CompatApiVersion.normalize(scalarString(apiVersion, "api-version", source));
             config.description = scalarString(fields.get("description"), "description", source);
             config.depends = dependsList(fields.get("depends"), source);
 
@@ -319,6 +321,7 @@ public class PluginLoader {
         config.depends = annotation.dependencies() == null || annotation.dependencies().length == 0
                 ? null : new ArrayList<>(List.of(annotation.dependencies()));
         config.main = className;
+        config.apiVersion = CompatApiVersion.normalize(annotation.apiVersion());
         return config;
     }
 }
