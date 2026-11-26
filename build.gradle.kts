@@ -23,7 +23,7 @@ plugins {
 }
 
 group = "dev.waterbucket.waterbucketpe"
-version = "1.6.1"
+version = "1.6.2"
 description = "A fast and memory-efficient Minecraft: Bedrock Edition proxy, forked from the well-known WaterdogPE proxy"
 
 java {
