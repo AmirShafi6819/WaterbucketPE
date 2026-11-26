@@ -37,7 +37,6 @@ public class DefaultCommandMap extends SimpleCommandMap {
         this.registerCommand(new ReloadPacksCommand());
         this.registerCommand(new NetherNetCommand());
         this.registerCommand(new MeCommand());
-        this.registerCommand(new MaxPlayersCommand());
         this.registerCommand(new RestartCommand());
         this.registerCommand(new ServerOfflineCommand());
     }

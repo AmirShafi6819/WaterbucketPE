@@ -50,7 +50,6 @@ waterbucket.duplicate-login.kick-old: "§cYou logged in from another location."
 waterbucket.transfer.queue_full: "§cTransfer queue got too large"
 
 # Default reason when a player is kicked without one
-waterbucket.player.kick.default: "§cKicked from the proxy"
 
 # ---------- Connecting and transferring ----------
 
@@ -112,14 +111,6 @@ waterbucket.command.end.usage: "end"
 waterbucket.command.status.description: "Show proxy server status"
 waterbucket.command.status.usage: "wbstatus"
 
-waterbucket.command.maxplayers.description: "Show or set the maximum player count"
-waterbucket.command.maxplayers.usage: "wbmaxplayers <count:optional>"
-# {%0} = online players, {%1} = max players, {%2} = max or "unlimited"
-waterbucket.command.maxplayers.current: "§3Players: §b{%0}§3 / §b{%2}"
-# {%0} = the invalid input
-waterbucket.command.maxplayers.invalid: "§cNot a valid player count: {%0}"
-# {%0} = the new max player count or "unlimited"
-waterbucket.command.maxplayers.set: "§aMaximum player count set to §b{%0}§a and saved."
 
 waterbucket.command.plugins.description: "Show proxy server plugins list"
 waterbucket.command.plugins.usage: "wbplugins"
