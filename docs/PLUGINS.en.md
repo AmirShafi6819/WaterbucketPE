@@ -767,7 +767,7 @@ Notes:
 
 - `setMaxPlayers(0)` disables the limit. Negative values throw `IllegalArgumentException`.
 - The effective value drives the server-list ping and query responses, the `/wbstatus` and panel displays, and login enforcement: when the proxy is full, new players are disconnected with the `waterbucket.server.full` message unless they hold the `waterbucket.bypass.maxplayers` permission.
-- The same functionality is available from the console/in-game through `/wbmaxplayers [count]`.
+- The runtime override is plugin-only: there is no proxy command for it (the limit is config-driven; `/wbstatus` and the panel display the effective value).
 - Handlers in `PlayerLoginEvent` with a higher priority run after the full check and can still admit a player by connecting them in the handler.
 
 ### Broadcasting

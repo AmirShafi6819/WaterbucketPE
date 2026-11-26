@@ -69,21 +69,25 @@ additive.
   `show_max_players` can hide the maximum so the proxy never looks full, `command_rate_limit`
   floods back at the configured rate per player, and `kick_existing_players` closes the older
   session when a duplicate login with the same name arrives so the newcomer takes over.
-- **Real IP forwarding** — the player's real address and port can travel inside the login data
-  (`forward_client_ip`, off by default), so downstream servers log the player's true IP instead
-  of the proxy's own socket (127.0.0.1 with a random port on co-located hosts). Turn it on for
-  server software that reads the de-facto shared forwarding fields (Nukkit-MOT, Geyser, or a
-  login-extras plugin); strict servers such as PocketMine-MP reject the extra fields as an
-  unknown client data property and fail the login, so it stays off unless asked for.
+- **Real IP forwarding, built in** — every downstream login carries the player's real address
+  and Xbox identity in the de-facto `Waterdog_*` client data fields the whole Bedrock proxy
+  ecosystem reads, with no switch to find or forget: claim-aware server software (Nukkit-MOT,
+  Geyser) shows the true IP on its own. For PocketMine-MP backends the release ships a signed
+  companion plugin (`companion/pocketmine/`) that teaches the strict client data parser the
+  forwarded fields, applies the real IP and XUID to the session, and refuses joins that
+  bypassed the proxy. A backend that cannot read the claims answers once, the proxy remembers
+  it and retries the join with a clean login, so a strict backend can never block a join —
+  the log names exactly what to install to get the full forwarding there.
 - **Persian Fix** — with `persian_fix.enable: true` the proxy makes Persian (and every other
   Arabic-script language) display-ready on the client: joined letters, correct right-to-left
   order, mixed Latin and numbers intact. Runs inside the proxy on the packets themselves, so
   it works with every downstream server software; chat, messages, signs, titles, boss bars,
   scoreboards and forms each have their own toggle, and the bundled font pack is offered to
   joining clients automatically. Off by default.
-- **Only Proxy Join** — one config switch keeps host firewall rules that block direct public
-  access to every downstream server's UDP port (loopback stays open for the proxy itself), so
-  players can only enter through the proxy port you picked.
+- **Only Proxy Join, protocol-level** — the backend itself decides: the companion plugin
+  accepts joins only from the addresses the proxy dials from, and the forwarded claims prove
+  the player traveled through the proxy. No firewall rules, no root, nothing to apply or
+  clean up on disable — remove the plugin and the backend is a plain server again.
 - **Professional `/restart`** — a managed sequence (cancellable `ProxyRestartEvent`, notice
   broadcast, graceful kick, plugin disable, relaunch script, clean shutdown) that brings the
   process back with newly added plugins, packs and config values in place. Concurrent
@@ -104,7 +108,7 @@ additive.
   codes and `{%0}` placeholders documented inline.
 - **Quiet logs by design** — STUN/ICE noise filtered without hiding real failures; the
   console shows `time LEVEL | message` and nothing floods.
-- **Actively maintained** — 75 test suites / 448 tests green on every change, CI on every
+- **Actively maintained** — 85 test suites / 533 tests green on every change, CI on every
   push, docker images for every tagged release.
 
 ## Screenshots
@@ -184,11 +188,9 @@ Rebranded `wb*`; the old `wd*` names keep working as hidden aliases.
 | `/server <name> [player]` | transfer yourself or someone else |
 | `/wbsend <target>` | move everyone at once |
 | `/wbnethernet …` | inspect the NetherNet transport |
-| `/wbmaxplayers [count]` | show or set the max player count (`0` = unlimited, persisted) |
 | `/wbplugins [verbose]` | plugins list; `verbose` adds description + author |
 | `/restart` | managed restart: notice, graceful kick, plugin disable, relaunch with new plugins/packs/config in place |
 | `/wbserveroffline <server> [on\|off]` | stop sending players to a server that keeps running (persists) |
-| `/wbonlyproxy [status\|apply\|remove]` | inspect or manage the Only Proxy Join firewall rules |
 | `/wbreloadpacks`, `/end` | packs, shutdown |
 
 ## The web panel
@@ -199,8 +201,7 @@ database, nothing else to secure.
 
 - **Overview** — players, CPU, memory with a live bar, uptime; rolling charts for all three.
 - **Servers** — every downstream server as a live card (online state, players, ping
-  sparkline); click one for its detail dialog: ping/player charts, its players, kick and
-  move-to-server actions, ping-now.
+  sparkline); click one for its detail dialog: ping/player charts, its players, ping-now.
 - **Console** — the proxy console in the browser: level-colored, filterable, with command
   history.
 - **Settings** — dark/light, four accents, glass intensity, fa/en with RTL, layout editor.
@@ -236,8 +237,6 @@ Full walkthrough in the file's header comment.
 | `prefer_fast_transfer` | `true` | intercept downstream `TransferPacket`s into fast transfers |
 | `ping_passthrough` | `disabled` | show the priority server's real MOTD (`description`) plus counts/game type (`all`) |
 | `show_max_players` | `true` | `false` shows the live player count as the maximum, so the proxy never looks full |
-| `command_rate_limit` | `20` | max commands per player per second; `0` disables |
-| `only_proxy_join.enable` / `proxy_port` | `false` / `19132` | block direct public access to downstream ports; the proxy port stays the only way in |
 | `restart.script_path` / `use_script` | *(auto)* / `true` | the relaunch script `/restart` uses; wrappers like systemd keep working with `false` |
 
 The full configuration lives in `config.yml` with inline comments.
@@ -277,6 +276,15 @@ Full documentation for all three languages, including the facade reference and
 troubleshooting, is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable examples under
 [examples/plugins/](examples/plugins/) and in each release's `plugin-examples.zip`.
 
+## The PocketMine companion
+
+Backends get half the forwarding story too: `companion/pocketmine/` ships
+`WaterbucketForwarding.phar`, a signed PocketMine-MP plugin that applies the forwarded real
+IP and XUID to the session and enforces only-proxy-join at the protocol layer. Drop the phar
+into the backend's `plugins/`, set `xbox-auth=off` (the proxy checks Xbox authentication —
+see the companion's README), restart, done. Without it, strict PocketMine-MP backends simply
+receive clean logins; nothing breaks.
+
 ## Documentation
 
 - [Plugin API — Java, Python & PHP](docs/PLUGINS.md) · [نسخه فارسی](docs/PLUGINS.fa.md)
@@ -286,9 +294,6 @@ troubleshooting, is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable exam
 
 ## Roadmap
 
-- **Fallback routing** — automatic player failover when a downstream dies, with configurable
-  priorities and a reconnect flow that keeps the player in the world, not on an error screen.
-  *Coming in the next feature release.*
 - Further panel tooling: scheduled restart windows and per-server console filters.
 
 ## Building from source
@@ -297,7 +302,7 @@ troubleshooting, is in [docs/PLUGINS.md](docs/PLUGINS.md) — with runnable exam
 git clone https://github.com/AmirShafi6819/WaterbucketPE.git
 cd WaterbucketPE
 ./gradlew shadowJar        # build/libs/Waterbucket.jar
-./gradlew test             # 75 suites, 448 tests
+./gradlew test             # 85 suites, 533 tests
 ```
 
 JDK 17+ is required; the jar embeds a Python runtime and the Quercus PHP interpreter, so no

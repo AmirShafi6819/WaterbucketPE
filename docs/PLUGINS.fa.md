@@ -767,7 +767,7 @@ boolean full = getProxy().isFull(player);      // وقتی سقف پر شده و
 
 - `setMaxPlayers(0)` محدودیت را غیرفعال می‌کند. مقدار منفی `IllegalArgumentException` می‌دهد.
 - مقدار مؤثر در پاسخ Ping لیست سرورها و Query، نمایش `/wbstatus` و پنل و اجرای محدودیت ورود استفاده می‌شود: وقتی پراکسی پر است، بازیکنان جدید با پیام `waterbucket.server.full` قطع می‌شوند مگر اینکه Permission با نام `waterbucket.bypass.maxplayers` داشته باشند.
-- همین قابلیت از کنسول یا داخل بازی با `/wbmaxplayers [count]` هم در دسترس است.
+- این تغییر زمان اجرا فقط از طریق Plugin ممکن است؛ هیچ کامند پروکسی برای آن وجود ندارد (سقف اصلی در Config تنظیم می‌شود و `/wbstatus` و پنل مقدار مؤثر را نشان می‌دهند).
 - Handlerهای `PlayerLoginEvent` با اولویت بالاتر بعد از بررسی پر بودن اجرا می‌شوند و در صورت نیاز می‌توانند بازیکن را در همان Handler پذیرش کنند.
 
 ### پیام همگانی (Broadcast)

@@ -5,6 +5,38 @@ versioning follows [semantic versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-11-26
+
+### Changed — forwarding is built in, only-proxy-join moves to the backend
+
+- **Real-IP forwarding has no switch anymore.** Every downstream dial carries the
+  `Waterdog_*` client data claims (the de-facto field set the Bedrock proxy ecosystem reads),
+  so a fresh install already shows players' real addresses on claim-aware backends instead of
+  the proxy's own socket. The `Waterbucket_*` mirror claims and the `Waterbucket_Port` field
+  are gone - one lean claim set, the one every backend reads.
+- **The reported `JSON property "Waterdog_IP" does not exist` bad packet self-heals.** Strict
+  server software such as PocketMine-MP parses the client data object strictly and drops the
+  login when it sees the forwarded keys - previously with `use_login_extras: true` carried
+  over from an old config this happened no matter what was toggled, because that switch kept
+  implying the claims. Now the failure handling recognizes that exact disconnect, remembers
+  the server, and redials the same join with a clean login, so the player gets in and the log
+  explains what to install.
+- **The companion PocketMine-MP plugin** ships under `companion/pocketmine/`
+  (`WaterbucketForwarding.phar`, prebuilt and signed, source and build script next to it): it
+  strips the forwarded keys before the strict client data mapping runs, applies the real IP
+  and XUID to the session, and refuses joins that did not come from a listed proxy address.
+  Backend requirements (`xbox-auth=off`, `player.verify-xuid=false`) are checked at startup
+  and explained in its README.
+- **The firewall-based Only Proxy Join is gone** - the `only_proxy_join` config section, the
+  `/wbonlyproxy` command and the iptables/netsh rule manager with them. A userspace proxy
+  writing host firewall rules needs root, is fragile against rule flushes, and cannot verify
+  who a join belongs to; the backend companion plugin does the same job at the protocol
+  layer, where the forwarded claims prove a join traveled through the proxy. A migration step
+  removes the section and points at the companion.
+- **The forwarding switches leave the config.** `forward_client_ip` and `use_login_extras`
+  are gone from every existing file by the upgrade step; their only effect was claim
+  injection, which is now unconditional per dial (and per backend capability).
+
 ### Removed — sleep mode
 
 - The `sleep_mode` feature, its config section, the `/wbsleep` command, the panel badge and
@@ -14,6 +46,15 @@ versioning follows [semantic versioning](https://semver.org/).
   not save on its own. A config upgrade step removes the section from every existing file.
   Sleep mode shipped in 1.6.0; the removal keeps the proxy honest: nothing in the config
   that the operator cannot explain the purpose of.
+
+### Removed — command and panel trim
+
+- `/wbmaxplayers` is gone: the config sets the limit, the ping displays it, `/wbstatus`
+  reports it and the panel charts it; the runtime `setMaxPlayers` plugin API stays.
+- The panel loses its per-player kick and transfer buttons and the
+  `/api/players/<name>/kick` and `/transfer` endpoints. Acting on players belongs to the
+  console, where every action is a deliberate typed command; the panel keeps watching:
+  players, servers, history, logs and pings.
 
 ## [1.6.1] - 2026-11-26
 

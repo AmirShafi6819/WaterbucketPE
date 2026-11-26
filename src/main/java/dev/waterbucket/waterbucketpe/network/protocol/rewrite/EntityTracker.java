@@ -72,7 +72,6 @@ public class EntityTracker implements BedrockPacketHandler {
     @Override
     public PacketSignal handle(RemoveEntityPacket packet) {
         this.player.getEntities().remove(packet.getUniqueEntityId());
-        // TODO Check if this is correct
         this.player.getEntityLinks().remove(packet.getUniqueEntityId());
         return PacketSignal.UNHANDLED;
     }
