@@ -23,7 +23,7 @@ const I18N = {
     "servers.online": "Online", "servers.offline": "Offline", "servers.clickForDetail": "Click for detail",
     "players.title": "Players", "players.name": "Player", "players.server": "Server",
     "players.address": "Address", "players.protocol": "Protocol", "players.actions": "Actions",
-    "players.empty": "No players online", "players.kick": "Kick", "players.transfer": "Move",
+    "players.empty": "No players online",
     "console.title": "Console", "console.all": "All levels", "console.warnPlus": "Warnings and errors",
     "console.errors": "Errors only", "console.clear": "Clear view", "console.send": "Send",
     "console.placeholder": "Type a command…",
@@ -38,9 +38,9 @@ const I18N = {
     "nav.overview": "Overview", "nav.servers": "Servers", "nav.players": "Players",
     "nav.console": "Console", "nav.settings": "Settings",
     "edit.active": "Editing layout — drag cards, × hides, Done when finished",
-    "common.offline": "offline", "common.never": "—", "common.kicked": "kicked", "common.moved": "moved",
+    "common.offline": "offline", "common.never": "—",
     "common.pinged": "ping sent", "common.commandSent": "command sent",
-    "common.confirmKick": "Kick {name}?", "common.failed": "Action failed", "common.close": "Close",
+    "common.failed": "Action failed", "common.close": "Close",
     "settings.language": "Language", "settings.restoreCards": "Restore hidden cards",
     "settings.layoutReset": "Layout reset",
   },
@@ -61,7 +61,7 @@ const I18N = {
     "servers.clickForDetail": "برای جزئیات کلیک کنید",
     "players.title": "بازیکنان", "players.name": "بازیکن", "players.server": "سرور",
     "players.address": "آدرس", "players.protocol": "پروتکل", "players.actions": "عملیات",
-    "players.empty": "بازیکنی آنلاین نیست", "players.kick": "اخراج", "players.transfer": "انتقال",
+    "players.empty": "بازیکنی آنلاین نیست",
     "console.title": "کنسول", "console.all": "همه سطوح", "console.warnPlus": "هشدار و خطا",
     "console.errors": "فقط خطاها", "console.clear": "پاک کردن", "console.send": "ارسال",
     "console.placeholder": "دستور را بنویسید…",
@@ -76,9 +76,9 @@ const I18N = {
     "nav.overview": "خانه", "nav.servers": "سرورها", "nav.players": "بازیکنان",
     "nav.console": "کنسول", "nav.settings": "تنظیمات",
     "edit.active": "ویرایش چیدمان — کارت‌ها را بکشید، × مخفی می‌کند، «اتمام» برای پایان",
-    "common.offline": "آفلاین", "common.never": "—", "common.kicked": "اخراج شد", "common.moved": "منتقل شد",
+    "common.offline": "آفلاین", "common.never": "—",
     "common.pinged": "پینگ ارسال شد", "common.commandSent": "دستور ارسال شد",
-    "common.confirmKick": "اخراج {name}؟", "common.failed": "عملیات ناموفق بود", "common.close": "بستن",
+    "common.failed": "عملیات ناموفق بود", "common.close": "بستن",
     "settings.language": "زبان", "settings.restoreCards": "بازگرداندن کارت‌های مخفی",
     "settings.layoutReset": "چیدمان بازنشانی شد",
   },
@@ -462,44 +462,11 @@ async function refreshServerDialog() {
   const list = $("#sd-players-list");
   list.innerHTML = "";
   (detail.playerNames || []).forEach((playerName) => {
-    const chip = el("span", "chip", playerName);
-    const kick = el("button", "btn mini danger");
-    kick.appendChild(icon("logout"));
-    kick.title = t("players.kick");
-    kick.addEventListener("click", async () => {
-      if (!confirm(t("common.confirmKick", { name: playerName }))) return;
-      await API.post("/api/players/" + encodeURIComponent(playerName) + "/kick");
-      toast(playerName + " " + t("common.kicked"));
-      refreshServerDialog();
-    });
-    chip.appendChild(kick);
-    list.appendChild(chip);
+    list.appendChild(el("span", "chip", playerName));
   });
   if (!(detail.playerNames || []).length) {
     list.appendChild(el("span", "muted small", t("players.empty")));
   }
-
-  // Move a player to this server
-  const box = $("#sd-transfer");
-  box.innerHTML = "";
-  try {
-    const data = await API.get("/api/players");
-    const select = el("select", "select");
-    select.appendChild(el("option", "", t("players.transfer") + " →"));
-    (data.players || []).forEach((p) => {
-      const option = el("option", "", p.name);
-      option.value = p.name;
-      select.appendChild(option);
-    });
-    const move = el("button", "btn mini primary", dialogServer);
-    move.addEventListener("click", async () => {
-      if (!select.value) return;
-      await API.post("/api/players/" + encodeURIComponent(select.value) + "/transfer",
-        { server: dialogServer });
-      toast(select.value + " " + t("common.moved"));
-    });
-    box.append(select, move);
-  } catch { /* players fetch failed; box stays empty */ }
 }
 $("#sd-ping").addEventListener("click", async () => {
   if (!dialogServer) return;
@@ -524,27 +491,6 @@ async function refreshPlayers() {
     row.appendChild(el("td", "muted", player.address || ""));
     row.appendChild(el("td", "muted", String(player.protocol || "")));
 
-    const actions = el("td");
-    const kick = el("button", "btn mini danger", t("players.kick"));
-    kick.addEventListener("click", async () => {
-      if (!confirm(t("common.confirmKick", { name: player.name }))) return;
-      await API.post("/api/players/" + encodeURIComponent(player.name) + "/kick");
-      toast(player.name + " " + t("common.kicked"));
-      refreshPlayers();
-    });
-    actions.appendChild(kick);
-
-    const move = el("button", "btn mini", t("players.transfer"));
-    move.style.marginInlineStart = "6px";
-    move.addEventListener("click", () => {
-      const target = prompt(t("players.transfer") + " →", (player.server || "") && "");
-      if (!target) return;
-      API.post("/api/players/" + encodeURIComponent(player.name) + "/transfer", { server: target })
-        .then(() => { toast(player.name + " " + t("common.moved")); refreshPlayers(); })
-        .catch(() => toast(t("common.failed")));
-    });
-    actions.appendChild(move);
-    row.appendChild(actions);
     body.appendChild(row);
   });
 }

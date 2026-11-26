@@ -67,7 +67,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import dev.waterbucket.waterbucketpe.utils.types.TranslationContainer;
 
 
 /**
@@ -414,10 +413,6 @@ public class PanelServer {
                         } else {
                             PanelServer.this.respondJson(ctx, request, HttpResponseStatus.OK, detail);
                         }
-                    } else if (path.startsWith("/api/players/") && path.endsWith("/kick") && request.method() == HttpMethod.POST) {
-                        PanelServer.this.handleKick(ctx, request, path);
-                    } else if (path.startsWith("/api/players/") && path.endsWith("/transfer") && request.method() == HttpMethod.POST) {
-                        PanelServer.this.handleTransfer(ctx, request, path);
                     } else if (path.startsWith("/api/servers/ping/") && request.method() == HttpMethod.POST) {
                         PanelServer.this.handleServerPing(ctx, request, path);
                     } else {
@@ -516,42 +511,6 @@ public class PanelServer {
                     }
                 }, false));
         this.respondJson(ctx, request, HttpResponseStatus.OK, Map.of("queued", true));
-    }
-
-    private void handleKick(ChannelHandlerContext ctx, FullHttpRequest request, String path) {
-        String name = extractMiddle(path, "/api/players/", "/kick");
-        ProxiedPlayer player = this.proxy.getPlayerManager().getPlayer(name);
-        if (player == null) {
-            this.respondError(ctx, request, HttpResponseStatus.NOT_FOUND, "Player not found");
-            return;
-        }
-        String body = request.content().toString(StandardCharsets.UTF_8);
-        Map<?, ?> payload = parseBody(body);
-        String reason = payload != null && payload.get("reason") instanceof String text && !text.isBlank()
-                ? text : new TranslationContainer("waterbucket.player.kick.default").getTranslated();
-        this.commandExecutor.execute(() -> player.disconnect(reason));
-        this.respondJson(ctx, request, HttpResponseStatus.OK, Map.of("kicked", player.getName()));
-    }
-
-    private void handleTransfer(ChannelHandlerContext ctx, FullHttpRequest request, String path) {
-        String name = extractMiddle(path, "/api/players/", "/transfer");
-        ProxiedPlayer player = this.proxy.getPlayerManager().getPlayer(name);
-        if (player == null) {
-            this.respondError(ctx, request, HttpResponseStatus.NOT_FOUND, "Player not found");
-            return;
-        }
-        Map<?, ?> payload = parseBody(request.content().toString(StandardCharsets.UTF_8));
-        if (payload == null || !(payload.get("server") instanceof String serverName) || serverName.isBlank()) {
-            this.respondError(ctx, request, HttpResponseStatus.BAD_REQUEST, "Missing 'server'");
-            return;
-        }
-        ServerInfo target = this.proxy.getServerInfo(serverName);
-        if (target == null) {
-            this.respondError(ctx, request, HttpResponseStatus.NOT_FOUND, "Server not registered");
-            return;
-        }
-        this.commandExecutor.execute(() -> player.connect(target));
-        this.respondJson(ctx, request, HttpResponseStatus.OK, Map.of("transferring", player.getName(), "server", target.getServerName()));
     }
 
     private void handleServerPing(ChannelHandlerContext ctx, FullHttpRequest request, String path) {
