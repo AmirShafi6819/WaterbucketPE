@@ -65,39 +65,22 @@ public class ProxyConfigTest {
     }
 
     @Test
-    public void shippedOnForwardingSwitchIsResetOnce() throws Exception {
-        // 1.5.6 and 1.6.0 shipped forward_client_ip on and wrote it true into every config they
-        // generated; strict server software such as PocketMine-MP rejects the forwarded login
-        // fields as a bad packet, so the migration resets the value once with a warning.
+    public void forwardingSwitchesLeaveEveryFile() throws Exception {
+        // forward_client_ip and use_login_extras are gone: forwarding is built in, and neither a
+        // carried-over true (the 1.5.6/1.6.0 shipped-on switch whose value kept injecting claims
+        // no matter what the operator changed, or an operator's use_login_extras) nor a false
+        // survives as a dead key that makes forwarding look configurable.
         File file = newFile();
         ProxyConfig config = migrate(file, """
                 # Waterbucket Main Configuration file
                 forward_client_ip: true
+                use_login_extras: true
                 config_version: 3
                 """);
 
-        assertFalse(config.forwardClientIp());
-        assertTrue(Files.readString(file.toPath()).contains("\nforward_client_ip: false\n"));
-    }
-
-    @Test
-    public void reEnablingForwardingOnTheCurrentLayoutKeepsTheChoice() throws Exception {
-        // The reset happens only while upgrading: once the file is on the current layout, an
-        // operator setting forward_client_ip: true again for claim-aware backends (Nukkit-MOT,
-        // Geyser, login-extras plugins) keeps that choice.
-        File file = newFile();
-        migrate(file, """
-                # Waterbucket Main Configuration file
-                forward_client_ip: true
-                config_version: 3
-                """);
-        Files.writeString(file.toPath(),
-                Files.readString(file.toPath()).replace("\nforward_client_ip: false\n", "\nforward_client_ip: true\n"));
-
-        ProxyConfig reloaded = new ProxyConfig(file);
-        reloaded.init();
-
-        assertTrue(reloaded.forwardClientIp());
+        String written = Files.readString(file.toPath());
+        assertFalse(written.contains("forward_client_ip"));
+        assertFalse(written.contains("use_login_extras"));
     }
 
     @Test

@@ -46,8 +46,9 @@ public final class ConfigMigrations {
             ConfigMigrations::netherNetLayout,
             ConfigMigrations::proxyProtocolWhitelist,
             ConfigMigrations::proxyProtocolSwitch,
-            ConfigMigrations::forwardingClaimOptIn,
-            ConfigMigrations::removeSleepMode
+            ConfigMigrations::forwardingBuiltIn,
+            ConfigMigrations::removeSleepMode,
+            ConfigMigrations::removeOnlyProxyJoin
     );
 
     /**
@@ -160,22 +161,25 @@ public final class ConfigMigrations {
     }
 
     /**
-     * Step 4: forward_client_ip becomes opt-in. 1.5.6 and 1.6.0 shipped it on and wrote
-     * {@code forward_client_ip: true} into every config they generated, but the forwarded fields
-     * are extra keys in the client data object, and strict server software - PocketMine-MP and
-     * its forks - rejects unknown keys as a bad packet on the LoginPacket, which broke every
-     * login to such a server. A carried-over true is reset once, with a warning that names the
-     * way back for claim-aware backends.
+     * Step 4: the forwarding switches are gone. Real-IP forwarding is built into the proxy now:
+     * every dial carries the forwarding claims, and a backend that cannot parse them (strict
+     * server software such as PocketMine-MP) is remembered and later joins skip the claims. The
+     * two switches {@code use_login_extras} and {@code forward_client_ip} leave every file -
+     * their only two effects were forwarding claims that can no longer be configured away, and
+     * the 1.5.6/1.6.0 default-on {@code forward_client_ip} that blocked every login to a strict
+     * backend with a "JSON property" bad packet, because a carried-over true kept injecting
+     * claims no matter what the operator changed afterwards.
      */
-    private static void forwardingClaimOptIn(ConfigSection root) {
-        String switchPath = "forward_client_ip";
-        if (root.has(switchPath) && isTrue(root, switchPath)) {
-            root.set(switchPath, false);
-            log.warn("forward_client_ip is now off by default and its value was reset: the forwarded login fields are "
-                    + "unknown keys to strict server software such as PocketMine-MP, which rejected them as a bad packet "
-                    + "and dropped the login. If your downstream servers read the forwarding fields (Nukkit-MOT, Geyser, "
-                    + "or a login-extras plugin), set forward_client_ip: true again; use_login_extras keeps implying it");
+    private static void forwardingBuiltIn(ConfigSection root) {
+        for (String switchPath : List.of("use_login_extras", "forward_client_ip")) {
+            if (root.has(switchPath)) {
+                root.remove(switchPath);
+            }
         }
+        log.warn("forward_client_ip and use_login_extras are gone: real-IP forwarding is now built in. Strict backends "
+                + "such as PocketMine-MP that rejected the forwarded login fields as a bad packet get their joins retried "
+                + "without the claims automatically; run the WaterbucketPE companion plugin (companion/pocketmine) on them "
+                + "to get the real IP and identity there too");
     }
 
     /**
@@ -186,6 +190,22 @@ public final class ConfigMigrations {
     private static void removeSleepMode(ConfigSection root) {
         if (root.has("sleep_mode")) {
             root.remove("sleep_mode");
+        }
+    }
+
+    /**
+     * Step 6: the firewall-based only_proxy_join section is gone. Asking the proxy to write
+     * iptables/netsh rules for the backend ports was fragile and never as reliable as the
+     * backend deciding on its own: the forwarding claims now always travel in the login, and
+     * the companion plugin shipped under companion/pocketmine refuses any join that did not
+     * come from the proxy. The section leaves every file that still carries it.
+     */
+    private static void removeOnlyProxyJoin(ConfigSection root) {
+        if (root.has("only_proxy_join")) {
+            root.remove("only_proxy_join");
+            log.warn("only_proxy_join is gone: the firewall-based rules it kept are no longer written. The protocol-level "
+                    + "replacement runs on the backend itself - install the WaterbucketPE companion plugin "
+                    + "(companion/pocketmine) there, and with require-proxy on it refuses every join that bypassed the proxy");
         }
     }
 

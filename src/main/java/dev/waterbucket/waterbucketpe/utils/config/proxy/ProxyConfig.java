@@ -144,15 +144,6 @@ public class ProxyConfig extends YamlConfig {
     @Comment("NetherNet settings, used when listener.transport is nethernet or both")
     private NetherNetSettings netherNetSettings = new NetherNetSettings();
 
-    @Path("only_proxy_join")
-    @Comments({
-            "Only Proxy Join: when enabled, the proxy keeps host firewall rules that block direct",
-            "public access to every downstream server's UDP port (loopback stays allowed), so players",
-            "can only join through the proxy port below. Applying needs admin/root once; disable or",
-            "shut the proxy down to remove the rules automatically."
-    })
-    private OnlyProxyJoinSettings onlyProxyJoinSettings = new OnlyProxyJoinSettings();
-
     @Path("persian_fix")
     @Comments({
             "Persian Fix: display-ready Persian (and every other Arabic-script language) on the",
@@ -205,16 +196,6 @@ public class ProxyConfig extends YamlConfig {
     @Path("listener.reconnect_handler")
     @Comment("The reconnect handler used to determine fallback connections. Possible options: DefaultReconnectHandler, RoundRobinReconnectHandler")
     private String reconnectHandler = "DefaultReconnectHandler";
-
-    @Path("use_login_extras")
-    @Accessors(fluent = true)
-    @Comment("If enabled, the proxy passes extra login fields such as the XUID and Minecraft ID to the downstream server using custom fields in the LoginPacket. The player's real IP is forwarded separately by forward_client_ip")
-    private boolean useLoginExtras = false;
-
-    @Path("forward_client_ip")
-    @Accessors(fluent = true)
-    @Comment("If enabled, the proxy embeds the player's real IP and port into the login data sent to every downstream server, so servers stop logging joins from the proxy's own socket (e.g. 127.0.0.1 with a random port) and show the player's real address. Only enable this for server software that actually reads the forwarding fields (Nukkit-MOT, Geyser, or a login-extras plugin): strict servers such as PocketMine-MP treat the extra login data fields as unknown client data properties and reject the whole login as a bad packet. Off by default so every backend software accepts logins out of the box")
-    private boolean forwardClientIp = false;
 
     @Path("replace_username_spaces")
     @Comment("Replaces username spaces with underscores if enabled")

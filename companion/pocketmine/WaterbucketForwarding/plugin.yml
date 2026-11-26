@@ -1,0 +1,8 @@
+name: WaterbucketForwarding
+version: 1.0.0
+api: 5.0.0
+main: WaterbucketForwarding\Main
+src-namespace-prefix: WaterbucketForwarding
+author: WaterBucketTEAM
+description: Applies the player identity the WaterbucketPE proxy forwards in the login data, and rejects joins that bypassed the proxy.
+website: https://github.com/AmirShafi6819/WaterbucketPE

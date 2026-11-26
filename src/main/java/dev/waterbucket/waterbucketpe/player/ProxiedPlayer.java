@@ -584,7 +584,7 @@ public class ProxiedPlayer implements CommandSender {
             connection.setPacketHandler(new CompressionInitHandler(this, connection, handler));
         } else {
             connection.setPacketHandler(handler);
-            connection.sendPacket(this.loginData.getLoginPacket());
+            connection.sendPacket(this.loginData.getLoginPacket(targetServer));
         }
 
         this.getLogger().info("[{}|{}] -> Downstream [{}] has connected", connection.getSocketAddress(), this.getName(), targetServer.getServerName());
@@ -673,6 +673,79 @@ public class ProxiedPlayer implements CommandSender {
 
         this.getLogger().debug("[{}] Transfer to {} failed: reconnecting to {}", this.getName(), targetServer.getServerName(), reconnectServer.getServerName());
         this.connect(reconnectServer);
+    }
+
+    /**
+     * Whether a failure was caused by a backend rejecting the forwarding claims, and the join
+     * should be retried right away without them.
+     * <p>
+     * Real-IP forwarding is built-in: every login carries the {@code Waterdog_*} client data
+     * claims. Strict server software (PocketMine-MP and forks) parses the client data object
+     * strictly and answers the extra keys with a "Bad packet: Error processing LoginPacket: JSON
+     * property ... does not exist" disconnect, which used to block the join entirely. When that
+     * exact signature arrives, the server is remembered as claim-rejecting (so later logins to
+     * it carry no claims) and the same server is dialed again with a clean login. The player
+     * then joins normally, and the log names the way back: run the companion plugin shipped
+     * under {@code companion/pocketmine/} on that backend and forwarding works there too.
+     *
+     * @return true when the retry dial was started and owns the failure handling
+     */
+    private boolean tryForwardingFallback(ClientConnection connection, ReconnectReason reason, String message) {
+        if (reason != ReconnectReason.SERVER_KICK || !this.isClaimRejection(message)) {
+            return false;
+        }
+        ServerInfo server = connection.getServerInfo();
+        // Only a login that actually carried the claims can be a claim rejection: a server
+        // already marked claim-rejecting gets plain logins, so its failures are not ours to retry.
+        if (!server.forwardClaims()) {
+            return false;
+        }
+        // Only a pre-spawn login rejection can be a claim rejection: past StartGame the backend
+        // already parsed the client data, so a later kick means something else entirely.
+        boolean initialAttempt = this.getPendingConnection() == connection && this.clientConnection == null;
+        boolean transferAttempt = this.getPendingConnection() == connection;
+        if (!initialAttempt && !transferAttempt) {
+            return false;
+        }
+        TransferCallback transferCallback = this.rewriteData.getTransferCallback();
+        if (transferCallback != null && transferCallback.getConnection() == connection
+                && transferCallback.getPhase() != TransferCallback.TransferPhase.RESET) {
+            return false; // the transfer failure paths own this connection already
+        }
+        if (this.disconnected.get()) {
+            return false;
+        }
+
+        server.setForwardingSupport(ServerInfo.ForwardingSupport.UNSUPPORTED);
+        this.getLogger().warning("[{}|{}] {} rejected the forwarding claims in the login data ({}) - the same join is retried "
+                + "without forwarding. Real-IP and identity forwarding for this server stays off until it runs the "
+                + "WaterbucketPE companion plugin (companion/pocketmine in the release zip), which teaches it the claims",
+                this.getAddress(), this.getName(), server.getServerName(), message);
+
+        this.notifyConnectResult(server, ConnectionResultStatus.CONNECTION_FAILED);
+        boolean current = this.clearPendingConnection(connection);
+        connection.disconnect();
+        if (!current || this.disconnected.get()) {
+            return true;
+        }
+        // Retry the same server, not the fallback list: the operator pointed the player there.
+        this.connect(server);
+        return true;
+    }
+
+    /**
+     * The signature a strict backend answers with when it cannot parse the forwarding claims in
+     * the login client data (PocketMine-MP and forks use this exact wording via json-mapper).
+     * Deliberately narrow: only this wording retried, so ordinary kicks still recover through
+     * the regular reconnect handling.
+     */
+    static boolean isClaimRejection(String message) {
+        if (message == null) {
+            return false;
+        }
+        String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("loginpacket")
+                && (lower.contains("json property") || lower.contains("unknown property") || lower.contains("does not exist"));
     }
 
     /**
@@ -773,6 +846,11 @@ public class ProxiedPlayer implements CommandSender {
      */
     public final void onDownstreamFailure(ClientConnection connection, ReconnectReason reason, String message) {
         Preconditions.checkNotNull(connection, "Connection can not be null!");
+        if (this.tryForwardingFallback(connection, reason, message)) {
+            // The same join is being retried without the forwarding claims; that dial owns the
+            // outcome now, so no recovery path runs on top of it.
+            return;
+        }
         this.notifyConnectResult(connection.getServerInfo(), ConnectionResultStatus.CONNECTION_FAILED);
 
         // CLAIMED: mid-transfer target failure, the old downstream is already gone, fail the transfer.

@@ -18,6 +18,7 @@ package dev.waterbucket.waterbucketpe.network.protocol.user;
 import com.google.gson.JsonObject;
 import com.nimbusds.jwt.SignedJWT;
 import dev.waterbucket.waterbucketpe.network.protocol.ProtocolVersion;
+import dev.waterbucket.waterbucketpe.network.serverinfo.ServerInfo;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -63,7 +64,10 @@ public class LoginData {
 
     private final KeyPair keyPair;
     private final JsonObject clientData;
-    private LoginPacket loginPacket;
+    // Values rather than packets: which claims travel depends on the target server (see
+    // getLoginPacket), so both variants are cached and a rebuild invalidates them together.
+    private LoginPacket loginPacketWithClaims;
+    private LoginPacket loginPacketWithoutClaims;
 
     // Values rather than packets, so every send builds its own.
     // Set on the upstream loop (RequestChunkRadiusPacket, ClientCacheStatusPacket) and read
@@ -85,14 +89,64 @@ public class LoginData {
      */
 
     /**
-     * Used to construct new login packet using this.clientData and this.extraData signed by this.keyPair.
-     * This method should be called everytime client data is changed. Otherwise player will join to downstream using old data.
+     * Used to construct a new login packet using this.clientData and this.extraData signed by
+     * this.keyPair. This method should be called every time client data is changed. Otherwise
+     * the player will join downstream using old data.
      *
      * @return new LoginPacket.
      */
     public synchronized LoginPacket rebuildLoginPacket() {
+        this.loginPacketWithClaims = null;
+        this.loginPacketWithoutClaims = null;
+        return this.getLoginPacket();
+    }
+
+    /**
+     * The login to send to the given downstream server, signed by the proxy. The forwarding
+     * claims travel when the server has not proven that it rejects unknown client data keys
+     * (see {@link ServerInfo#forwardClaims()}), because real-IP forwarding is a built-in
+     * property of the proxy and only a backend that cannot parse them turns it off.
+     * <p>
+     * Built once per claim variant, lazily, potentially from several downstream loops
+     * (parallel dials). The synchronized block makes both the build and its publication safe;
+     * the fields are only read after the method, never hot.
+     *
+     * @param target the server the login is being dialed for, or null for the claim-carrying default
+     */
+    public synchronized LoginPacket getLoginPacket(ServerInfo target) {
+        return this.getLoginPacket(target == null || target.forwardClaims());
+    }
+
+    /**
+     * The claim-carrying default variant, as plugins reading the login packet expect.
+     */
+    public synchronized LoginPacket getLoginPacket() {
+        return this.getLoginPacket(true);
+    }
+
+    public synchronized LoginPacket getLoginPacket(boolean forwardingClaims) {
+        LoginPacket cached = forwardingClaims ? this.loginPacketWithClaims : this.loginPacketWithoutClaims;
+        if (cached != null) {
+            return cached;
+        }
+        LoginPacket built = this.buildLoginPacket(forwardingClaims);
+        if (forwardingClaims) {
+            this.loginPacketWithClaims = built;
+        } else {
+            this.loginPacketWithoutClaims = built;
+        }
+        return built;
+    }
+
+    private LoginPacket buildLoginPacket(boolean forwardingClaims) {
         LoginPacket loginPacket = new LoginPacket();
-        SignedJWT signedClientData = HandshakeUtils.encodeJWT(this.keyPair, this.clientData);
+        // A copy, so the claims never leak into this.clientData, which the upstream skin
+        // parsing and any plugin edits keep working on.
+        JsonObject payload = forwardingClaims ? this.clientData.deepCopy() : this.clientData;
+        if (forwardingClaims) {
+            HandshakeUtils.addForwardingClaims(payload, this);
+        }
+        SignedJWT signedClientData = HandshakeUtils.encodeJWT(this.keyPair, payload);
         loginPacket.setClientJwt(signedClientData.serialize());
         loginPacket.setProtocolVersion(this.protocol.getProtocol());
         if (shouldSendCertificateChain) {
@@ -103,21 +157,7 @@ public class LoginData {
             SignedJWT signedPayload = HandshakeUtils.createClientDataToken(this.keyPair, displayName, xuid, uuid, minecraftId);
             loginPacket.setAuthPayload(new TokenPayload(signedPayload.serialize(), AuthType.SELF_SIGNED));
         }
-        this.loginPacket = loginPacket;
         return loginPacket;
-    }
-
-    /**
-     * The login to send downstream, signed by the proxy.
-     * Built once, lazily, potentially from several downstream loops (parallel dials). The
-     * synchronized block makes both the build and its publication safe; the field is only
-     * read after this method, never hot.
-     */
-    public synchronized LoginPacket getLoginPacket() {
-        if (this.loginPacket == null) {
-            this.rebuildLoginPacket();
-        }
-        return this.loginPacket;
     }
 
 }

@@ -24,7 +24,6 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import dev.waterbucket.waterbucketpe.ProxyServer;
 import dev.waterbucket.waterbucketpe.network.protocol.ProtocolVersion;
-import dev.waterbucket.waterbucketpe.utils.config.proxy.ProxyConfig;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import org.cloudburstmc.protocol.bedrock.BedrockSession;
@@ -36,7 +35,6 @@ import org.cloudburstmc.protocol.bedrock.util.EncryptionUtils;
 
 import javax.crypto.SecretKey;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.net.URI;
 import java.security.*;
 import java.security.interfaces.ECPrivateKey;
@@ -142,7 +140,7 @@ public class HandshakeUtils {
         String minecraftId = identityData.minecraftId;
 
         SignedJWT clientDataJwt = SignedJWT.parse(packet.getClientJwt());
-        JsonObject clientData = HandshakeUtils.parseClientData(clientDataJwt, xuid, session.getSocketAddress());
+        JsonObject clientData = HandshakeUtils.parseClientData(clientDataJwt);
         if (!verifyJwt(clientDataJwt, identityPublicKey) && strict) {
             xboxAuth = false;
         }
@@ -155,19 +153,7 @@ public class HandshakeUtils {
         }
 
         if (xboxAuth) {
-            ProxyConfig config = ProxyServer.getInstance().getConfiguration();
-            if (config.useLoginExtras()) {
-                // Waterdog_* keys are kept so downstream servers migrated from WaterdogPE keep working;
-                // Waterbucket_* keys mirror them under the fork's own namespace.
-                clientData.addProperty("Waterdog_Auth", true);
-                clientData.addProperty("Waterbucket_Auth", true);
-                clientData.addProperty("Waterdog_XUID", identityData.xuid);
-                clientData.addProperty("Waterbucket_XUID", identityData.xuid);
-                if (identityData.minecraftId != null) {
-                    clientData.addProperty("Waterdog_MID", identityData.minecraftId);
-                    clientData.addProperty("Waterbucket_MID", identityData.minecraftId);
-                }
-            }
+            ProxyServer.getInstance().getLogger().debug("Xbox live authenticated: {}", identityData.displayName);
         }
         // Before 1.26.20, client sends CertificateChainPayload in LoginPacket instead of TokenPayload
         // We are trying to replicate that behavior.
@@ -176,55 +162,48 @@ public class HandshakeUtils {
                     protocol.isBefore(ProtocolVersion.MINECRAFT_PE_1_26_20));
     }
 
-    public static JsonObject parseClientData(JWSObject clientJwt, String xuid, SocketAddress address) {
-        JsonObject clientData = (JsonObject) JsonParser.parseString(clientJwt.getPayload().toString());
-        ProxyConfig config = ProxyServer.getInstance().getConfiguration();
-        addForwardingClaims(clientData, address, config.forwardClientIp(), config.useLoginExtras());
-        addLoginExtras(clientData, xuid, config.useLoginExtras());
-        return clientData;
+    public static JsonObject parseClientData(JWSObject clientJwt) {
+        // The parsed object is exactly what the client sent. Forwarding claims are a property of
+        // each downstream dial (see LoginData), never of the login itself: baking them in here
+        // would send them to every backend including the strict ones that reject unknown keys.
+        return (JsonObject) JsonParser.parseString(clientJwt.getPayload().toString());
     }
 
     /**
-     * Claims every downstream server can read to learn where the player really connects from.
-     * The address a server sees on its socket is the proxy's own dial address (loopback on
-     * co-located hosts), so the real client address travels inside the client data JWT instead.
-     * Waterdog_IP is the de-facto field the ecosystem reads - modern Bedrock server software
-     * and the proxy login-extras plugins all check it; the Waterbucket_*
-     * fields mirror it under the fork's own namespace and add the client's source port.
+     * Claims every downstream server can read to learn who is really joining. The address a
+     * server sees on its socket is the proxy's own dial address (loopback on co-located hosts),
+     * so the real client address and the Xbox identity travel inside the client data JWT
+     * instead. {@code Waterdog_*} is the de-facto field set the whole Bedrock proxy ecosystem
+     * reads (Nukkit-MOT, Geyser, and the PocketMine-MP companion plugin shipped under
+     * {@code companion/pocketmine/}); the proxy adds it on every dial because forwarding is a
+     * built-in property of the proxy, not a config switch.
      * <p>
-     * The legacy use_login_extras switch keeps its old meaning and still implies this, so
-     * setups that relied on it keep forwarding the address.
+     * Strict server software that rejects unknown client data keys fails the login, so the
+     * first join to such a backend is retried without the claims and the server is remembered
+     * (see {@link ProxiedPlayer#onDownstreamFailure}); installing the companion plugin turns
+     * the full forwarding back on for it.
      */
-    public static void addForwardingClaims(JsonObject clientData, SocketAddress address, boolean forwardClientIp, boolean useLoginExtras) {
-        if (!forwardClientIp && !useLoginExtras) {
-            return;
-        }
+    public static void addForwardingClaims(JsonObject clientData, LoginData loginData) {
         // Never let forwarding break the login: an unexpected address type (or an unresolved
-        // one) simply skips the claims instead of throwing into the login catch-all, which
+        // one) simply skips the IP claim instead of throwing into the login catch-all, which
         // would disconnect the player with a generic "Login failed".
-        if (!(address instanceof InetSocketAddress)) {
-            return;
+        if (loginData.getAddress() instanceof InetSocketAddress inet) {
+            // getHostAddress() is null for an unresolved address; getHostString() then returns
+            // the literal host text without a reverse DNS lookup, so forwarding still carries something.
+            String ip = inet.getAddress() == null ? inet.getHostString() : inet.getAddress().getHostAddress();
+            clientData.addProperty("Waterdog_IP", ip);
         }
-        InetSocketAddress inet = (InetSocketAddress) address;
-        // getHostAddress() is null for an unresolved address; getHostString() then returns the
-        // literal host text without a reverse DNS lookup, so forwarding still carries something.
-        String ip = inet.getAddress() == null ? inet.getHostString() : inet.getAddress().getHostAddress();
-        clientData.addProperty("Waterdog_IP", ip);
-        clientData.addProperty("Waterbucket_IP", ip);
-        clientData.addProperty("Waterbucket_Port", inet.getPort());
-    }
-
-    /**
-     * The identity fields behind the legacy use_login_extras switch: the real XUID plus the
-     * fork's namespaced copy, so downstream servers can bind accounts to the true owner.
-     */
-    public static void addLoginExtras(JsonObject clientData, String xuid, boolean useLoginExtras) {
-        if (!useLoginExtras) {
-            return;
+        String xuid = loginData.getXuid();
+        if (xuid != null && !xuid.isEmpty()) {
+            clientData.addProperty("Waterdog_XUID", xuid);
         }
-        // Waterdog_* keys kept for downstream compatibility, Waterbucket_* added for the fork
-        clientData.addProperty("Waterdog_XUID", xuid);
-        clientData.addProperty("Waterbucket_XUID", xuid);
+        if (loginData.isXboxAuthed()) {
+            clientData.addProperty("Waterdog_Auth", true);
+        }
+        String minecraftId = loginData.getMinecraftId();
+        if (minecraftId != null && !minecraftId.isEmpty()) {
+            clientData.addProperty("Waterdog_MID", minecraftId);
+        }
     }
 
     public static void processEncryption(BedrockSession session, PublicKey key) throws Exception {

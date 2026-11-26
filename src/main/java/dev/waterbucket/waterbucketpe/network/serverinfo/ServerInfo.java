@@ -87,6 +87,39 @@ public abstract class ServerInfo {
     @Getter
     private volatile boolean disabled = false;
 
+    /**
+     * How a server handles the forwarding claims the proxy embeds in the login client data.
+     * Claim-aware software (Nukkit-MOT, Geyser, PocketMine-MP with the companion plugin) reads
+     * them; strict software rejects the unknown keys and drops the login. The proxy always
+     * sends the claims, so after a strict backend refused a login once it is remembered here
+     * and later joins carry none. UNKNOWN behaves like SUPPORTED: forwarding is built-in, and
+     * only evidence turns it off. Volatile: written from failure handling, read on event loops.
+     */
+    public enum ForwardingSupport {
+        UNKNOWN,
+        SUPPORTED,
+        UNSUPPORTED
+    }
+
+    @Getter
+    private volatile ForwardingSupport forwardingSupport = ForwardingSupport.UNKNOWN;
+
+    /**
+     * Records what a backend did with the forwarding claims and reports whether future logins
+     * should carry them.
+     */
+    public void setForwardingSupport(ForwardingSupport support) {
+        this.forwardingSupport = support;
+    }
+
+    /**
+     * Whether the login sent to this server should carry the forwarding claims: only a backend
+     * that demonstrably rejected them (see {@link #setForwardingSupport}) turns forwarding off.
+     */
+    public boolean forwardClaims() {
+        return this.forwardingSupport != ForwardingSupport.UNSUPPORTED;
+    }
+
     public ServerInfo(String serverName, InetSocketAddress address, InetSocketAddress publicAddress) {
         this.serverName = serverName;
         this.address = address;
